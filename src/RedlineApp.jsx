@@ -1,0 +1,2398 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Upload, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, Copy, Check,
+  AlertTriangle, AlertCircle, Info, ShieldCheck, Eye, Gauge, Trophy,
+  Zap, FileText, Stamp, Navigation as NavIcon, Palette,
+  Accessibility as A11yIcon, TrendingUp, Brain, Rocket, CircleDot,
+  Mail, Download, History as HistoryIcon, Link2, Crown, ShieldAlert,
+  ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
+  FileType2,
+} from "lucide-react";
+
+/* ----------------------------------------------------------------------- */
+/* Warm "paper & red ink" theme tokens                                     */
+/* ----------------------------------------------------------------------- */
+const C = {
+  bg: "#F2EADA",
+  surface: "#FBF6EC",
+  surfaceAlt: "#EFE3C6",
+  raised: "#FFFFFF",
+  border: "#E0CFA8",
+  borderSoft: "#ECDFBE",
+  text: "#2C2013",
+  textDim: "#5C4B34",
+  muted: "#8E7A55",
+  gold: "#B23B2E",
+  goldSoft: "#F3DCD2",
+  critical: "#B23B2E",
+  criticalSoft: "#F4D9D0",
+  high: "#B5791E",
+  highSoft: "#F3E3BE",
+  medium: "#33688F",
+  mediumSoft: "#DCE7EC",
+  low: "#3E7A4C",
+  lowSoft: "#DEEADB",
+};
+
+const FONT_IMPORT =
+  "@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');";
+
+const SEVERITY_STYLES = {
+  Critical: { color: C.critical, bg: C.criticalSoft, icon: AlertCircle, label: "Critical" },
+  High: { color: C.high, bg: C.highSoft, icon: AlertTriangle, label: "High" },
+  Medium: { color: C.medium, bg: C.mediumSoft, icon: Info, label: "Medium" },
+  Low: { color: C.low, bg: C.lowSoft, icon: CircleDot, label: "Low" },
+};
+
+function severityFor(raw) {
+  const s = (raw || "").toLowerCase();
+  if (s.includes("critical")) return "Critical";
+  if (s.includes("high")) return "High";
+  if (s.includes("medium")) return "Medium";
+  if (s.includes("low")) return "Low";
+  return "Medium";
+}
+
+/* ----------------------------------------------------------------------- */
+/* Plan limits                                                              */
+/* ----------------------------------------------------------------------- */
+const FREE_SCREEN_LIMIT = 5;
+const PRO_SCREEN_LIMIT = 20;
+const FREE_NAV_LIMIT = 5;
+const PRO_NAV_LIMIT = 20;
+
+function screenLimitFor(user) {
+  return user && user.plan === "pro" ? PRO_SCREEN_LIMIT : FREE_SCREEN_LIMIT;
+}
+function navLimitFor(user) {
+  return user && user.plan === "pro" ? PRO_NAV_LIMIT : FREE_NAV_LIMIT;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Prompts                                                                  */
+/* ----------------------------------------------------------------------- */
+const SHARED_RULES = `For every issue identified:
+1. Explain why it is a problem.
+2. Describe the impact on users.
+3. Provide a recommendation.
+4. Estimate severity.
+
+Severity levels: Critical, High, Medium, Low.
+
+Be direct, professional, and specific. Avoid generic statements. Always focus on improving user outcomes and business outcomes.
+
+BREVITY IS MANDATORY: "Why it matters" max 35 words. "Recommendation" max 30 words. Output exactly the minimum issue count requested per section — no more. No introductions before sections, no summaries after them.
+
+Output ONLY the sections listed below — no other sections, no preamble, no closing commentary, no code fences, no markdown bold/asterisks around labels. Use these exact section headers and labels.
+
+The issue block format, where required, is exactly:
+Issue: <short title>
+Severity: <Critical|High|Medium|Low>
+Why it matters: <explanation>
+Recommendation: <actionable fix>
+(repeated for each issue)`;
+
+/* The report is generated as 4 parallel batches to keep wall-clock time low.
+   Each batch independently analyzes the same input and writes only its
+   assigned sections; outputs are concatenated in this order. */
+const REPORT_BATCHES = [
+  `# Executive Summary
+2-3 sentence summary of overall UX quality (max 60 words).
+Overall UX Score: X/100
+Overall Assessment: [one of: Excellent, Good, Average, Poor]
+Top Strengths:
+1.
+2.
+3.
+Top Concerns:
+1.
+2.
+3.
+(Each strength/concern max 12 words.)`,
+
+  `# Usability Analysis
+Evaluate Navigation, Discoverability, Learnability, User Control, Error Prevention.
+Use the issue block format, exactly 3 issues.
+
+# Visual Design Analysis
+Evaluate Layout, Alignment, Spacing, Typography, Color Usage, Consistency.
+Use the issue block format, exactly 3 issues.`,
+
+  `# Accessibility Review
+Evaluate Contrast, Readability, Touch Targets, Screen Reader Friendliness, Keyboard Accessibility.
+Use the issue block format, exactly 3 issues.
+
+# Trust & Credibility Review
+Evaluate Professional appearance, Transparency, Security signals, User confidence.
+Use the issue block format, exactly 2 issues.`,
+
+  `# Conversion Optimization Review
+Evaluate Calls to Action, Friction Points, User Motivation, Form Complexity, Decision Making.
+Use the issue block format, exactly 2 issues.
+
+# Cognitive Load Assessment
+Evaluate Information Density, Mental Effort, Decision Fatigue, Content Clarity.
+Use the issue block format, exactly 2 issues.`,
+
+  `# AI Recommendations
+Strategic narrative synthesizing the most important patterns into prioritized direction for a product/design leader (4-5 sentences, max 110 words).
+
+# Quick Wins
+Dash-bulleted list of improvements completable in under one day. Exactly 5 items, max 15 words each.
+
+# Strategic Improvements
+Dash-bulleted list of larger improvements requiring real design effort. Exactly 4 items, max 15 words each.`,
+
+  `# Top 10 UX Improvements
+Rank from highest impact to lowest. Output exactly 10 numbered entries in this shape:
+1. Recommendation: <max 18 words>
+Expected User Benefit: <max 12 words>
+Expected Business Benefit: <max 12 words>
+(continue 2 through 10 in the same shape)
+
+# Final Scorecard
+Usability: XX/100
+Accessibility: XX/100
+Visual Design: XX/100
+Trust: XX/100
+Conversion: XX/100
+Overall UX Score: XX/100
+Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
+];
+
+function buildFilesBatchPrompt(batchSections) {
+  return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
+
+Perform a professional UX audit of the attached screenshot(s) and/or document(s). Do not merely describe the screen — analyze the experience as a UX expert.
+
+Evaluate using Nielsen's 10 Usability Heuristics, Accessibility Best Practices (WCAG), Conversion Optimization Principles, Cognitive Load Reduction, Visual Hierarchy Principles, User Trust & Credibility Principles, and Mobile/Responsive UX Best Practices.
+
+${SHARED_RULES}
+
+Sections to write:
+
+${batchSections}
+
+Begin now.`;
+}
+
+const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its main navigation destinations. Be efficient — a handful of fetches is enough. If a page won't load, note that and move on rather than retrying.
+
+Then write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.`;
+
+function buildUrlBatchPrompt(url, dossier, batchSections) {
+  return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
+
+You are auditing the website ${url}. Below is a factual observation dossier gathered from the live site's content and structure. Base your audit on it. Because it reflects content/structure rather than pixels, do not fabricate claims about exact colors, spacing, or pixel alignment; where something can't be assessed without a visual screenshot, say so inside that issue's "Why it matters" rather than guessing.
+
+--- SITE OBSERVATION DOSSIER ---
+${dossier}
+--- END DOSSIER ---
+
+${SHARED_RULES}
+
+Sections to write:
+
+${batchSections}
+
+Begin now for ${url}.`;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Parsing                                                                  */
+/* ----------------------------------------------------------------------- */
+function stripDashLines(s) {
+  return (s || "")
+    .split("\n")
+    .filter((l) => !/^-{4,}\s*$/.test(l.trim()))
+    .join("\n")
+    .trim();
+}
+
+function parseIssues(block) {
+  const content = stripDashLines(block);
+  const re =
+    /Issue:\s*([\s\S]+?)\nSeverity:\s*([\s\S]+?)\nWhy it matters:\s*([\s\S]+?)\nRecommendation:\s*([\s\S]+?)(?=\n+Issue:|\s*$)/g;
+  const issues = [];
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    issues.push({
+      title: m[1].trim().replace(/^\*+|\*+$/g, ""),
+      severity: severityFor(m[2]),
+      why: m[3].trim(),
+      recommendation: m[4].trim(),
+    });
+  }
+  const introEnd = content.search(/Issue:/);
+  const intro = introEnd > 0 ? content.slice(0, introEnd).trim() : "";
+  return { intro, issues };
+}
+
+function parseNumberedList(text) {
+  if (!text) return [];
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^\d+[\.\)]\s*/.test(l))
+    .map((l) => l.replace(/^\d+[\.\)]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function parseDashList(text) {
+  if (!text) return [];
+  return stripDashLines(text)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^[-*•]\s*/.test(l))
+    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function parseSummary(block) {
+  const content = stripDashLines(block);
+  const scoreM = content.match(/Overall UX Score:\s*(\d+)/i);
+  const assessM = content.match(
+    /Overall Assessment:\s*[\*_]*\s*(Excellent|Good|Average|Poor)/i
+  );
+  const strengthsStart = content.search(/Top Strengths:/i);
+  const concernsStart = content.search(/Top Concerns:/i);
+  let strengthsText = "";
+  let concernsText = "";
+  if (strengthsStart >= 0) {
+    strengthsText = content.slice(strengthsStart, concernsStart >= 0 ? concernsStart : content.length);
+  }
+  if (concernsStart >= 0) concernsText = content.slice(concernsStart);
+  const introEnd = strengthsStart >= 0 ? strengthsStart : content.length;
+  return {
+    intro: content.slice(0, introEnd).replace(/Overall UX Score:.*$/im, "").replace(/Overall Assessment:.*$/im, "").trim(),
+    score: scoreM ? Number(scoreM[1]) : null,
+    assessment: assessM ? assessM[1] : null,
+    strengths: parseNumberedList(strengthsText),
+    concerns: parseNumberedList(concernsText),
+  };
+}
+
+function parseTop10(block) {
+  const content = stripDashLines(block);
+  const re =
+    /(\d+)[\.\)]\s*(?:\*+)?Recommendation:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected User Benefit:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected Business Benefit:?(?:\*+)?\s*([\s\S]+?)(?=\n+\d+[\.\)]|\s*$)/g;
+  const items = [];
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    items.push({
+      rank: Number(m[1]),
+      recommendation: m[2].trim(),
+      userBenefit: m[3].trim(),
+      businessBenefit: m[4].trim(),
+    });
+  }
+  return items;
+}
+
+function parseScorecard(block) {
+  const content = stripDashLines(block);
+  const num = (label) => {
+    const m = content.match(new RegExp(label + ":?\\s*\\*{0,2}\\s*(\\d+)", "i"));
+    return m ? Number(m[1]) : null;
+  };
+  const verdictM = content.match(/Final Verdict:\s*([\s\S]+)$/i);
+  return {
+    usability: num("Usability"),
+    accessibility: num("Accessibility"),
+    visual: num("Visual Design"),
+    trust: num("Trust"),
+    conversion: num("Conversion"),
+    overall: num("Overall UX Score"),
+    verdict: verdictM ? verdictM[1].trim() : "",
+  };
+}
+
+const KNOWN_SECTIONS = [
+  "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
+  "Trust & Credibility Review", "Trust and Credibility Review", "Conversion Optimization Review",
+  "Cognitive Load Assessment", "AI Recommendations", "Top 10 UX Improvements", "Quick Wins",
+  "Strategic Improvements", "Final Scorecard",
+];
+
+function normalizeReportText(rawText) {
+  let t = (rawText || "").replace(/\r\n/g, "\n").replace(/```[a-z]*\n?/gi, "");
+  // Normalize any heading depth (#, ##, ###) to a single '# '
+  t = t.replace(/^#{1,6}\s+/gm, "# ");
+  // Convert bold-only section title lines (e.g. **Executive Summary**) into headers
+  const sectionAlt = KNOWN_SECTIONS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  t = t.replace(new RegExp(`^\\s*\\*{1,2}(${sectionAlt})\\*{1,2}\\s*$`, "gmi"), "# $1");
+  // Also catch plain title lines that exactly match a known section name
+  t = t.replace(new RegExp(`^(${sectionAlt})\\s*$`, "gmi"), (m, name) => `# ${name}`);
+  // Strip bold markers around field labels so the issue regex matches
+  t = t.replace(/\*\*(Issue|Severity|Why it matters|Recommendation|Expected User Benefit|Expected Business Benefit|Overall UX Score|Overall Assessment|Top Strengths|Top Concerns|Final Verdict|Usability|Accessibility|Visual Design|Trust|Conversion):\*\*/gi, "$1:");
+  t = t.replace(/\*\*(Issue|Severity|Why it matters|Recommendation|Expected User Benefit|Expected Business Benefit|Final Verdict):\s*/gi, "$1: ");
+  return t;
+}
+
+function parseReport(rawText) {
+  const clean = normalizeReportText(rawText);
+  const headerRe = /^#\s+(.+?)\s*$/gm;
+  const matches = [...clean.matchAll(headerRe)];
+  const sections = {};
+  for (let i = 0; i < matches.length; i++) {
+    const title = matches[i][1].trim();
+    const start = matches[i].index + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : clean.length;
+    sections[title] = clean.slice(start, end).trim();
+  }
+  const find = (key) =>
+    sections[Object.keys(sections).find((k) => k.toLowerCase().includes(key))] || "";
+
+  return {
+    raw: clean,
+    hasContent: matches.length > 0,
+    summary: parseSummary(find("executive summary")),
+    usability: parseIssues(find("usability analysis")),
+    visual: parseIssues(find("visual design analysis")),
+    accessibility: parseIssues(find("accessibility review")),
+    trust: parseIssues(find("trust")),
+    conversion: parseIssues(find("conversion optimization")),
+    cognitive: parseIssues(find("cognitive load")),
+    aiRecommendations: stripDashLines(find("ai recommendations")),
+    top10: parseTop10(find("top 10")),
+    quickWins: parseDashList(find("quick wins")),
+    strategic: parseDashList(find("strategic improvements")),
+    scorecard: parseScorecard(find("final scorecard")),
+  };
+}
+
+function buildPlainTextSummary(report) {
+  if (!report) return "";
+  const lines = [];
+  lines.push(`Redline UX Audit — Overall Score: ${report.summary.score ?? "—"}/100 (${report.summary.assessment ?? "Unrated"})`);
+  if (report.summary.intro) lines.push("", report.summary.intro);
+  if (report.summary.strengths.length) {
+    lines.push("", "Top Strengths:");
+    report.summary.strengths.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+  }
+  if (report.summary.concerns.length) {
+    lines.push("", "Top Concerns:");
+    report.summary.concerns.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+  }
+  if (report.scorecard.verdict) lines.push("", "Final Verdict:", report.scorecard.verdict);
+  lines.push("", "(Full detailed report attached as PDF — download it from Redline and attach it to this email.)");
+  return lines.join("\n");
+}
+
+/* ----------------------------------------------------------------------- */
+/* Storage / lightweight accounts                                          */
+/* ----------------------------------------------------------------------- */
+/* Hashing: crypto.subtle needs a secure context and isn't guaranteed inside
+   every iframe. Fall back to a pure-JS FNV-1a variant so auth never breaks.
+   (Fine for a demo gate; a real deployment uses server-side bcrypt/argon2.) */
+function fnv1aHex(text) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 ^= c; h1 = Math.imul(h1, 0x01000193) >>> 0;
+    h2 = (h2 + c) >>> 0; h2 = Math.imul(h2 ^ (h2 >>> 15), 0x85ebca6b) >>> 0;
+  }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+}
+
+async function sha256Hex(text) {
+  try {
+    if (typeof crypto !== "undefined" && crypto.subtle && crypto.subtle.digest) {
+      const enc = new TextEncoder().encode(text);
+      const digest = await crypto.subtle.digest("SHA-256", enc);
+      return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch {
+    /* fall through to JS fallback */
+  }
+  return fnv1aHex(text);
+}
+
+/* Storage: prefer window.storage (persists across sessions). If it's missing
+   or failing, fall back to an in-memory map so login still works for the
+   current session, and tell the user persistence is off. */
+const memoryStore = new Map();
+let storageDegraded = false;
+
+async function kvGet(key) {
+  if (window.storage && !storageDegraded) {
+    try {
+      const res = await window.storage.get(key, true);
+      return res ? res.value : null;
+    } catch (e) {
+      // get() throws for missing keys — only degrade if storage itself is absent
+      if (!window.storage) storageDegraded = true;
+      return memoryStore.has(key) ? memoryStore.get(key) : null;
+    }
+  }
+  return memoryStore.has(key) ? memoryStore.get(key) : null;
+}
+
+async function kvSet(key, value) {
+  memoryStore.set(key, value);
+  if (window.storage) {
+    try {
+      await window.storage.set(key, value, true);
+      return true;
+    } catch {
+      storageDegraded = true;
+      return false;
+    }
+  }
+  storageDegraded = true;
+  return false;
+}
+
+function userKey(emailHash) {
+  return `redline:user:${emailHash}`;
+}
+function historyKey(emailHash) {
+  return `redline:history:${emailHash}`;
+}
+
+async function getUserRecord(emailHash) {
+  try {
+    const val = await kvGet(userKey(emailHash));
+    return val ? JSON.parse(val) : null;
+  } catch {
+    return null;
+  }
+}
+async function setUserRecord(emailHash, record) {
+  return kvSet(userKey(emailHash), JSON.stringify(record));
+}
+async function getHistoryList(emailHash) {
+  try {
+    const val = await kvGet(historyKey(emailHash));
+    return val ? JSON.parse(val) : [];
+  } catch {
+    return [];
+  }
+}
+async function appendHistoryEntry(emailHash, entry) {
+  const list = await getHistoryList(emailHash);
+  const next = [entry, ...list].slice(0, 20);
+  await kvSet(historyKey(emailHash), JSON.stringify(next));
+  return next;
+}
+
+/* ----------------------------------------------------------------------- */
+/* Small UI atoms                                                           */
+/* ----------------------------------------------------------------------- */
+function Squiggle({ width = 64, color = C.gold }) {
+  return (
+    <svg width={width} height="8" viewBox="0 0 64 8" fill="none" style={{ display: "block" }}>
+      <path
+        d="M1 5.5C4 2 7 1 10 4C13 7 16 2 19 2C22 2 25 6.5 28 6.5C31 6.5 34 1.5 37 1.5C40 1.5 43 6 46 6C49 6 52 1.5 55 2C58 2.5 60 5 63 4.5"
+        stroke={color}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
+function SeverityBadge({ severity, size = "sm" }) {
+  const s = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
+  const Icon = s.icon;
+  const pad = size === "sm" ? "3px 9px" : "4px 12px";
+  const fs = size === "sm" ? 11 : 12;
+  return (
+    <span
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5, padding: pad, borderRadius: 99,
+        background: s.bg, color: s.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: fs,
+        letterSpacing: 0.4, fontWeight: 500, border: `1px solid ${s.color}33`, whiteSpace: "nowrap",
+      }}
+    >
+      <Icon size={size === "sm" ? 12 : 13} strokeWidth={2.2} />
+      {s.label.toUpperCase()}
+    </span>
+  );
+}
+
+function IssueCard({ issue }) {
+  const s = SEVERITY_STYLES[issue.severity] || SEVERITY_STYLES.Medium;
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${s.color}`, borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+        <h4 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16.5, color: C.text, lineHeight: 1.3 }}>{issue.title}</h4>
+        <SeverityBadge severity={issue.severity} />
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.muted, marginBottom: 3 }}>WHY IT MATTERS</div>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: C.textDim }}>{issue.why}</p>
+      </div>
+      <div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.gold, marginBottom: 3 }}>RECOMMENDATION</div>
+        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: C.text }}>{issue.recommendation}</p>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value }) {
+  const v = value == null ? 0 : value;
+  const color = v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical;
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+        <span style={{ fontSize: 13, color: C.textDim, fontWeight: 500 }}>{label}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: C.text }}>{value == null ? "—" : `${value}/100`}</span>
+      </div>
+      <div style={{ height: 6, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${v}%`, background: color, borderRadius: 99, transition: "width 900ms cubic-bezier(.2,.8,.2,1)" }} />
+      </div>
+    </div>
+  );
+}
+
+function SectionIntro({ text }) {
+  if (!text) return null;
+  return <p style={{ color: C.textDim, fontSize: 14, lineHeight: 1.6, margin: "0 0 14px 0" }}>{text}</p>;
+}
+
+function EmptyIssueState() {
+  return (
+    <p style={{ color: C.muted, fontSize: 13.5, fontStyle: "italic", margin: 0 }}>
+      The director found nothing structured to flag here yet — try regenerating, or this area may be clean.
+    </p>
+  );
+}
+
+function Section({ icon: Icon, title, data }) {
+  return (
+    <div>
+      <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon size={17} color={C.gold} /> {title}
+      </h3>
+      <SectionIntro text={data.intro} />
+      {data.issues.length === 0 ? <EmptyIssueState /> : data.issues.map((issue, i) => <IssueCard key={i} issue={issue} />)}
+    </div>
+  );
+}
+
+function ListBlock({ icon: Icon, title, subtitle, items, color }) {
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+      <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 2px 0", display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon size={16} color={color} /> {title}
+      </h3>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>{subtitle}</div>
+      {items.length === 0 ? (
+        <EmptyIssueState />
+      ) : (
+        <div>
+          {items.map((it, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < items.length - 1 ? `1px solid ${C.borderSoft}` : "none" }}>
+              <CircleDot size={14} color={color} style={{ marginTop: 3, flexShrink: 0 }} />
+              <span style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.55 }}>{it}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Modal({ children, onClose, maxWidth = 420 }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(44,32,19,0.55)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22, maxWidth, width: "100%", maxHeight: "85vh", overflowY: "auto" }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Disclaimer modal                                                        */
+/* ----------------------------------------------------------------------- */
+function DisclaimerModal({ onAccept, onCancel }) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <Modal onClose={onCancel} maxWidth={460}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <ShieldAlert size={19} color={C.gold} />
+        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>Before you run this</h3>
+      </div>
+      <p style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.6, margin: "0 0 10px 0" }}>
+        Redline's findings are generated by an AI model, not a certified human auditor. They're a strong
+        starting point for design discussion — not a substitute for professional accessibility testing,
+        legal/compliance review, or licensed UX research. Scores and severities are estimates and can be wrong.
+      </p>
+      <p style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.6, margin: "0 0 16px 0" }}>
+        Don't upload screenshots containing other people's private or sensitive data unless you have the right
+        to do so. See our <strong>Disclaimer</strong> and <strong>Terms</strong> in the footer for full detail.
+      </p>
+      <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, color: C.text, marginBottom: 16, cursor: "pointer" }}>
+        <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} style={{ marginTop: 2 }} />
+        I understand this is AI-generated analysis and not certified or legal advice.
+      </label>
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={onCancel} style={{ flex: 1, padding: "11px 0", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 13.5, cursor: "pointer" }}>
+          Cancel
+        </button>
+        <button
+          disabled={!checked}
+          onClick={onAccept}
+          style={{ flex: 1, padding: "11px 0", borderRadius: 9, border: "none", background: checked ? C.gold : C.surfaceAlt, color: checked ? "#FBF1EC" : C.muted, fontWeight: 600, fontSize: 13.5, cursor: checked ? "pointer" : "not-allowed" }}
+        >
+          Agree & continue
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Auth modal                                                               */
+/* ----------------------------------------------------------------------- */
+function AuthModal({ onClose, onAuth, reason }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    setError(null);
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const hash = await sha256Hex(cleanEmail);
+      const passwordHash = await sha256Hex(`${cleanEmail}:${password}`);
+      const existing = await getUserRecord(hash);
+
+      if (mode === "signup") {
+        if (existing) {
+          setError("An account with this email already exists — log in instead.");
+          setLoading(false);
+          return;
+        }
+        const record = { email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now() };
+        const persisted = await setUserRecord(hash, record);
+        onAuth({ email: cleanEmail, plan: "free", emailHash: hash, ephemeral: !persisted });
+      } else {
+        if (!existing) {
+          setError("No account found with this email — sign up instead.");
+          setLoading(false);
+          return;
+        }
+        if (existing.passwordHash !== passwordHash) {
+          setError("Incorrect email or password.");
+          setLoading(false);
+          return;
+        }
+        onAuth({ email: existing.email, plan: existing.plan || "free", emailHash: hash });
+      }
+    } catch (e) {
+      setError(`Couldn't complete that: ${(e && e.message) || "unknown error"}. Please try again.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <Lock size={18} color={C.gold} />
+        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>
+          {mode === "login" ? "Log in" : "Create your account"}
+        </h3>
+      </div>
+      {reason && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 14px 0" }}>{reason}</p>}
+      {!reason && <div style={{ marginBottom: 14 }} />}
+
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        style={inputStyle}
+      />
+      <input
+        type="password"
+        placeholder="Password (min 6 characters)"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        style={{ ...inputStyle, marginTop: 10 }}
+      />
+
+      {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
+
+      <button
+        onClick={submit}
+        disabled={loading}
+        style={{
+          width: "100%", marginTop: 16, padding: "12px 0", borderRadius: 9, border: "none",
+          background: C.gold, color: "#FBF1EC", fontWeight: 600, fontSize: 14, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}
+      >
+        {loading ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : mode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
+        {mode === "login" ? "Log in" : "Sign up"}
+      </button>
+
+      <div style={{ textAlign: "center", marginTop: 14, fontSize: 12.5, color: C.muted }}>
+        {mode === "login" ? (
+          <>New here? <button onClick={() => { setMode("signup"); setError(null); }} style={linkBtnStyle}>Create an account</button></>
+        ) : (
+          <>Already have one? <button onClick={() => { setMode("login"); setError(null); }} style={linkBtnStyle}>Log in</button></>
+        )}
+      </div>
+
+      <p style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
+        This is a lightweight demo account system for this prototype — your password is hashed before storage,
+        but there's no email verification or recovery, and it isn't built for handling sensitive production data.
+      </p>
+    </Modal>
+  );
+}
+
+const inputStyle = {
+  width: "100%", padding: "11px 13px", borderRadius: 9, border: `1px solid ${C.border}`,
+  background: C.raised, color: C.text, fontSize: 13.5, fontFamily: "'Inter', sans-serif", outline: "none",
+};
+const linkBtnStyle = { background: "none", border: "none", color: C.gold, fontWeight: 600, cursor: "pointer", fontSize: 12.5, padding: 0 };
+
+/* ----------------------------------------------------------------------- */
+/* Legal pages                                                              */
+/* ----------------------------------------------------------------------- */
+const LEGAL_CONTENT = {
+  terms: {
+    title: "Terms of Service",
+    body: `Placeholder template — have this reviewed by a lawyer before real use.
+
+By using Redline, you agree this tool provides AI-generated UX analysis for informational purposes only. It is not professional design, legal, accessibility-certification, or compliance advice, and Redline's creators accept no liability for decisions made based on its output.
+
+You're responsible for the content you upload, including screenshots, PDFs, and URLs. Don't upload material you don't have the right to share, including other people's private data.
+
+Accounts are provided as-is for this prototype, without uptime or data-retention guarantees. We may change or discontinue features at any time.`,
+  },
+  privacy: {
+    title: "Privacy Policy",
+    body: `Placeholder template — have this reviewed by a lawyer before real use.
+
+Redline stores your email (hashed alongside a hashed password) and any audits you save to history, so you can return to them later. This is a client-side prototype: it does not run on a private backend server, and data is kept in shared application storage rather than a dedicated database.
+
+Uploaded screenshots and PDFs are sent to Claude (via Anthropic's API) to generate your report and are not separately stored by Redline. Website reviews fetch publicly available page content.
+
+Don't treat this prototype as suitable for storing sensitive personal data about yourself or others.`,
+  },
+  disclaimer: {
+    title: "Disclaimer",
+    body: `Redline produces AI-generated UX commentary. It is not a certified accessibility audit (WCAG conformance still requires manual and assistive-technology testing), not legal advice, and not a guarantee of business outcomes.
+
+Severity ratings, scores, and recommendations are estimates based on a language model's interpretation of what was uploaded or fetched — they can be incomplete, outdated, or simply wrong. Always validate critical or legal-risk findings (e.g., accessibility compliance, security, regulated-industry disclosures) with a qualified professional before acting on them.
+
+Website reviews are based on fetched page content, not a true visual screenshot, and may miss purely visual issues.`,
+  },
+};
+
+function LegalPage({ pageKey, onBack }) {
+  const page = LEGAL_CONTENT[pageKey];
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "8px 4px 60px" }}>
+      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, cursor: "pointer", marginBottom: 18, padding: 0 }}>
+        <ArrowLeft size={14} /> Back
+      </button>
+      <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, color: C.text, marginBottom: 14 }}>{page.title}</h2>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+        {page.body.split("\n\n").map((p, i) => (
+          <p key={i} style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.65, margin: i === 0 ? "0 0 12px 0" : "0 0 12px 0", fontStyle: i === 0 ? "italic" : "normal" }}>
+            {p}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Footer({ onOpenLegal }) {
+  return (
+    <div style={{ maxWidth: 720, margin: "30px auto 0", textAlign: "center", padding: "16px 10px 0", borderTop: `1px solid ${C.borderSoft}` }}>
+      <p style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, margin: "0 0 8px 0" }}>
+        Redline gives AI-generated UX analysis. It does not replace a certified accessibility audit, legal review, or professional UX research.
+      </p>
+      <div style={{ display: "flex", justifyContent: "center", gap: 14 }}>
+        {["terms", "privacy", "disclaimer"].map((k) => (
+          <button key={k} onClick={() => onOpenLegal(k)} style={{ background: "none", border: "none", color: C.muted, fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+            {LEGAL_CONTENT[k].title}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Upload / URL screens                                                    */
+/* ----------------------------------------------------------------------- */
+function ModeTabs({ mode, setMode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+      {[
+        { key: "files", label: "Screens & PDFs", icon: Upload },
+        { key: "url", label: "Website URL", icon: Globe },
+      ].map((m) => {
+        const Icon = m.icon;
+        const active = mode === m.key;
+        return (
+          <button
+            key={m.key}
+            onClick={() => setMode(m.key)}
+            style={{
+              display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 99,
+              border: `1px solid ${active ? C.gold : C.border}`, background: active ? C.goldSoft : C.surface,
+              color: active ? C.gold : C.muted, fontSize: 13, fontWeight: 500, cursor: "pointer",
+            }}
+          >
+            <Icon size={14} /> {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOver, error, screenLimit, isPro }) {
+  return (
+    <div>
+      <label
+        htmlFor="redline-file-input"
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); onAddFiles(e.dataTransfer.files); }}
+        style={{
+          display: "block", position: "relative", border: `1.5px dashed ${dragOver ? C.gold : C.border}`,
+          background: dragOver ? C.goldSoft : C.surface, borderRadius: 14,
+          padding: images.length ? 18 : 38, textAlign: "center", cursor: "pointer", transition: "all 160ms ease",
+        }}
+      >
+        <input
+          id="redline-file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,application/pdf"
+          multiple
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 1 }}
+          onChange={(e) => { onAddFiles(e.target.files); e.target.value = ""; }}
+        />
+        {images.length === 0 ? (
+          <>
+            <Upload size={26} color={C.gold} strokeWidth={1.8} style={{ marginBottom: 10 }} />
+            <div style={{ color: C.text, fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Drop screens or PDFs here, or tap to browse</div>
+            <div style={{ color: C.muted, fontSize: 12.5 }}>
+              PNG, JPG, WEBP or PDF · up to {screenLimit} files {isPro ? "(Pro)" : "(Free plan)"}
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(82px, 1fr))", gap: 10 }}>
+            {images.map((img) => (
+              <div key={img.id} style={{ position: "relative", borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}`, aspectRatio: "3/4", background: C.surfaceAlt }}>
+                {img.kind === "pdf" ? (
+                  <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, padding: 4 }}>
+                    <FileType2 size={20} color={C.gold} />
+                    <span style={{ fontSize: 9, color: C.muted, textAlign: "center", wordBreak: "break-all", lineHeight: 1.2 }}>{img.name}</span>
+                  </div>
+                ) : (
+                  <img src={img.dataUrl} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                )}
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(img.id); }}
+                  style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: "rgba(44,32,19,0.75)", border: `1px solid ${C.border}`, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 5 }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            {images.length < screenLimit && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: `1px dashed ${C.border}`, borderRadius: 8, aspectRatio: "3/4", color: C.muted }}>
+                <ImageIcon size={16} />
+                <span style={{ fontSize: 10.5, marginTop: 4 }}>Add more</span>
+              </div>
+            )}
+          </div>
+        )}
+      </label>
+
+      <div style={{ fontSize: 11.5, color: C.muted, textAlign: "right", marginTop: 6 }}>
+        {images.length}/{screenLimit} used {!isPro && "· Free plan"}
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 10, padding: "10px 14px", background: C.criticalSoft, border: `1px solid ${C.critical}55`, borderRadius: 8, color: C.critical, fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        disabled={images.length === 0}
+        onClick={onRun}
+        style={{
+          width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 10, border: "none",
+          background: images.length ? C.gold : C.surfaceAlt, color: images.length ? "#FBF1EC" : C.muted,
+          fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 15, cursor: images.length ? "pointer" : "not-allowed",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        }}
+      >
+        <Sparkles size={17} strokeWidth={2.2} /> Run the audit
+      </button>
+    </div>
+  );
+}
+
+function UrlScreen({ url, setUrl, onRun, error, navLimit, isPro }) {
+  return (
+    <div>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <Globe size={18} color={C.gold} />
+          <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, color: C.text }}>Review a live website</span>
+        </div>
+        <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "0 0 14px 0" }}>
+          Redline reads the homepage and up to {navLimit} main navigation pages ({isPro ? "Pro" : "Free"} plan). This
+          is a content/structure-based review, not a pixel-level screenshot audit.
+        </p>
+        <input
+          type="url"
+          placeholder="example.com"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          style={inputStyle}
+        />
+        {error && <div style={{ marginTop: 10, fontSize: 13, color: C.critical }}>{error}</div>}
+        <button
+          disabled={!url.trim()}
+          onClick={onRun}
+          style={{
+            width: "100%", marginTop: 16, padding: "14px 0", borderRadius: 10, border: "none",
+            background: url.trim() ? C.gold : C.surfaceAlt, color: url.trim() ? "#FBF1EC" : C.muted,
+            fontWeight: 600, fontSize: 15, cursor: url.trim() ? "pointer" : "not-allowed",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}
+        >
+          <Sparkles size={17} /> Review this site
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatElapsed(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+const AUDIT_STEPS = [
+  { icon: Eye, label: "Reading the screens", sub: "Ingesting layout, copy & structure" },
+  { icon: NavIcon, label: "Usability heuristics", sub: "Nielsen's 10, navigation & error prevention" },
+  { icon: Palette, label: "Visual design pass", sub: "Hierarchy, spacing, typography, color" },
+  { icon: A11yIcon, label: "Accessibility check", sub: "Contrast, touch targets, WCAG" },
+  { icon: ShieldCheck, label: "Trust & credibility", sub: "Security signals, transparency" },
+  { icon: TrendingUp, label: "Conversion & cognition", sub: "CTAs, friction, mental load" },
+  { icon: Trophy, label: "Ranking priorities", sub: "Top 10, quick wins, strategy" },
+  { icon: FileText, label: "Final scorecard", sub: "Scores, verdict, sign-off" },
+];
+
+function StepRow({ step, state, index }) {
+  const Icon = step.icon;
+  const isDone = state === "done";
+  const isActive = state === "active";
+  return (
+    <div
+      className="step-enter"
+      style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "9px 12px",
+        borderRadius: 10, marginBottom: 4, animationDelay: `${index * 70}ms`,
+        background: isActive ? C.goldSoft : "transparent",
+        border: `1px solid ${isActive ? `${C.gold}44` : "transparent"}`,
+        transition: "background 300ms ease, border 300ms ease",
+      }}
+    >
+      <div
+        style={{
+          width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: isDone ? C.low : isActive ? C.gold : C.surfaceAlt,
+          border: `1px solid ${isDone ? C.low : isActive ? C.gold : C.border}`,
+          transition: "background 300ms ease",
+          position: "relative",
+        }}
+      >
+        {isDone ? (
+          <span className="tick-pop" style={{ display: "flex" }}><Check size={15} color="#FBF6EC" strokeWidth={3} /></span>
+        ) : (
+          <Icon
+            size={14}
+            color={isActive ? "#FBF1EC" : C.muted}
+            style={isActive ? { animation: "iconBob 1.1s ease-in-out infinite" } : undefined}
+          />
+        )}
+        {isActive && (
+          <span style={{ position: "absolute", inset: -4, borderRadius: "50%", border: `1.5px solid ${C.gold}55`, animation: "pulseRing 1.6s ease-out infinite" }} />
+        )}
+      </div>
+      <div style={{ textAlign: "left", minWidth: 0, flex: 1 }}>
+        <div
+          className={isActive ? "shimmer-text" : undefined}
+          style={{
+            fontSize: 13.5, fontWeight: 600,
+            color: isDone ? C.textDim : isActive ? C.text : C.muted,
+            textDecorationLine: "none",
+          }}
+        >
+          {step.label}
+        </div>
+        <div style={{ fontSize: 11, color: isActive ? C.textDim : `${C.muted}AA`, lineHeight: 1.35 }}>
+          {step.sub}
+        </div>
+      </div>
+      {isDone && <span className="tick-pop" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: C.low }}>DONE</span>}
+      {isActive && (
+        <div style={{ display: "flex", gap: 3 }}>
+          {[0, 1, 2].map((i) => (
+            <span key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: C.gold, animation: `dotPulse 1.2s ease-in-out ${i * 0.18}s infinite` }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LoadingScreen({ thumbs, progress, onCancel }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const tInterval = setInterval(() => setElapsed((t) => t + 1), 1000);
+    return () => clearInterval(tInterval);
+  }, []);
+
+  /* Blend real batch progress with elapsed time so steps advance smoothly
+     even between batch completions, but never show ahead of reality. */
+  const realFrac = progress.total ? (progress.done || 0) / progress.total : 0;
+  const timeFrac = Math.min(elapsed / 100, 0.92);
+  const frac = Math.min(Math.max(realFrac, Math.min(timeFrac, realFrac + 0.18)), 0.98);
+  const activeIndex = Math.min(Math.floor(frac * AUDIT_STEPS.length), AUDIT_STEPS.length - 1);
+  const pct = Math.round(frac * 100);
+
+  return (
+    <div style={{ maxWidth: 440, margin: "34px auto", textAlign: "center", padding: "0 16px" }}>
+      {thumbs.length > 0 && (
+        <div style={{ position: "relative", display: "flex", justifyContent: "center", gap: 8, marginBottom: 20, overflow: "hidden", padding: "2px 0" }}>
+          {thumbs.slice(0, 5).map((img) => (
+            <div key={img.id} style={{ position: "relative", width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, opacity: 0.9, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {img.kind === "pdf" ? <FileType2 size={15} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              <div className="scan-sweep" style={{ position: "absolute", top: 0, left: "-60%", width: "60%", height: "100%", background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Progress bar with moving stripes */}
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ height: 8, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden", border: `1px solid ${C.borderSoft}` }}>
+          <div
+            style={{
+              height: "100%", width: `${pct}%`, borderRadius: 99,
+              background: `repeating-linear-gradient(45deg, ${C.gold}, ${C.gold} 8px, #C4564A 8px, #C4564A 16px)`,
+              backgroundSize: "24px 24px",
+              animation: "stripeSlide 0.9s linear infinite",
+              transition: "width 800ms cubic-bezier(.2,.8,.2,1)",
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.muted }}>{formatElapsed(elapsed)}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.gold }}>{pct}%</span>
+      </div>
+
+      {/* Step checklist */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 8px", textAlign: "left", marginBottom: 10 }}>
+        {AUDIT_STEPS.map((step, i) => (
+          <StepRow
+            key={step.label}
+            step={step}
+            index={i}
+            state={i < activeIndex ? "done" : i === activeIndex ? "active" : "pending"}
+          />
+        ))}
+      </div>
+
+      {progress.status && (
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: C.high, marginBottom: 6 }}>
+          {progress.status}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14 }}>
+        Usually 1–3 minutes · stops automatically at 5
+      </div>
+
+      <button
+        onClick={onCancel}
+        style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12.5, borderRadius: 8, padding: "8px 16px", cursor: "pointer" }}
+      >
+        Cancel audit
+      </button>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Report screen                                                           */
+/* ----------------------------------------------------------------------- */
+const TABS = [
+  { key: "summary", label: "Summary", icon: Gauge },
+  { key: "usability", label: "Usability", icon: NavIcon },
+  { key: "visual", label: "Visual", icon: Palette },
+  { key: "accessibility", label: "A11y", icon: A11yIcon },
+  { key: "trust", label: "Trust", icon: ShieldCheck },
+  { key: "conversion", label: "Conversion", icon: TrendingUp },
+  { key: "cognitive", label: "Cog. Load", icon: Brain },
+  { key: "ai", label: "AI Recommendations", icon: Lightbulb },
+  { key: "top10", label: "Top 10", icon: Trophy },
+  { key: "wins", label: "Quick Wins", icon: Zap },
+  { key: "strategic", label: "Strategic", icon: Rocket },
+  { key: "scorecard", label: "Scorecard", icon: FileText },
+];
+
+function AssessmentChip({ assessment }) {
+  const map = { Excellent: C.low, Good: C.medium, Average: C.high, Poor: C.critical };
+  const color = map[assessment] || C.muted;
+  return (
+    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, letterSpacing: 0.5, color, border: `1px solid ${color}55`, background: `${color}1A`, borderRadius: 99, padding: "4px 12px" }}>
+      {assessment ? assessment.toUpperCase() : "UNRATED"}
+    </span>
+  );
+}
+
+function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+  const [tab, setTab] = useState("summary");
+  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+
+  return (
+    <div>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px 20px", marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 1.4, color: C.muted, marginBottom: 6 }}>OVERALL UX SCORE</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 46, color: C.text, lineHeight: 1 }}>{summary.score ?? "—"}</span>
+              <span style={{ color: C.muted, fontSize: 15 }}>/100</span>
+            </div>
+            <Squiggle width={70} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+            <AssessmentChip assessment={summary.assessment} />
+            <button onClick={onReset} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+              <RefreshCw size={12} /> New audit
+            </button>
+          </div>
+        </div>
+
+        {/* Source thumbnails / URL chip */}
+        {source.mode === "files" && images.length > 0 && (
+          <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+            {images.map((img) => (
+              <div key={img.id} style={{ width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, flexShrink: 0, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {img.kind === "pdf" ? <FileType2 size={14} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              </div>
+            ))}
+          </div>
+        )}
+        {source.mode === "url" && source.url && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, background: C.surfaceAlt, borderRadius: 8, padding: "5px 10px", marginBottom: 14 }}>
+            <Globe size={12} /> {source.url}
+          </div>
+        )}
+
+        {summary.intro && <p style={{ color: C.textDim, fontSize: 14, lineHeight: 1.6, margin: "0 0 16px 0" }}>{summary.intro}</p>}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.low, marginBottom: 8 }}>TOP STRENGTHS</div>
+            {summary.strengths.length ? (
+              <ul style={{ margin: 0, paddingLeft: 16, color: C.textDim, fontSize: 13, lineHeight: 1.6 }}>
+                {summary.strengths.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
+              </ul>
+            ) : <EmptyIssueState />}
+          </div>
+          <div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.critical, marginBottom: 8 }}>TOP CONCERNS</div>
+            {summary.concerns.length ? (
+              <ul style={{ margin: 0, paddingLeft: 16, color: C.textDim, fontSize: 13, lineHeight: 1.6 }}>
+                {summary.concerns.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
+              </ul>
+            ) : <EmptyIssueState />}
+          </div>
+        </div>
+      </div>
+
+      {!isLoggedIn && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+          <HistoryIcon size={15} color={C.muted} style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, color: C.textDim, flex: 1 }}>Optional: log in to save this audit to your history for later.</span>
+          <button onClick={() => onRequireLogin("save")} style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer", flexShrink: 0 }}>
+            Log in
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 16 }}>
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = tab === t.key;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, padding: "8px 13px", borderRadius: 99, fontSize: 12.5, fontWeight: 500, border: `1px solid ${active ? C.gold : C.border}`, background: active ? C.goldSoft : C.surface, color: active ? C.gold : C.muted, cursor: "pointer", whiteSpace: "nowrap" }}>
+              <Icon size={13} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div>
+        {tab === "summary" && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 12px 0" }}>Final Verdict</h3>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <Stamp size={20} color={C.gold} style={{ marginTop: 2, flexShrink: 0 }} />
+              <p style={{ margin: 0, color: C.textDim, fontSize: 14, lineHeight: 1.6 }}>{scorecard.verdict || "Verdict pending — see Scorecard tab."}</p>
+            </div>
+          </div>
+        )}
+        {tab === "usability" && <Section icon={NavIcon} title="Usability Analysis" data={usability} />}
+        {tab === "visual" && <Section icon={Palette} title="Visual Design Analysis" data={visual} />}
+        {tab === "accessibility" && <Section icon={A11yIcon} title="Accessibility Review" data={accessibility} />}
+        {tab === "trust" && <Section icon={ShieldCheck} title="Trust & Credibility Review" data={trust} />}
+        {tab === "conversion" && <Section icon={TrendingUp} title="Conversion Optimization Review" data={conversion} />}
+        {tab === "cognitive" && <Section icon={Brain} title="Cognitive Load Assessment" data={cognitive} />}
+
+        {tab === "ai" && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: 8 }}>
+              <Lightbulb size={16} color={C.gold} /> AI Recommendations
+            </h3>
+            {aiRecommendations ? (
+              <p style={{ margin: 0, color: C.textDim, fontSize: 14, lineHeight: 1.65 }}>{aiRecommendations}</p>
+            ) : <EmptyIssueState />}
+          </div>
+        )}
+
+        {tab === "top10" && (
+          <div>
+            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
+              <Trophy size={17} color={C.gold} /> Top 10 UX Improvements
+            </h3>
+            {top10.length === 0 && <EmptyIssueState />}
+            {top10.map((item) => (
+              <div key={item.rank} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 10, display: "flex", gap: 12 }}>
+                <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: C.gold, width: 28, flexShrink: 0 }}>{String(item.rank).padStart(2, "0")}</div>
+                <div>
+                  <p style={{ margin: "0 0 8px 0", color: C.text, fontSize: 14.5, lineHeight: 1.5, fontWeight: 500 }}>{item.recommendation}</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: C.medium, marginBottom: 2 }}>USER BENEFIT</div>
+                      <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{item.userBenefit}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: C.gold, marginBottom: 2 }}>BUSINESS BENEFIT</div>
+                      <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{item.businessBenefit}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === "wins" && <ListBlock icon={Zap} title="Quick Wins" subtitle="Under a day of effort" items={quickWins} color={C.low} />}
+        {tab === "strategic" && <ListBlock icon={Rocket} title="Strategic Improvements" subtitle="Larger design investment" items={strategic} color={C.gold} />}
+
+        {tab === "scorecard" && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
+            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 16px 0" }}>Final Scorecard</h3>
+            <ScoreBar label="Usability" value={scorecard.usability} />
+            <ScoreBar label="Accessibility" value={scorecard.accessibility} />
+            <ScoreBar label="Visual Design" value={scorecard.visual} />
+            <ScoreBar label="Trust" value={scorecard.trust} />
+            <ScoreBar label="Conversion" value={scorecard.conversion} />
+            <div style={{ height: 1, background: C.border, margin: "14px 0" }} />
+            <ScoreBar label="Overall UX Score" value={scorecard.overall} />
+            <div style={{ marginTop: 18, padding: "14px 16px", background: C.surfaceAlt, borderRadius: 10, border: `1px solid ${C.border}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <Stamp size={16} color={C.gold} />
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 0.6, color: C.gold }}>FINAL VERDICT</span>
+              </div>
+              <p style={{ margin: 0, color: C.text, fontSize: 14, lineHeight: 1.6 }}>{scorecard.verdict || "—"}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
+        <button onClick={onDownload} style={{ ...exportBtnStyle, background: C.gold, color: "#FBF1EC", border: "none", fontWeight: 600 }}>
+          <Download size={14} /> View slide deck
+        </button>
+        <a href={mailtoHref} style={{ ...exportBtnStyle, textDecoration: "none" }}>
+          <Mail size={13} /> Email report
+        </a>
+      </div>
+      <p style={{ textAlign: "center", fontSize: 11, color: C.muted, marginTop: 8 }}>
+        "View slide deck" opens the 12-slide deck right here — present from it directly, or use "Print / Save PDF" inside it to export where your device allows.  "Email report" opens your mail app with a summary; attach the downloaded PDF yourself, since browsers won't let a webpage attach files automatically.
+      </p>
+    </div>
+  );
+}
+
+const exportBtnStyle = {
+  display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1px solid ${C.border}`,
+  color: C.muted, fontSize: 12.5, borderRadius: 8, padding: "8px 14px", cursor: "pointer",
+};
+
+/* ----------------------------------------------------------------------- */
+/* Printable view (for window.print() → Save as PDF)                       */
+/* ----------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------- */
+/* Standalone HTML deck (for download / share when print is unavailable)    */
+/* ----------------------------------------------------------------------- */
+function esc(s) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildDeckHtml(report, source) {
+  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const srcLabel = source && source.mode === "url" && source.url ? esc(source.url.replace(/^https?:\/\//, "").toUpperCase()) : "SCREEN REVIEW";
+  const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
+  const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
+  const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
+  const TOTAL = 12;
+  let n = 0;
+  const footer = () => `<div class="ft"><span>REDLINE UX AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
+
+  const issueSlide = (title, data) => {
+    const cards = data.issues.slice(0, 3).map((iss) => `
+      <div class="card" style="border-top:5px solid ${sevColor(iss.severity)}">
+        <div class="cardhead"><div class="ctitle">${esc(iss.title)}</div>
+        <span class="sev" style="color:${sevColor(iss.severity)};background:${sevBg(iss.severity)};border-color:${sevColor(iss.severity)}55">${esc(iss.severity).toUpperCase()}</span></div>
+        <div class="why">${esc(iss.why)}</div>
+        <div class="fix"><div class="fixlabel">FIX</div>${esc(iss.recommendation)}</div>
+      </div>`).join("");
+    return `<section class="slide"><div class="kicker">FINDINGS</div><h2>${esc(title)}</h2>
+      <div class="cards">${cards || '<p class="empty">No structured findings for this area.</p>'}</div>${footer()}</section>`;
+  };
+
+  const bars = [["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]]
+    .map(([label, v]) => `
+      <div class="bar-row"><span class="bar-label"${label === "Overall" ? ' style="font-weight:700"' : ""}>${label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${v ?? 0}%;background:${scoreColor(v ?? 0)}"></div></div>
+      <span class="bar-val">${v ?? "—"}</span></div>`).join("");
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redline UX Audit — ${srcLabel}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+* { box-sizing: border-box; margin: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+body { background: #555; font-family: 'Inter', sans-serif; color: ${C.text}; }
+.hint { text-align:center; color:#fff; font-size:13px; padding:14px; }
+.slide { width: 296mm; height: 166mm; background: ${C.bg}; margin: 6mm auto; padding: 14mm 16mm; position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
+.kicker { font-family: 'IBM Plex Mono', monospace; font-size: 10pt; letter-spacing: 2px; color: ${C.gold}; margin-bottom: 3mm; }
+h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22pt; margin-bottom: 5mm; }
+.ft { position: absolute; bottom: 8mm; left: 16mm; right: 16mm; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 8pt; color: ${C.muted}; }
+.cards { display: flex; gap: 6mm; flex: 1; }
+.card { flex: 1; background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 3mm; padding: 6mm; display: flex; flex-direction: column; gap: 3mm; }
+.cardhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; }
+.ctitle { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12pt; line-height: 1.25; }
+.sev { font-family: 'IBM Plex Mono', monospace; font-size: 7.5pt; border: 1px solid; border-radius: 99px; padding: 1mm 3mm; white-space: nowrap; }
+.why { font-size: 9pt; line-height: 1.45; color: ${C.textDim}; }
+.fix { margin-top: auto; background: ${C.goldSoft}; border-radius: 2mm; padding: 3.5mm; font-size: 9pt; line-height: 1.4; }
+.fixlabel { font-family: 'IBM Plex Mono', monospace; font-size: 7pt; letter-spacing: 1px; color: ${C.gold}; margin-bottom: 1.5mm; }
+.empty { color: ${C.muted}; font-style: italic; }
+.cols { display: flex; gap: 8mm; flex: 1; }
+.panel { flex: 1; border-radius: 3mm; padding: 6mm; }
+.plabel { font-family: 'IBM Plex Mono', monospace; font-size: 8pt; letter-spacing: 1px; margin-bottom: 3mm; }
+.li { font-size: 10.5pt; line-height: 1.4; margin-bottom: 3mm; display: flex; gap: 2.5mm; }
+.grid10 { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; flex: 1; align-content: start; }
+.t10 { display: flex; gap: 3mm; align-items: baseline; border-bottom: 1px solid ${C.borderSoft}; padding-bottom: 2.5mm; }
+.rank { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13pt; color: ${C.gold}; min-width: 7mm; }
+.t10 span:last-child { font-size: 9.5pt; line-height: 1.35; }
+.bar-row { display: flex; align-items: center; gap: 5mm; margin-bottom: 5mm; }
+.bar-label { width: 38mm; font-size: 10.5pt; }
+.bar-track { flex: 1; height: 5mm; background: ${C.surfaceAlt}; border-radius: 99px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; }
+.bar-val { font-family: 'IBM Plex Mono', monospace; font-size: 10.5pt; width: 16mm; text-align: right; }
+.center { justify-content: center; align-items: center; text-align: center; }
+.bigscore { font-family: 'Fraunces', serif; font-weight: 600; font-size: 64pt; }
+.disc { position: absolute; bottom: 16mm; left: 16mm; right: 16mm; font-size: 7.5pt; color: ${C.muted}; line-height: 1.4; }
+@media print {
+  @page { size: 296mm 166mm; margin: 0; }
+  body { background: none; }
+  .hint { display: none; }
+  .slide { margin: 0; box-shadow: none; page-break-after: always; }
+}
+</style></head><body>
+<div class="hint">To make this a PDF: open your browser's menu → Print → choose "Save as PDF".</div>
+
+<section class="slide center">
+  <div class="kicker">SENIOR UX REVIEW</div>
+  <div style="font-family:'Fraunces',serif;font-weight:600;font-size:40pt;margin-bottom:4mm">Redline UX Audit</div>
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:11pt;color:${C.textDim};margin-bottom:10mm">${srcLabel}</div>
+  <div><span class="bigscore" style="color:${scoreColor(summary.score ?? 0)}">${summary.score ?? "—"}</span>
+  <span style="font-size:16pt;color:${C.muted}">/100 · ${esc(summary.assessment ?? "Unrated")}</span></div>
+  ${footer()}
+</section>
+
+<section class="slide">
+  <div class="kicker">OVERVIEW</div><h2>Executive Summary</h2>
+  <p style="font-size:11pt;line-height:1.55;color:${C.textDim};max-width:220mm;margin-bottom:6mm">${esc(summary.intro)}</p>
+  <div class="cols">
+    <div class="panel" style="background:${C.lowSoft};border:1px solid ${C.low}44"><div class="plabel" style="color:${C.low}">TOP STRENGTHS</div>
+      ${summary.strengths.map((s) => `<div class="li"><span style="color:${C.low}">▸</span><span>${esc(s)}</span></div>`).join("")}</div>
+    <div class="panel" style="background:${C.criticalSoft};border:1px solid ${C.critical}44"><div class="plabel" style="color:${C.critical}">TOP CONCERNS</div>
+      ${summary.concerns.map((s) => `<div class="li"><span style="color:${C.critical}">▸</span><span>${esc(s)}</span></div>`).join("")}</div>
+  </div>
+  ${footer()}
+</section>
+
+${issueSlide("Usability", usability)}
+${issueSlide("Visual Design", visual)}
+${issueSlide("Accessibility", accessibility)}
+${issueSlide("Trust & Credibility", trust)}
+${issueSlide("Conversion", conversion)}
+${issueSlide("Cognitive Load", cognitive)}
+
+<section class="slide">
+  <div class="kicker">PRIORITIES</div><h2>Top 10 Improvements</h2>
+  <div class="grid10">${top10.slice(0, 10).map((t) => `<div class="t10"><span class="rank">${String(t.rank).padStart(2, "0")}</span><span>${esc(t.recommendation)}</span></div>`).join("")}</div>
+  ${footer()}
+</section>
+
+<section class="slide">
+  <div class="kicker">ROADMAP</div><h2>Quick Wins vs. Strategic Bets</h2>
+  <div class="cols">
+    <div class="panel" style="background:${C.surface};border:1px solid ${C.border}"><div class="plabel" style="color:${C.low}">QUICK WINS · UNDER A DAY</div>
+      ${quickWins.slice(0, 6).map((q) => `<div class="li" style="font-size:10pt"><span style="color:${C.low}">✓</span><span>${esc(q)}</span></div>`).join("")}</div>
+    <div class="panel" style="background:${C.surface};border:1px solid ${C.border}"><div class="plabel" style="color:${C.gold}">STRATEGIC · REAL DESIGN EFFORT</div>
+      ${strategic.slice(0, 6).map((s) => `<div class="li" style="font-size:10pt"><span style="color:${C.gold}">◆</span><span>${esc(s)}</span></div>`).join("")}</div>
+  </div>
+  ${footer()}
+</section>
+
+<section class="slide">
+  <div class="kicker">SCORECARD</div><h2>Final Scores</h2>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:230mm">${bars}</div>
+  ${footer()}
+</section>
+
+<section class="slide" style="justify-content:center">
+  <div class="kicker">DECISION</div><h2>Final Verdict</h2>
+  <p style="font-size:13pt;line-height:1.6;max-width:220mm;margin-bottom:6mm">${esc(scorecard.verdict || "—")}</p>
+  ${aiRecommendations ? `<div class="panel" style="background:${C.surface};border:1px solid ${C.border};max-width:230mm;flex:none"><div class="plabel" style="color:${C.gold}">WHERE TO INVEST NEXT</div><p style="font-size:10pt;line-height:1.5;color:${C.textDim}">${esc(aiRecommendations)}</p></div>` : ""}
+  <p class="disc">AI-generated analysis by Redline. Not a certified accessibility audit, legal advice, or professional UX research. Validate critical findings with qualified professionals.</p>
+  ${footer()}
+</section>
+</body></html>`;
+}
+
+const SLIDE = {
+  page: {
+    width: "296mm", height: "166mm", boxSizing: "border-box", padding: "14mm 16mm",
+    background: C.bg, color: C.text, pageBreakAfter: "always", position: "relative",
+    fontFamily: "'Inter', sans-serif", overflow: "hidden", display: "flex", flexDirection: "column",
+  },
+  kicker: { fontFamily: "'IBM Plex Mono', monospace", fontSize: "10pt", letterSpacing: 2, color: C.gold, marginBottom: "3mm" },
+  title: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "22pt", margin: "0 0 5mm 0", color: C.text },
+  footer: { position: "absolute", bottom: "8mm", left: "16mm", right: "16mm", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", color: C.muted },
+};
+
+function SlideFooter({ n, total, sourceLabel }) {
+  return (
+    <div style={SLIDE.footer}>
+      <span>REDLINE UX AUDIT · {sourceLabel}</span>
+      <span>{n} / {total}</span>
+    </div>
+  );
+}
+
+function SevChip({ severity }) {
+  const s = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
+  return (
+    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", color: s.color, background: s.bg, border: `1px solid ${s.color}55`, borderRadius: 99, padding: "1mm 3mm", whiteSpace: "nowrap" }}>
+      {severity.toUpperCase()}
+    </span>
+  );
+}
+
+function IssueSlide({ title, data, n, total, sourceLabel }) {
+  const issues = data.issues.slice(0, 3);
+  return (
+    <div style={SLIDE.page}>
+      <div style={SLIDE.kicker}>FINDINGS</div>
+      <h2 style={SLIDE.title}>{title}</h2>
+      <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
+        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
+        {issues.map((iss, i) => (
+          <div key={i} style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderTop: `2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: "3mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
+              <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "12pt", lineHeight: 1.25 }}>{iss.title}</div>
+              <SevChip severity={iss.severity} />
+            </div>
+            <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
+            <div style={{ marginTop: "auto", background: C.goldSoft, borderRadius: "2mm", padding: "3.5mm" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7pt", letterSpacing: 1, color: C.gold, marginBottom: "1.5mm" }}>FIX</div>
+              <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} />
+    </div>
+  );
+}
+
+function DeckSlides({ report, source }) {
+  if (!report) return null;
+  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
+  const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
+  const TOTAL = 12;
+  let n = 0;
+  const next = () => ++n;
+
+  return (
+    <div>
+      {/* 1 — Title */}
+      <div style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+        <div style={SLIDE.kicker}>SENIOR UX REVIEW</div>
+        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Redline UX Audit</div>
+        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "3mm" }}>
+          <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
+          <span style={{ fontSize: "16pt", color: C.muted }}>/100 · {summary.assessment ?? "Unrated"}</span>
+        </div>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+
+      {/* 2 — Executive Summary */}
+      <div style={SLIDE.page}>
+        <div style={SLIDE.kicker}>OVERVIEW</div>
+        <h2 style={SLIDE.title}>Executive Summary</h2>
+        <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{summary.intro}</p>
+        <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
+          <div style={{ flex: 1, background: C.lowSoft, border: `1px solid ${C.low}44`, borderRadius: "3mm", padding: "6mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>TOP STRENGTHS</div>
+            {summary.strengths.map((s, i) => (
+              <div key={i} style={{ fontSize: "10.5pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.low }}>▸</span><span>{s}</span></div>
+            ))}
+          </div>
+          <div style={{ flex: 1, background: C.criticalSoft, border: `1px solid ${C.critical}44`, borderRadius: "3mm", padding: "6mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.critical, marginBottom: "3mm" }}>TOP CONCERNS</div>
+            {summary.concerns.map((s, i) => (
+              <div key={i} style={{ fontSize: "10.5pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.critical }}>▸</span><span>{s}</span></div>
+            ))}
+          </div>
+        </div>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+
+      {/* 3–8 — Section slides */}
+      <IssueSlide title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+
+      {/* 9 — Top 10 */}
+      <div style={SLIDE.page}>
+        <div style={SLIDE.kicker}>PRIORITIES</div>
+        <h2 style={SLIDE.title}>Top 10 Improvements</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3mm 8mm", flex: 1, alignContent: "start" }}>
+          {top10.slice(0, 10).map((t) => (
+            <div key={t.rank} style={{ display: "flex", gap: "3mm", alignItems: "baseline", borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: "2.5mm" }}>
+              <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "13pt", color: C.gold, minWidth: "7mm" }}>{String(t.rank).padStart(2, "0")}</span>
+              <span style={{ fontSize: "9.5pt", lineHeight: 1.35 }}>{t.recommendation}</span>
+            </div>
+          ))}
+        </div>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+
+      {/* 10 — Roadmap */}
+      <div style={SLIDE.page}>
+        <div style={SLIDE.kicker}>ROADMAP</div>
+        <h2 style={SLIDE.title}>Quick Wins vs. Strategic Bets</h2>
+        <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
+          <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>QUICK WINS · UNDER A DAY</div>
+            {quickWins.slice(0, 6).map((q, i) => (
+              <div key={i} style={{ fontSize: "10pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.low }}>✓</span><span>{q}</span></div>
+            ))}
+          </div>
+          <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.gold, marginBottom: "3mm" }}>STRATEGIC · REAL DESIGN EFFORT</div>
+            {strategic.slice(0, 6).map((s, i) => (
+              <div key={i} style={{ fontSize: "10pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.gold }}>◆</span><span>{s}</span></div>
+            ))}
+          </div>
+        </div>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+
+      {/* 11 — Scorecard */}
+      <div style={SLIDE.page}>
+        <div style={SLIDE.kicker}>SCORECARD</div>
+        <h2 style={SLIDE.title}>Final Scores</h2>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "5mm", maxWidth: "230mm" }}>
+          {[["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]].map(([label, v]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: "5mm" }}>
+              <span style={{ width: "38mm", fontSize: "10.5pt", fontWeight: label === "Overall" ? 700 : 500 }}>{label}</span>
+              <div style={{ flex: 1, height: "5mm", background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ width: `${v ?? 0}%`, height: "100%", background: scoreColor(v ?? 0), borderRadius: 99 }} />
+              </div>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10.5pt", width: "16mm", textAlign: "right" }}>{v ?? "—"}</span>
+            </div>
+          ))}
+        </div>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+
+      {/* 12 — Verdict & disclaimer */}
+      <div style={{ ...SLIDE.page, justifyContent: "center" }}>
+        <div style={SLIDE.kicker}>DECISION</div>
+        <h2 style={SLIDE.title}>Final Verdict</h2>
+        <p style={{ fontSize: "13pt", lineHeight: 1.6, color: C.text, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{scorecard.verdict || "—"}</p>
+        {aiRecommendations && (
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm", maxWidth: "230mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.gold, marginBottom: "2.5mm" }}>WHERE TO INVEST NEXT</div>
+            <p style={{ fontSize: "10pt", lineHeight: 1.5, color: C.textDim, margin: 0 }}>{aiRecommendations}</p>
+          </div>
+        )}
+        <p style={{ position: "absolute", bottom: "16mm", left: "16mm", right: "16mm", fontSize: "7.5pt", color: C.muted, lineHeight: 1.4 }}>
+          AI-generated analysis by Redline. Not a certified accessibility audit, legal advice, or professional UX research. Validate critical findings with qualified professionals.
+        </p>
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      </div>
+    </div>
+  );
+}
+
+function PrintableReport({ report, source }) {
+  if (!report) return null;
+  return (
+    <div id="redline-print-area" className="print-only">
+      <DeckSlides report={report} source={source} />
+    </div>
+  );
+}
+
+/* Fullscreen in-app deck viewer: slides scaled to the device width so users
+   can present or screenshot directly, since sandboxed iframes block both
+   window.print() and file downloads on some platforms. */
+function DeckViewer({ report, source, onClose, onTryPrint }) {
+  const [scale, setScale] = useState(0.3);
+  const SLIDE_W = 1119; // 296mm at 96dpi
+  useEffect(() => {
+    const compute = () => setScale(Math.min((window.innerWidth - 16) / SLIDE_W, 1));
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#3A3129", zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(58,49,41,0.95)", backdropFilter: "blur(4px)" }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#D8CBB6" }}>SLIDE DECK · PINCH OR ROTATE TO ZOOM</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onTryPrint} style={{ background: C.gold, color: "#FBF1EC", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            Print / Save PDF
+          </button>
+          <button onClick={onClose} style={{ background: "transparent", color: "#D8CBB6", border: "1px solid #6B5D4D", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
+            Close
+          </button>
+        </div>
+      </div>
+      <div style={{ width: SLIDE_W * scale, margin: "10px auto 40px" }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
+          <div className="deck-screen">
+            <DeckSlides report={report} source={source} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* History panel                                                           */
+/* ----------------------------------------------------------------------- */
+function HistoryPanel({ entries, onOpen, onClose, loading }) {
+  return (
+    <Modal onClose={onClose} maxWidth={460}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <HistoryIcon size={18} color={C.gold} />
+        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>Saved audits</h3>
+      </div>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 20, color: C.muted }}>
+          <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+        </div>
+      ) : entries.length === 0 ? (
+        <p style={{ fontSize: 13, color: C.muted }}>No saved audits yet — run one while logged in to see it here.</p>
+      ) : (
+        entries.map((e) => (
+          <button
+            key={e.id}
+            onClick={() => onOpen(e)}
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+              textAlign: "left", background: C.raised, border: `1px solid ${C.border}`, borderRadius: 10,
+              padding: "11px 13px", marginBottom: 8, cursor: "pointer",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 500, marginBottom: 2 }}>
+                {e.mode === "url" ? e.url : `${e.screenCount} screen${e.screenCount === 1 ? "" : "s"}`}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted }}>{new Date(e.date).toLocaleDateString()} · {e.assessment || "Unrated"}</div>
+            </div>
+            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: C.gold }}>{e.score ?? "—"}</div>
+          </button>
+        ))
+      )}
+    </Modal>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Root App                                                                 */
+/* ----------------------------------------------------------------------- */
+export default function RedlineApp() {
+  const [mode, setMode] = useState("files");
+  const [images, setImages] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [report, setReport] = useState(null);
+  const [rawReport, setRawReport] = useState("");
+  const [source, setSource] = useState({ mode: "files", url: "" });
+  const [error, setError] = useState(null);
+
+  const [legalPage, setLegalPage] = useState(null);
+  const [showDeck, setShowDeck] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const pendingRunRef = useRef(null);
+
+  const [user, setUser] = useState(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [authReason, setAuthReason] = useState("");
+  const pendingAuthActionRef = useRef(null);
+  const [historySaved, setHistorySaved] = useState(false);
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const screenLimit = screenLimitFor(user);
+  const navLimit = navLimitFor(user);
+  const isPro = !!(user && user.plan === "pro");
+
+  /* ---- file handling ---- */
+  /* Downscale images before upload: full-res phone screenshots are multi-MB
+     base64 blobs that slow every API round-trip. 1568px longest edge matches
+     the model's effective max input resolution, so nothing useful is lost. */
+  function downscaleImage(dataUrl, mediaType) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_EDGE = 1568;
+        const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
+        if (scale >= 1 && dataUrl.length < 1_500_000) {
+          resolve({ dataUrl, base64: dataUrl.split(",")[1], mediaType });
+          return;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        const outUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ dataUrl: outUrl, base64: outUrl.split(",")[1], mediaType: "image/jpeg" });
+      };
+      img.onerror = () => resolve({ dataUrl, base64: dataUrl.split(",")[1], mediaType });
+      img.src = dataUrl;
+    });
+  }
+
+  const onAddFiles = useCallback((fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
+    if (!files.length) return;
+    setError(null);
+    setImages((prev) => {
+      if (prev.length >= screenLimit) {
+        setError(`Your plan allows up to ${screenLimit} files. ${isPro ? "" : "Upgrade to Pro for up to 20."}`);
+        return prev;
+      }
+      return prev;
+    });
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const rawUrl = String(reader.result);
+        const isPdf = file.type === "application/pdf";
+        const processed = isPdf
+          ? { dataUrl: rawUrl, base64: rawUrl.split(",")[1], mediaType: "application/pdf" }
+          : await downscaleImage(rawUrl, file.type || "image/png");
+        setImages((prev) => {
+          if (prev.length >= screenLimit) return prev;
+          return [
+            ...prev,
+            {
+              id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name: file.name,
+              dataUrl: processed.dataUrl,
+              base64: processed.base64,
+              mediaType: processed.mediaType,
+              kind: isPdf ? "pdf" : "image",
+            },
+          ];
+        });
+      };
+      reader.onerror = () => setError("Couldn't read one of the files — try a different one.");
+      reader.readAsDataURL(file);
+    });
+  }, [screenLimit, isPro]);
+
+  const onRemove = useCallback((id) => setImages((prev) => prev.filter((img) => img.id !== id)), []);
+
+  /* ---- API ---- */
+  const runControlRef = useRef({ cancelled: false, deadline: 0 });
+  const [runProgress, setRunProgress] = useState({ round: 0, status: "", done: 0, total: 4 });
+
+  function checkRunState() {
+    const ctl = runControlRef.current;
+    if (ctl.cancelled) throw new Error("CANCELLED");
+    if (ctl.deadline && Date.now() > ctl.deadline) throw new Error("DEADLINE");
+  }
+
+  async function waitInterruptible(ms) {
+    const step = 500;
+    let waited = 0;
+    while (waited < ms) {
+      checkRunState();
+      const chunk = Math.min(step, ms - waited);
+      await new Promise((res) => setTimeout(res, chunk));
+      waited += chunk;
+    }
+    checkRunState();
+  }
+
+  async function callClaude(messages, tools, attempt = 0) {
+    checkRunState();
+    const body = { model: "claude-sonnet-4-6", max_tokens: 1000, messages };
+    if (tools) body.tools = tools;
+
+    let response;
+    try {
+      response = await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (networkErr) {
+      if (attempt >= 4) {
+        throw new Error("Couldn't reach the audit service. If you're viewing this outside the Claude app's artifact preview, the API isn't available — otherwise check your connection and retry.");
+      }
+      setRunProgress((p) => ({ ...p, status: `Connection hiccup — retrying (${attempt + 1}/4)…` }));
+      await waitInterruptible(Math.min(1000 * 2 ** attempt, 6000) + Math.random() * 800);
+      return callClaude(messages, tools, attempt + 1);
+    }
+
+    if (response.status === 429 || response.status >= 500) {
+      if (attempt >= 3) {
+        throw new Error(response.status === 429 ? "The audit service is busy right now. Please wait a minute and try again." : `The server is temporarily unavailable (${response.status}). Please try again shortly.`);
+      }
+      const retryAfter = response.headers.get("retry-after");
+      const waitMs = retryAfter ? Math.min(Number(retryAfter) * 1000, 8000) : Math.min(1000 * 2 ** attempt, 4000);
+      setRunProgress((p) => ({ ...p, status: `Service busy — retrying (${attempt + 1}/3)…` }));
+      await waitInterruptible(waitMs);
+      return callClaude(messages, tools, attempt + 1);
+    }
+    if (!response.ok) throw new Error(`API request failed (${response.status})`);
+
+    try {
+      return await response.json();
+    } catch {
+      if (attempt >= 3) throw new Error("Received an unreadable response from the audit service. Please try again.");
+      await waitInterruptible(Math.min(1000 * 2 ** attempt, 4000));
+      return callClaude(messages, tools, attempt + 1);
+    }
+  }
+
+  async function runWithContinuation(initialMessages, tools, onRound) {
+    let messages = initialMessages;
+    let fullText = "";
+    let iterations = 0;
+    while (iterations < 10) {
+      iterations++;
+      if (onRound) onRound(iterations);
+      const data = await callClaude(messages, tools);
+      const blocks = data.content || [];
+      fullText += blocks.filter((b) => b.type === "text").map((b) => b.text).join("");
+      // pause_turn: the model paused mid-search — resume by returning its turn.
+      // tool_use with server tools shouldn't normally surface, but resume the same way.
+      if (data.stop_reason === "pause_turn" || data.stop_reason === "tool_use") {
+        messages = [...messages, { role: "assistant", content: blocks }];
+        continue;
+      }
+      if (data.stop_reason === "max_tokens") {
+        messages = [
+          ...messages,
+          { role: "assistant", content: blocks },
+          { role: "user", content: "Continue exactly where you left off. Do not repeat anything already written, do not add commentary, and do not restart any section. Keep the same exact structure and labels." },
+        ];
+        continue;
+      }
+      break;
+    }
+    return fullText;
+  }
+
+  /* Run report batches concurrently but throttled: at most 2 in flight, with
+     staggered starts. Firing all 4 simultaneously (each carrying images or a
+     web-search tool) can overwhelm the artifact fetch bridge on mobile and
+     fail at the network level before reaching the API. Still ~2x faster than
+     sequential. */
+  async function runBatchedAudit(buildPromptForBatch, sharedContent, tools, progressOffset = 0) {
+    let completed = 0;
+    setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
+
+    const CONCURRENCY = 3;
+    const STAGGER_MS = 500;
+    const results = new Array(REPORT_BATCHES.length);
+    let nextIndex = 0;
+
+    async function worker(workerId) {
+      // Stagger worker start so requests never launch in the same instant
+      if (workerId > 0) await waitInterruptible(workerId * STAGGER_MS);
+      while (nextIndex < REPORT_BATCHES.length) {
+        const i = nextIndex++;
+        const content = [
+          ...sharedContent,
+          { type: "text", text: buildPromptForBatch(REPORT_BATCHES[i]) },
+        ];
+        try {
+          const text = await runWithContinuation([{ role: "user", content }], tools);
+          results[i] = { status: "fulfilled", value: text };
+        } catch (e) {
+          results[i] = { status: "rejected", reason: e };
+          if (e && (e.message === "CANCELLED" || e.message === "DEADLINE")) return;
+        }
+        completed++;
+        setRunProgress((p) => ({ ...p, done: completed + progressOffset }));
+      }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, (_, id) => worker(id)));
+
+    const failures = results.filter((r) => r && r.status === "rejected");
+    const cancelled = failures.find((f) => f.reason && f.reason.message === "CANCELLED");
+    if (cancelled) throw cancelled.reason;
+
+    const texts = results.map((r) => (r && r.status === "fulfilled" ? r.value : ""));
+    const combined = texts.join("\n\n");
+
+    const deadlined = failures.find((f) => f.reason && f.reason.message === "DEADLINE");
+    if (deadlined && !combined.trim()) throw deadlined.reason;
+    if (deadlined) {
+      // Time ran out but some batches finished — show what we have.
+      setError("Time limit reached before every section finished — showing the completed parts below. Re-run to fill the gaps.");
+      return combined;
+    }
+
+    if (!combined.trim()) {
+      const firstErr = failures[0];
+      throw new Error((firstErr && firstErr.reason && firstErr.reason.message) || "The review came back empty.");
+    }
+    if (failures.length > 0) {
+      // Partial success: show what we have, but tell the user.
+      setError(`${failures.length} of ${REPORT_BATCHES.length} report sections failed to generate — the rest are shown below. Re-run to fill the gaps.`);
+    }
+    return combined;
+  }
+
+  const executeFilesAudit = async () => {
+    const fileContent = images.map((img) =>
+      img.kind === "pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: img.base64 } }
+        : { type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } }
+    );
+    return runBatchedAudit(buildFilesBatchPrompt, fileContent, undefined);
+  };
+
+  const executeUrlAudit = async () => {
+    let cleanUrl = urlInput.trim();
+    if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`;
+    const tools = [{ type: "web_search_20250305", name: "web_search" }];
+
+    // Stage 1: one exploration pass produces a factual dossier of the site.
+    setRunProgress({ round: 0, status: "Exploring the site…", done: 0, total: REPORT_BATCHES.length + 1 });
+    const dossier = await runWithContinuation(
+      [{ role: "user", content: [{ type: "text", text: EXPLORATION_PROMPT(cleanUrl, navLimit) }] }],
+      tools
+    );
+    if (!dossier || dossier.trim().length < 100) {
+      throw new Error("Couldn't gather enough content from that site to audit it — it may block automated access. Try a different URL or upload screenshots instead.");
+    }
+    setRunProgress((p) => ({ ...p, status: "", done: 1 }));
+
+    // Stage 2: batches consume the dossier as plain text — no tools, fast.
+    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier.trim(), batch), [], undefined, 1);
+  };
+
+  const startRun = (which) => {
+    if (!showDisclaimer) {
+      pendingRunRef.current = which;
+      setShowDisclaimer(true);
+      return;
+    }
+    performRun(which);
+  };
+
+  const RUN_DEADLINE_MS = 5 * 60 * 1000;
+
+  const performRun = async (which) => {
+    runControlRef.current = { cancelled: false, deadline: Date.now() + RUN_DEADLINE_MS };
+    setRunProgress({ round: 0, status: "" });
+    setAnalyzing(true);
+    setError(null);
+    setReport(null);
+    setHistorySaved(false);
+    try {
+      const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
+      if (!text || !text.trim()) throw new Error("The review came back empty.");
+      const parsed = parseReport(text);
+      setRawReport(text);
+      setReport(parsed);
+      setSource(which === "url" ? { mode: "url", url: urlInput.trim() } : { mode: "files", url: "" });
+
+      if (user) {
+        const entry = {
+          id: `${Date.now()}`,
+          date: Date.now(),
+          score: parsed.summary.score,
+          assessment: parsed.summary.assessment,
+          mode: which,
+          url: which === "url" ? urlInput.trim() : "",
+          screenCount: which === "files" ? images.length : 0,
+          rawText: text.slice(0, 20000),
+        };
+        appendHistoryEntry(user.emailHash, entry).catch(() => {});
+        setHistorySaved(true);
+      }
+    } catch (e) {
+      const msg = e && e.message;
+      if (msg === "CANCELLED") {
+        setError(null); // user chose to stop; no error banner needed
+      } else if (msg === "DEADLINE") {
+        setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
+      } else {
+        setError(msg || "Something went wrong running the audit. Please try again.");
+      }
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const cancelRun = () => {
+    runControlRef.current.cancelled = true;
+  };
+
+  const onAcceptDisclaimer = () => {
+    setShowDisclaimer(false);
+    const which = pendingRunRef.current;
+    pendingRunRef.current = null;
+    if (which) performRun(which);
+  };
+
+  const onRunFiles = () => {
+    setError(null);
+    if (!images.length) return;
+    startRun("files");
+  };
+  const onRunUrl = () => {
+    setError(null);
+    let v = urlInput.trim();
+    if (!v) return;
+    if (!/^https?:\/\//i.test(v)) {
+      v = `https://${v}`;
+    }
+    // Sanity-check it parses as a URL with a plausible hostname
+    try {
+      const u = new URL(v);
+      if (!u.hostname.includes(".")) throw new Error();
+    } catch {
+      setError("That doesn't look like a valid website address — try something like example.com");
+      return;
+    }
+    if (v !== urlInput.trim()) setUrlInput(v);
+    startRun("url");
+  };
+
+  const onReset = useCallback(() => {
+    setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
+  }, []);
+
+  /* ---- auth ---- */
+  const requireLogin = (action) => {
+    pendingAuthActionRef.current = action;
+    const reasons = {
+      save: "Log in to save this audit to your history.",
+    };
+    setAuthReason(reasons[action] || "");
+    setShowAuth(true);
+  };
+
+  const onAuthSuccess = async (u) => {
+    setUser(u);
+    setShowAuth(false);
+    const action = pendingAuthActionRef.current;
+    pendingAuthActionRef.current = null;
+
+    if (report && !historySaved) {
+      const entry = {
+        id: `${Date.now()}`,
+        date: Date.now(),
+        score: report.summary.score,
+        assessment: report.summary.assessment,
+        mode: source.mode,
+        url: source.url,
+        screenCount: source.mode === "files" ? images.length : 0,
+        rawText: rawReport.slice(0, 20000),
+      };
+      appendHistoryEntry(u.emailHash, entry).catch(() => {});
+      setHistorySaved(true);
+    }
+
+  };
+
+  const onLogout = () => { setUser(null); setShowHistory(false); };
+
+  const doDownloadPdf = useCallback(() => {
+    if (!report) return;
+    setShowDeck(true);
+  }, [report]);
+
+  const tryExportDeck = useCallback(async () => {
+    if (!report) return;
+    const html = buildDeckHtml(report, source);
+    const fileName = `redline-ux-audit-${new Date().toISOString().slice(0, 10)}.html`;
+    try {
+      const file = new File([html], fileName, { type: "text/html" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Redline UX Audit" });
+        return;
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+    }
+    try {
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch { /* ignore */ }
+    window.print();
+  }, [report, source]);
+
+  const openHistory = async () => {
+    if (!user) return;
+    setShowHistory(true);
+    setHistoryLoading(true);
+    const list = await getHistoryList(user.emailHash);
+    setHistoryEntries(list);
+    setHistoryLoading(false);
+  };
+
+  const openHistoryEntry = (entry) => {
+    const parsed = parseReport(entry.rawText);
+    setReport(parsed);
+    setRawReport(entry.rawText);
+    setSource({ mode: entry.mode, url: entry.url || "" });
+    setImages([]);
+    setShowHistory(false);
+  };
+
+  const simulatePro = async () => {
+    if (!user) return;
+    const nextPlan = user.plan === "pro" ? "free" : "pro";
+    const updated = { ...user, plan: nextPlan };
+    setUser(updated);
+    try {
+      const record = await getUserRecord(user.emailHash);
+      if (record) await setUserRecord(user.emailHash, { ...record, plan: nextPlan });
+    } catch {
+      // Plan still flips locally for this session even if the background save fails.
+    }
+  };
+
+  const mailtoHref = report
+    ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report))}`
+    : "#";
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Inter', sans-serif", padding: "20px 14px 40px" }}>
+      <style>{`
+        ${FONT_IMPORT}
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { display: none; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes scanSweep { 0% { left: -60%; } 100% { left: 130%; } }
+        .scan-sweep { animation: scanSweep 1.6s ease-in-out infinite; }
+        @keyframes msgFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .msg-fade { animation: msgFadeIn 350ms ease-out; }
+        @keyframes pulseRing { 0% { transform: scale(0.85); opacity: 0.9; } 100% { transform: scale(1.5); opacity: 0; } }
+        @keyframes dotPulse { 0%, 100% { transform: scale(0.7); opacity: 0.4; } 50% { transform: scale(1.1); opacity: 1; } }
+        @keyframes tickPop { 0% { transform: scale(0); } 60% { transform: scale(1.35); } 100% { transform: scale(1); } }
+        .tick-pop { animation: tickPop 380ms cubic-bezier(.2,.8,.3,1.4) both; }
+        @keyframes stepEnter { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+        .step-enter { animation: stepEnter 420ms ease-out both; }
+        @keyframes iconBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+        @keyframes stripeSlide { from { background-position: 0 0; } to { background-position: 24px 0; } }
+        @keyframes shimmerText { 0% { background-position: -120px 0; } 100% { background-position: 120px 0; } }
+        .shimmer-text {
+          background: linear-gradient(90deg, ${C.text} 40%, ${C.gold} 50%, ${C.text} 60%);
+          background-size: 240px 100%;
+          -webkit-background-clip: text; background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: shimmerText 1.8s linear infinite;
+        }
+        .print-only { display: none; }
+        .deck-screen > div > div { margin-bottom: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+        @media print {
+          @page { size: 296mm 166mm; margin: 0; }
+          body * { visibility: hidden; }
+          .print-only, .print-only * { visibility: visible; }
+          .print-only { display: block; position: absolute; top: 0; left: 0; width: 296mm; }
+          .print-only * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+      `}</style>
+
+      <header style={{ maxWidth: 720, margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 26, height: 26, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Eye size={14} color="#FBF1EC" strokeWidth={2.4} />
+          </div>
+          <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, color: C.text, letterSpacing: -0.2 }}>Redline</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {user ? (
+            <>
+              <button onClick={simulatePro} title="Demo only — no real billing" style={{ display: "flex", alignItems: "center", gap: 5, background: isPro ? C.goldSoft : C.surface, border: `1px solid ${C.border}`, color: isPro ? C.gold : C.muted, fontSize: 11.5, borderRadius: 99, padding: "5px 10px", cursor: "pointer" }}>
+                <Crown size={12} /> {isPro ? "Pro (demo)" : "Free — simulate Pro"}
+              </button>
+              <button onClick={openHistory} style={iconBtnStyle} title="History"><HistoryIcon size={15} color={C.muted} /></button>
+              <button onClick={onLogout} style={iconBtnStyle} title="Log out"><LogOut size={15} color={C.muted} /></button>
+            </>
+          ) : (
+            <button onClick={() => { setAuthReason(""); pendingAuthActionRef.current = null; setShowAuth(true); }} style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, borderRadius: 99, padding: "7px 12px", cursor: "pointer" }}>
+              <LogIn size={13} /> Log in
+            </button>
+          )}
+        </div>
+      </header>
+      {user && user.ephemeral && (
+        <div style={{ maxWidth: 720, margin: "0 auto 14px", fontSize: 11.5, color: C.high, background: C.highSoft, border: `1px solid ${C.high}44`, borderRadius: 8, padding: "8px 12px" }}>
+          Persistent storage isn't available right now — your account and history will only last for this session.
+        </div>
+      )}
+
+      <main style={{ maxWidth: 720, margin: "0 auto" }}>
+        {legalPage ? (
+          <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
+        ) : (
+          <>
+            {!analyzing && !report && (
+              <div style={{ maxWidth: 640, margin: "0 auto" }}>
+                <div style={{ textAlign: "center", marginBottom: 22 }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <Stamp size={20} color={C.gold} strokeWidth={2} />
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: 2, color: C.gold }}>SENIOR UX REVIEW</span>
+                  </div>
+                  <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "0 0 8px 0", letterSpacing: -0.3 }}>Redline</h1>
+                  <p style={{ color: C.muted, fontSize: 14.5, lineHeight: 1.55, margin: "0 auto", maxWidth: 440 }}>
+                    Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
+                  </p>
+                </div>
+
+                <ModeTabs mode={mode} setMode={setMode} />
+
+                {mode === "files" ? (
+                  <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} isPro={isPro} />
+                ) : (
+                  <UrlScreen url={urlInput} setUrl={setUrlInput} onRun={onRunUrl} error={error} navLimit={navLimit} isPro={isPro} />
+                )}
+
+                <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 22, flexWrap: "wrap" }}>
+                  {["Nielsen Heuristics", "WCAG", "Conversion", "Cognitive Load"].map((t) => (
+                    <span key={t} style={{ fontSize: 11.5, color: C.muted, fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 0.3 }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {analyzing && <LoadingScreen thumbs={images} progress={runProgress} onCancel={cancelRun} />}
+
+            {!analyzing && report && (
+              <ReportScreen
+                report={report}
+                images={images}
+                source={source}
+                onReset={onReset}
+                isLoggedIn={!!user}
+                onRequireLogin={requireLogin}
+                onDownload={doDownloadPdf}
+                mailtoHref={mailtoHref}
+              />
+            )}
+          </>
+        )}
+
+        <Footer onOpenLegal={setLegalPage} />
+      </main>
+
+      {showDisclaimer && <DisclaimerModal onAccept={onAcceptDisclaimer} onCancel={() => { setShowDisclaimer(false); pendingRunRef.current = null; }} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={onAuthSuccess} reason={authReason} />}
+      {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
+
+      {showDeck && report && (
+        <DeckViewer report={report} source={source} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} />
+      )}
+      <PrintableReport report={report} source={source} />
+    </div>
+  );
+}
+
+const iconBtnStyle = {
+  display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 8,
+  background: C.surface, border: `1px solid ${C.border}`, cursor: "pointer",
+};
