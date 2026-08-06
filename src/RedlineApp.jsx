@@ -61,6 +61,8 @@ function severityFor(raw) {
 /* ----------------------------------------------------------------------- */
 /* Plan limits                                                              */
 /* ----------------------------------------------------------------------- */
+const SITE_URL = "https://redline-sandy-sigma.vercel.app";
+
 const FREE_SCREEN_LIMIT = 5;
 const PRO_SCREEN_LIMIT = 20;
 const FREE_NAV_LIMIT = 5;
@@ -369,7 +371,7 @@ function parseReport(rawText) {
   };
 }
 
-function buildPlainTextSummary(report, source) {
+function buildPlainTextSummary(report, source, saved) {
   if (!report) return "";
   // Keep well under ~1800 chars: long mailto: URLs are silently dropped by
   // many mail clients and browsers.
@@ -384,7 +386,11 @@ function buildPlainTextSummary(report, source) {
   if (report.scorecard.verdict) {
     lines.push("", "Verdict: " + String(report.scorecard.verdict).slice(0, 300));
   }
-  lines.push("", "Full report and slide deck attached separately from Redline.");
+  lines.push("", "View the full report, slide deck and PDF export:");
+  lines.push(saved ? `${SITE_URL}/#myaudits` : SITE_URL);
+  if (!saved) {
+    lines.push("(Log in and re-run to keep audits in your history.)");
+  }
   return lines.join("\n").slice(0, 1500);
 }
 
@@ -2223,8 +2229,32 @@ export default function RedlineApp() {
   const [source, setSource] = useState({ mode: "files", url: "" });
   const [error, setError] = useState(null);
 
-  const [page, setPage] = useState("landing");
+  const VALID_PAGES = ["landing", "audit", "myaudits", "dashboard"];
+  const [page, setPage] = useState(() => {
+    const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
+    return VALID_PAGES.includes(h) ? h : "landing";
+  });
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Reflect the current page in the URL hash so emailed links land in the
+  // right place, and respond to back/forward navigation.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const target = page === "landing" ? "" : `#${page}`;
+    if (window.location.hash !== target) {
+      window.history.replaceState(null, "", target || window.location.pathname);
+    }
+  }, [page]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHash = () => {
+      const h = window.location.hash.replace("#", "");
+      setPage(VALID_PAGES.includes(h) ? h : "landing");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
   const [legalPage, setLegalPage] = useState(null);
@@ -2725,7 +2755,7 @@ export default function RedlineApp() {
   };
 
   const mailtoHref = report
-    ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source))}`
+    ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source, !!user && historySaved))}`
     : "#";
 
   return (
