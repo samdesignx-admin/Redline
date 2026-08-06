@@ -2330,7 +2330,16 @@ export default function RedlineApp() {
     }
 
     if (response.status === 429 || response.status >= 500) {
-      if (attempt >= 3) {
+      // Surface the server's own error message when it provides one — a 500
+      // from our proxy usually means a config problem, not transient load.
+      let serverMsg = "";
+      try {
+        const body = await response.clone().json();
+        serverMsg = body && (body.error?.message || body.error || body.message) || "";
+        if (typeof serverMsg !== "string") serverMsg = JSON.stringify(serverMsg);
+      } catch { /* no JSON body */ }
+      if (attempt >= 3 || (response.status === 500 && serverMsg)) {
+        if (serverMsg) throw new Error(`${serverMsg} (HTTP ${response.status})`);
         throw new Error(response.status === 429 ? "The audit service is busy right now. Please wait a minute and try again." : `The server is temporarily unavailable (${response.status}). Please try again shortly.`);
       }
       const retryAfter = response.headers.get("retry-after");
@@ -2339,7 +2348,15 @@ export default function RedlineApp() {
       await waitInterruptible(waitMs);
       return callClaude(messages, tools, attempt + 1);
     }
-    if (!response.ok) throw new Error(`API request failed (${response.status})`);
+    if (!response.ok) {
+      let msg = "";
+      try {
+        const body = await response.clone().json();
+        msg = (body && (body.error?.message || body.error || body.message)) || "";
+        if (typeof msg !== "string") msg = JSON.stringify(msg);
+      } catch { /* ignore */ }
+      throw new Error(msg ? `${msg} (HTTP ${response.status})` : `API request failed (${response.status})`);
+    }
 
     try {
       return await response.json();
