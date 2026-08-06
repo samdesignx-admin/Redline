@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import {
   Upload, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, Copy, Check,
   AlertTriangle, AlertCircle, Info, ShieldCheck, Eye, Gauge, Trophy,
@@ -180,6 +182,9 @@ Begin now.`;
 }
 
 const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its main navigation destinations. Be efficient — a handful of fetches is enough. If a page won't load, note that and move on rather than retrying.
+
+First, output a line listing every page URL you successfully opened, in this exact format:
+PAGES AUDITED: <url1> | <url2> | <url3>
 
 Then write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.`;
 
@@ -364,22 +369,23 @@ function parseReport(rawText) {
   };
 }
 
-function buildPlainTextSummary(report) {
+function buildPlainTextSummary(report, source) {
   if (!report) return "";
+  // Keep well under ~1800 chars: long mailto: URLs are silently dropped by
+  // many mail clients and browsers.
   const lines = [];
-  lines.push(`Redline UX Audit — Overall Score: ${report.summary.score ?? "—"}/100 (${report.summary.assessment ?? "Unrated"})`);
-  if (report.summary.intro) lines.push("", report.summary.intro);
-  if (report.summary.strengths.length) {
-    lines.push("", "Top Strengths:");
-    report.summary.strengths.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-  }
+  const src = source && source.mode === "url" && source.url ? source.url : "uploaded screens";
+  lines.push(`Redline UX Audit — ${src}`);
+  lines.push(`Overall score: ${report.summary.score ?? "—"}/100 (${report.summary.assessment ?? "Unrated"})`);
   if (report.summary.concerns.length) {
-    lines.push("", "Top Concerns:");
-    report.summary.concerns.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
+    lines.push("", "Top concerns:");
+    report.summary.concerns.slice(0, 3).forEach((c, i) => lines.push(`${i + 1}. ${String(c).slice(0, 120)}`));
   }
-  if (report.scorecard.verdict) lines.push("", "Final Verdict:", report.scorecard.verdict);
-  lines.push("", "(Full detailed report attached as PDF — download it from Redline and attach it to this email.)");
-  return lines.join("\n");
+  if (report.scorecard.verdict) {
+    lines.push("", "Verdict: " + String(report.scorecard.verdict).slice(0, 300));
+  }
+  lines.push("", "Full report and slide deck attached separately from Redline.");
+  return lines.join("\n").slice(0, 1500);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -1194,7 +1200,7 @@ function AssessmentChip({ assessment }) {
   );
 }
 
-function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+function ReportScreen({ report, images, source, auditedPages = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
@@ -1257,6 +1263,17 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
                 <div key={img.id} style={{ width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, flexShrink: 0, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {img.kind === "pdf" ? <FileType2 size={14} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                 </div>
+              ))}
+            </div>
+          )}
+
+          {auditedPages.length > 0 && (
+            <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 8 }}>Pages Audited ({auditedPages.length})</div>
+              {auditedPages.map((u) => (
+                <a key={u} href={u} target="_blank" rel="noopener noreferrer" style={{ display: "block", fontSize: 12.5, color: C.gold, marginBottom: 5, wordBreak: "break-all", textDecoration: "none" }}>
+                  {u.replace(/^https?:\/\//, "")}
+                </a>
               ))}
             </div>
           )}
@@ -1394,14 +1411,14 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
 
       <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
         <button onClick={onDownload} style={{ ...exportBtnStyle, background: C.now, color: C.dark, borderRadius: 999, border: "none", fontWeight: 600 }}>
-          <Download size={14} /> View slide deck
+          <Download size={14} /> Slide deck & PDF
         </button>
         <a href={mailtoHref} style={{ ...exportBtnStyle, textDecoration: "none" }}>
           <Mail size={13} /> Email report
         </a>
       </div>
       <p style={{ textAlign: "center", fontSize: 11, color: C.muted, marginTop: 8 }}>
-        "View slide deck" opens the 12-slide deck right here — present from it directly, or use "Print / Save PDF" inside it to export where your device allows.  "Email report" opens your mail app with a summary; attach the downloaded PDF yourself, since browsers won't let a webpage attach files automatically.
+        "Slide deck & PDF" opens the deck — present from it directly, or tap "Download PDF" inside to save a real PDF file.  "Email report" opens your mail app with a summary; attach the downloaded PDF yourself, since browsers won't let a webpage attach files automatically.
       </p>
     </div>
   );
@@ -1422,7 +1439,7 @@ function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function buildDeckHtml(report, source) {
+function buildDeckHtml(report, source, auditedPages = []) {
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const srcLabel = source && source.mode === "url" && source.url ? esc(source.url.replace(/^https?:\/\//, "").toUpperCase()) : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
@@ -1437,8 +1454,8 @@ function buildDeckHtml(report, source) {
       <div class="card" style="border-top:5px solid ${sevColor(iss.severity)}">
         <div class="cardhead"><div class="ctitle">${esc(iss.title)}</div>
         <span class="sev" style="color:${sevColor(iss.severity)};background:${sevBg(iss.severity)};border-color:${sevColor(iss.severity)}55">${esc(iss.severity).toUpperCase()}</span></div>
-        <div class="why">${esc(iss.why)}</div>
-        <div class="fix"><div class="fixlabel">FIX</div>${esc(iss.recommendation)}</div>
+        <div><div class="whylabel">Why it matters</div><div class="why">${esc(iss.why)}</div></div>
+        <div class="fix"><div class="fixlabel">Recommendation</div>${esc(iss.recommendation)}</div>
       </div>`).join("");
     return `<section class="slide"><div class="kicker">Findings</div><h2>${esc(title)}</h2><div class="rule"></div>
       <div class="cards">${cards || '<p class="empty">No structured findings for this area.</p>'}</div>${footer()}</section>`;
@@ -1468,6 +1485,7 @@ h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 
 .ctitle { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 12pt; line-height: 1.25; color: ${C.dark}; }
 .sev { font-family: 'IBM Plex Mono', monospace; font-size: 7.5pt; border: 1px solid; border-radius: 99px; padding: 1mm 3mm; white-space: nowrap; }
 .why { font-size: 9pt; line-height: 1.45; color: ${C.textDim}; }
+.whylabel { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 8pt; letter-spacing: 0.5px; color: ${C.muted}; margin-bottom: 1.5mm; text-transform: uppercase; }
 .fix { margin-top: auto; border-top: 0.3mm solid ${C.border}; padding-top: 3.5mm; font-size: 9pt; line-height: 1.4; }
 .fixlabel { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 8pt; letter-spacing: 0.5px; color: ${C.gold}; margin-bottom: 1.5mm; text-transform: uppercase; }
 .empty { color: ${C.muted}; font-style: italic; }
@@ -1541,6 +1559,11 @@ ${issueSlide("Cognitive Load", cognitive)}
   ${footer()}
 </section>
 
+${auditedPages.length ? `<section class="slide">
+  <div class="kicker">Scope</div><h2>Pages Audited</h2><div class="rule"></div>
+  <div class="grid10">${auditedPages.map((u, i) => `<div class="t10"><span class="rank">${String(i + 1).padStart(2, "0")}</span><span>${esc(u.replace(/^https?:\/\//, ""))}</span></div>`).join("")}</div>
+</section>` : ""}
+
 <section class="slide">
   <div class="kicker">Scorecard</div><h2>Final Scores</h2><div class="rule"></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:230mm">${bars}</div>
@@ -1599,7 +1622,7 @@ function SevChip({ severity }) {
 function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   const issues = data.issues.slice(0, 3);
   return (
-    <div style={SLIDE.page}>
+    <div className="deck-slide" style={SLIDE.page}>
       <div style={SLIDE.kicker}>Findings</div>
       <h2 style={SLIDE.title}>{title}</h2>
       <div style={SLIDE.rule} />
@@ -1611,11 +1634,14 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
               <div style={{ fontWeight: 800, fontSize: "12pt", lineHeight: 1.25, color: C.dark }}>{iss.title}</div>
               <SevChip severity={iss.severity} />
             </div>
-            <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
+              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
+            </div>
             <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${C.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
               <SlideIconBadge icon={Check} size={12} />
               <div>
-                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.gold, marginBottom: "1mm", textTransform: "uppercase" }}>Fix</div>
+                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.gold, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
                 <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
               </div>
             </div>
@@ -1627,7 +1653,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   );
 }
 
-function DeckSlides({ report, source }) {
+function DeckSlides({ report, source, auditedPages = [] }) {
   if (!report) return null;
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
@@ -1639,7 +1665,7 @@ function DeckSlides({ report, source }) {
   return (
     <div>
       {/* 1 — Title */}
-      <div style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+      <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
         <div style={SLIDE.kicker}>Senior UX Review</div>
         <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Redline UX Audit</div>
         <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
@@ -1651,7 +1677,7 @@ function DeckSlides({ report, source }) {
       </div>
 
       {/* 2 — Executive Summary */}
-      <div style={SLIDE.page}>
+      <div className="deck-slide" style={SLIDE.page}>
         <div style={SLIDE.kicker}>Overview</div>
         <h2 style={SLIDE.title}>Executive Summary</h2>
         <div style={SLIDE.rule} />
@@ -1682,7 +1708,7 @@ function DeckSlides({ report, source }) {
       <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
 
       {/* 9 — Top 10 */}
-      <div style={SLIDE.page}>
+      <div className="deck-slide" style={SLIDE.page}>
         <div style={SLIDE.kicker}>Priorities</div>
         <h2 style={SLIDE.title}>Top 10 Improvements</h2>
         <div style={SLIDE.rule} />
@@ -1698,7 +1724,7 @@ function DeckSlides({ report, source }) {
       </div>
 
       {/* 10 — Roadmap */}
-      <div style={SLIDE.page}>
+      <div className="deck-slide" style={SLIDE.page}>
         <div style={SLIDE.kicker}>Roadmap</div>
         <h2 style={SLIDE.title}>Quick Wins vs. Strategic Bets</h2>
         <div style={SLIDE.rule} />
@@ -1720,7 +1746,7 @@ function DeckSlides({ report, source }) {
       </div>
 
       {/* 11 — Scorecard */}
-      <div style={SLIDE.page}>
+      <div className="deck-slide" style={SLIDE.page}>
         <div style={SLIDE.kicker}>Scorecard</div>
         <h2 style={SLIDE.title}>Final Scores</h2>
         <div style={SLIDE.rule} />
@@ -1739,7 +1765,7 @@ function DeckSlides({ report, source }) {
       </div>
 
       {/* 12 — Verdict & disclaimer */}
-      <div style={{ ...SLIDE.page, justifyContent: "center" }}>
+      <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
         <div style={SLIDE.kicker}>Decision</div>
         <h2 style={SLIDE.title}>Final Verdict</h2>
         <div style={SLIDE.rule} />
@@ -1759,11 +1785,11 @@ function DeckSlides({ report, source }) {
   );
 }
 
-function PrintableReport({ report, source }) {
+function PrintableReport({ report, source, auditedPages = [] }) {
   if (!report) return null;
   return (
     <div id="redline-print-area" className="print-only">
-      <DeckSlides report={report} source={source} />
+      <DeckSlides report={report} source={source} auditedPages={auditedPages} />
     </div>
   );
 }
@@ -1771,7 +1797,7 @@ function PrintableReport({ report, source }) {
 /* Fullscreen in-app deck viewer: slides scaled to the device width so users
    can present or screenshot directly, since sandboxed iframes block both
    window.print() and file downloads on some platforms. */
-function DeckViewer({ report, source, onClose, onTryPrint }) {
+function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, exporting }) {
   const [scale, setScale] = useState(0.3);
   const SLIDE_W = 1119; // 296mm at 96dpi
   useEffect(() => {
@@ -1794,9 +1820,9 @@ function DeckViewer({ report, source, onClose, onTryPrint }) {
         </div>
       </div>
       <div style={{ width: SLIDE_W * scale, margin: "10px auto 40px" }}>
-        <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
+        <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
-            <DeckSlides report={report} source={source} />
+            <DeckSlides report={report} source={source} auditedPages={auditedPages} />
           </div>
         </div>
       </div>
@@ -2200,6 +2226,7 @@ export default function RedlineApp() {
   const [page, setPage] = useState("landing");
   const [menuOpen, setMenuOpen] = useState(false);
   const [auditTitle, setAuditTitle] = useState("");
+  const [auditedPages, setAuditedPages] = useState([]);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -2479,6 +2506,11 @@ export default function RedlineApp() {
       [{ role: "user", content: [{ type: "text", text: EXPLORATION_PROMPT(cleanUrl, navLimit) }] }],
       tools
     );
+    const pagesMatch = dossier.match(/PAGES AUDITED:\s*(.+)/i);
+    const pages = pagesMatch
+      ? pagesMatch[1].split("|").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
+      : [];
+    setAuditedPages(pages);
     if (!dossier || dossier.trim().length < 100) {
       throw new Error("Couldn't gather enough content from that site to audit it — it may block automated access. Try a different URL or upload screenshots instead.");
     }
@@ -2581,6 +2613,7 @@ export default function RedlineApp() {
   const onReset = useCallback(() => {
     setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
+    setAuditedPages([]);
   }, []);
 
   /* ---- auth ---- */
@@ -2624,29 +2657,41 @@ export default function RedlineApp() {
     setShowDeck(true);
   }, [report]);
 
+  const [exporting, setExporting] = useState(false);
+
+  /* Genuine PDF export: rasterize each rendered slide with html2canvas and
+     place it on a landscape 16:9 jsPDF page. Requires the deck viewer to be
+     open so the slides exist in the DOM at full size. */
   const tryExportDeck = useCallback(async () => {
-    if (!report) return;
-    const html = buildDeckHtml(report, source);
-    const fileName = `redline-ux-audit-${new Date().toISOString().slice(0, 10)}.html`;
-    try {
-      const file = new File([html], fileName, { type: "text/html" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Redline UX Audit" });
-        return;
-      }
-    } catch (e) {
-      if (e && e.name === "AbortError") return;
+    if (!report || exporting) return;
+    const slides = Array.from(document.querySelectorAll(".deck-screen .deck-slide"));
+    if (!slides.length) {
+      setError("Open the slide deck first, then export.");
+      return;
     }
+    setExporting(true);
     try {
-      const blob = new Blob([html], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = fileName;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    } catch { /* ignore */ }
-    window.print();
-  }, [report, source]);
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [296, 166] });
+      for (let i = 0; i < slides.length; i++) {
+        const canvas = await html2canvas(slides[i], {
+          scale: 2,
+          backgroundColor: "#FFFFFF",
+          useCORS: true,
+          logging: false,
+          windowWidth: 1119,
+        });
+        const img = canvas.toDataURL("image/jpeg", 0.9);
+        if (i > 0) pdf.addPage([296, 166], "landscape");
+        pdf.addImage(img, "JPEG", 0, 0, 296, 166, undefined, "FAST");
+      }
+      const name = `redline-ux-audit-${new Date().toISOString().slice(0, 10)}.pdf`;
+      pdf.save(name);
+    } catch (e) {
+      setError("Couldn't build the PDF. You can still present from the deck view, or use your browser's Print > Save as PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }, [report, exporting]);
 
   const openHistory = async () => {
     if (!user) return;
@@ -2680,7 +2725,7 @@ export default function RedlineApp() {
   };
 
   const mailtoHref = report
-    ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report))}`
+    ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source))}`
     : "#";
 
   return (
@@ -2738,7 +2783,7 @@ export default function RedlineApp() {
 
           {/* Desktop nav — hidden on mobile via CSS class */}
           <nav className="nav-desktop" style={{ display: "flex", gap: 4, alignItems: "center" }}>
-            {[["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
+            {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
               <button key={key} onClick={() => { setPage(key); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", color: page === key && !legalPage ? C.gold : C.muted, fontSize: 12.5, fontWeight: 600, borderRadius: 99, padding: "6px 11px", cursor: "pointer" }}>
                 <Icon size={13} /> {label}
               </button>
@@ -2776,7 +2821,7 @@ export default function RedlineApp() {
         {/* Mobile dropdown menu */}
         {menuOpen && (
           <div className="nav-mobile-menu" style={{ maxWidth: 720, margin: "10px auto 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
-            {[["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
+            {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
               <button key={key} onClick={() => { setPage(key); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: page === key && !legalPage ? C.gold : C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
                 <Icon size={16} /> {label}
               </button>
@@ -2807,11 +2852,11 @@ export default function RedlineApp() {
       <main style={{ maxWidth: 720, margin: "0 auto" }}>
         {legalPage ? (
           <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
-        ) : page === "landing" && !analyzing && !report ? (
+        ) : page === "landing" && !analyzing ? (
           <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} />
-        ) : page === "dashboard" && !analyzing && !report ? (
+        ) : page === "dashboard" && !analyzing ? (
           <DashboardPage onStartAudit={() => setPage("audit")} />
-        ) : page === "myaudits" && !analyzing && !report ? (
+        ) : page === "myaudits" && !analyzing ? (
           <MyAuditsPage user={user} onOpenEntry={(e) => { openHistoryEntry(e); setPage("audit"); }} onNewAudit={() => setPage("audit")} onRequireLogin={requireLogin} />
         ) : (
           <>
@@ -2856,6 +2901,7 @@ export default function RedlineApp() {
                 report={report}
                 images={images}
                 source={source}
+                auditedPages={auditedPages}
                 onReset={onReset}
                 isLoggedIn={!!user}
                 onRequireLogin={requireLogin}
@@ -2874,9 +2920,9 @@ export default function RedlineApp() {
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (
-        <DeckViewer report={report} source={source} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} />
+        <DeckViewer report={report} source={source} auditedPages={auditedPages} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
-      <PrintableReport report={report} source={source} />
+      <PrintableReport report={report} source={source} auditedPages={auditedPages} />
     </div>
   );
 }
