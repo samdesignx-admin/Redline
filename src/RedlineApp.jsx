@@ -6,36 +6,39 @@ import {
   Accessibility as A11yIcon, TrendingUp, Brain, Rocket, CircleDot,
   Mail, Download, History as HistoryIcon, Link2, Crown, ShieldAlert,
   ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
-  FileType2,
+  FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
 } from "lucide-react";
 
 /* ----------------------------------------------------------------------- */
 /* Warm "paper & red ink" theme tokens                                     */
 /* ----------------------------------------------------------------------- */
 const C = {
-  bg: "#F2EADA",
-  surface: "#FBF6EC",
-  surfaceAlt: "#EFE3C6",
+  bg: "#F3F6F5",
+  surface: "#FFFFFF",
+  surfaceAlt: "#E8EFED",
   raised: "#FFFFFF",
-  border: "#E0CFA8",
-  borderSoft: "#ECDFBE",
-  text: "#2C2013",
-  textDim: "#5C4B34",
-  muted: "#8E7A55",
-  gold: "#B23B2E",
-  goldSoft: "#F3DCD2",
-  critical: "#B23B2E",
-  criticalSoft: "#F4D9D0",
+  border: "#D5E0DC",
+  borderSoft: "#E4ECE9",
+  text: "#12302B",
+  textDim: "#3E5A54",
+  muted: "#6E8681",
+  gold: "#0C7D62",
+  now: "#62D84E",
+  dark: "#0B3B36",
+  darkAlt: "#12463F",
+  goldSoft: "#DFF3EC",
+  critical: "#C74634",
+  criticalSoft: "#FAE4E0",
   high: "#B5791E",
-  highSoft: "#F3E3BE",
-  medium: "#33688F",
-  mediumSoft: "#DCE7EC",
-  low: "#3E7A4C",
-  lowSoft: "#DEEADB",
+  highSoft: "#F6ECD8",
+  medium: "#2E6E8E",
+  mediumSoft: "#DFEDF3",
+  low: "#1E8A5A",
+  lowSoft: "#DDF2E7",
 };
 
 const FONT_IMPORT =
-  "@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');";
+  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');";
 
 const SEVERITY_STYLES = {
   Critical: { color: C.critical, bg: C.criticalSoft, icon: AlertCircle, label: "Critical" },
@@ -475,6 +478,12 @@ async function appendHistoryEntry(emailHash, entry) {
   await kvSet(historyKey(emailHash), JSON.stringify(next));
   return next;
 }
+async function deleteHistoryEntry(emailHash, id) {
+  const list = await getHistoryList(emailHash);
+  const next = list.filter((e) => e.id !== id);
+  await kvSet(historyKey(emailHash), JSON.stringify(next));
+  return next;
+}
 
 /* ----------------------------------------------------------------------- */
 /* Small UI atoms                                                           */
@@ -517,7 +526,7 @@ function IssueCard({ issue }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${s.color}`, borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-        <h4 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16.5, color: C.text, lineHeight: 1.3 }}>{issue.title}</h4>
+        <h4 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16.5, color: C.text, lineHeight: 1.3 }}>{issue.title}</h4>
         <SeverityBadge severity={issue.severity} />
       </div>
       <div style={{ marginBottom: 8 }}>
@@ -564,7 +573,7 @@ function EmptyIssueState() {
 function Section({ icon: Icon, title, data }) {
   return (
     <div>
-      <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
+      <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
         <Icon size={17} color={C.gold} /> {title}
       </h3>
       <SectionIntro text={data.intro} />
@@ -576,7 +585,7 @@ function Section({ icon: Icon, title, data }) {
 function ListBlock({ icon: Icon, title, subtitle, items, color }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-      <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 2px 0", display: "flex", alignItems: "center", gap: 8 }}>
+      <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 17, margin: "0 0 2px 0", display: "flex", alignItems: "center", gap: 8 }}>
         <Icon size={16} color={color} /> {title}
       </h3>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>{subtitle}</div>
@@ -624,7 +633,7 @@ function DisclaimerModal({ onAccept, onCancel }) {
     <Modal onClose={onCancel} maxWidth={460}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <ShieldAlert size={19} color={C.gold} />
-        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>Before you run this</h3>
+        <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 18, color: C.text }}>Before you run this</h3>
       </div>
       <p style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.6, margin: "0 0 10px 0" }}>
         Redline's findings are generated by an AI model, not a certified human auditor. They're a strong
@@ -646,7 +655,7 @@ function DisclaimerModal({ onAccept, onCancel }) {
         <button
           disabled={!checked}
           onClick={onAccept}
-          style={{ flex: 1, padding: "11px 0", borderRadius: 9, border: "none", background: checked ? C.gold : C.surfaceAlt, color: checked ? "#FBF1EC" : C.muted, fontWeight: 600, fontSize: 13.5, cursor: checked ? "pointer" : "not-allowed" }}
+          style={{ flex: 1, padding: "11px 0", borderRadius: 9, border: "none", background: checked ? C.now : C.surfaceAlt, color: checked ? C.dark : C.muted, borderRadius: 999, fontWeight: 600, fontSize: 13.5, cursor: checked ? "pointer" : "not-allowed" }}
         >
           Agree & continue
         </button>
@@ -715,7 +724,7 @@ function AuthModal({ onClose, onAuth, reason }) {
     <Modal onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <Lock size={18} color={C.gold} />
-        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>
+        <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 18, color: C.text }}>
           {mode === "login" ? "Log in" : "Create your account"}
         </h3>
       </div>
@@ -744,7 +753,7 @@ function AuthModal({ onClose, onAuth, reason }) {
         disabled={loading}
         style={{
           width: "100%", marginTop: 16, padding: "12px 0", borderRadius: 9, border: "none",
-          background: C.gold, color: "#FBF1EC", fontWeight: 600, fontSize: 14, cursor: "pointer",
+          background: C.now, color: C.dark, borderRadius: 999, fontWeight: 600, fontSize: 14, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}
       >
@@ -815,7 +824,7 @@ function LegalPage({ pageKey, onBack }) {
       <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, cursor: "pointer", marginBottom: 18, padding: 0 }}>
         <ArrowLeft size={14} /> Back
       </button>
-      <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 22, color: C.text, marginBottom: 14 }}>{page.title}</h2>
+      <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, color: C.text, marginBottom: 14 }}>{page.title}</h2>
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
         {page.body.split("\n\n").map((p, i) => (
           <p key={i} style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.65, margin: i === 0 ? "0 0 12px 0" : "0 0 12px 0", fontStyle: i === 0 ? "italic" : "normal" }}>
@@ -949,7 +958,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
         onClick={onRun}
         style={{
           width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 10, border: "none",
-          background: images.length ? C.gold : C.surfaceAlt, color: images.length ? "#FBF1EC" : C.muted,
+          background: images.length ? C.now : C.surfaceAlt, color: images.length ? C.dark : C.muted, borderRadius: 999,
           fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 15, cursor: images.length ? "pointer" : "not-allowed",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}
@@ -966,7 +975,7 @@ function UrlScreen({ url, setUrl, onRun, error, navLimit, isPro }) {
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <Globe size={18} color={C.gold} />
-          <span style={{ fontFamily: "'Fraunces', serif", fontSize: 16, color: C.text }}>Review a live website</span>
+          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 16, color: C.text }}>Review a live website</span>
         </div>
         <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "0 0 14px 0" }}>
           Redline reads the homepage and up to {navLimit} main navigation pages ({isPro ? "Pro" : "Free"} plan). This
@@ -985,7 +994,7 @@ function UrlScreen({ url, setUrl, onRun, error, navLimit, isPro }) {
           onClick={onRun}
           style={{
             width: "100%", marginTop: 16, padding: "14px 0", borderRadius: 10, border: "none",
-            background: url.trim() ? C.gold : C.surfaceAlt, color: url.trim() ? "#FBF1EC" : C.muted,
+            background: url.trim() ? C.now : C.surfaceAlt, color: url.trim() ? C.dark : C.muted, borderRadius: 999,
             fontWeight: 600, fontSize: 15, cursor: url.trim() ? "pointer" : "not-allowed",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           }}
@@ -1191,58 +1200,93 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
 
   return (
     <div>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "22px 20px", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
-          <div>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 1.4, color: C.muted, marginBottom: 6 }}>OVERALL UX SCORE</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 46, color: C.text, lineHeight: 1 }}>{summary.score ?? "—"}</span>
-              <span style={{ color: C.muted, fontSize: 15 }}>/100</span>
+      {/* Report overview header — dark title band + score panel */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", marginBottom: 16, boxShadow: "0 6px 20px rgba(18,48,43,0.06)" }}>
+        <div style={{ height: 6, background: C.gold }} />
+        <div style={{ padding: "18px 18px 20px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", minWidth: 0 }}>
+              <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.dark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <FileText size={20} color="#FFFFFF" />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 22, color: C.text, margin: "0 0 3px 0", letterSpacing: -0.5 }}>Report Overview</h2>
+                <div style={{ fontSize: 12, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "") : `${images.length} screen${images.length === 1 ? "" : "s"} reviewed`}
+                  {"  ·  "}{new Date().toLocaleDateString()}
+                </div>
+              </div>
             </div>
-            <Squiggle width={70} />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-            <AssessmentChip assessment={summary.assessment} />
-            <button onClick={onReset} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, borderRadius: 8, padding: "6px 10px", cursor: "pointer" }}>
+            <button onClick={onReset} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12, borderRadius: 999, padding: "7px 12px", cursor: "pointer", flexShrink: 0 }}>
               <RefreshCw size={12} /> New audit
             </button>
           </div>
-        </div>
 
-        {/* Source thumbnails / URL chip */}
-        {source.mode === "files" && images.length > 0 && (
-          <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
-            {images.map((img) => (
-              <div key={img.id} style={{ width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, flexShrink: 0, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {img.kind === "pdf" ? <FileType2 size={14} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          {/* Score panel */}
+          <div style={{ background: C.goldSoft, borderRadius: 14, padding: "18px 18px 16px", marginBottom: 16, textAlign: "center" }}>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Overall Score</div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 62, color: C.dark, lineHeight: 1 }}>{summary.score ?? "—"}</div>
+            <div style={{ fontSize: 12.5, color: C.textDim, marginBottom: 12 }}>Out of 100</div>
+            <div style={{ height: 9, background: "rgba(255,255,255,0.7)", borderRadius: 99, overflow: "hidden", marginBottom: 10 }}>
+              <div style={{ height: "100%", width: `${summary.score ?? 0}%`, background: C.gold, borderRadius: 99, transition: "width 900ms cubic-bezier(.2,.8,.2,1)" }} />
+            </div>
+            <AssessmentChip assessment={summary.assessment} />
+          </div>
+
+          {/* Score breakdown */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 10 }}>Score Breakdown</div>
+            {[["Usability", scorecard.usability, NavIcon], ["Accessibility", scorecard.accessibility, A11yIcon], ["Visual Design", scorecard.visual, Palette], ["Trust", scorecard.trust, ShieldCheck], ["Conversion", scorecard.conversion, TrendingUp]].map(([label, v, Icon]) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                <div style={{ width: 26, height: 26, borderRadius: "50%", background: C.dark, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Icon size={13} color="#FFFFFF" />
+                </div>
+                <span style={{ fontSize: 12.5, color: C.textDim, width: 92, flexShrink: 0 }}>{label}</span>
+                <div style={{ flex: 1, height: 7, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${v ?? 0}%`, background: C.gold, borderRadius: 99 }} />
+                </div>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13, color: C.text, width: 26, textAlign: "right", flexShrink: 0 }}>{v ?? "—"}</span>
               </div>
             ))}
           </div>
-        )}
-        {source.mode === "url" && source.url && (
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted, background: C.surfaceAlt, borderRadius: 8, padding: "5px 10px", marginBottom: 14 }}>
-            <Globe size={12} /> {source.url}
-          </div>
-        )}
 
-        {summary.intro && <p style={{ color: C.textDim, fontSize: 14, lineHeight: 1.6, margin: "0 0 16px 0" }}>{summary.intro}</p>}
+          {/* Source thumbnails */}
+          {source.mode === "files" && images.length > 0 && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto" }}>
+              {images.map((img) => (
+                <div key={img.id} style={{ width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, flexShrink: 0, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {img.kind === "pdf" ? <FileType2 size={14} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                </div>
+              ))}
+            </div>
+          )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <div>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.low, marginBottom: 8 }}>TOP STRENGTHS</div>
-            {summary.strengths.length ? (
-              <ul style={{ margin: 0, paddingLeft: 16, color: C.textDim, fontSize: 13, lineHeight: 1.6 }}>
-                {summary.strengths.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
-              </ul>
-            ) : <EmptyIssueState />}
-          </div>
-          <div>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.critical, marginBottom: 8 }}>TOP CONCERNS</div>
-            {summary.concerns.length ? (
-              <ul style={{ margin: 0, paddingLeft: 16, color: C.textDim, fontSize: 13, lineHeight: 1.6 }}>
-                {summary.concerns.map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
-              </ul>
-            ) : <EmptyIssueState />}
+          {summary.intro && (
+            <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 6 }}>Executive Summary</div>
+              <p style={{ color: C.textDim, fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>{summary.intro}</p>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14 }}>
+            <div>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, color: C.low, marginBottom: 8 }}>Key Strengths</div>
+              {summary.strengths.length ? summary.strengths.map((t, i) => (
+                <div key={i} style={{ display: "flex", gap: 7, marginBottom: 7 }}>
+                  <Check size={14} color={C.low} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{t}</span>
+                </div>
+              )) : <EmptyIssueState />}
+            </div>
+            <div>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, color: C.critical, marginBottom: 8 }}>Key Concerns</div>
+              {summary.concerns.length ? summary.concerns.map((t, i) => (
+                <div key={i} style={{ display: "flex", gap: 7, marginBottom: 7 }}>
+                  <AlertCircle size={14} color={C.critical} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <span style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{t}</span>
+                </div>
+              )) : <EmptyIssueState />}
+            </div>
           </div>
         </div>
       </div>
@@ -1272,7 +1316,7 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
       <div>
         {tab === "summary" && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 12px 0" }}>Final Verdict</h3>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 17, margin: "0 0 12px 0" }}>Final Verdict</h3>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               <Stamp size={20} color={C.gold} style={{ marginTop: 2, flexShrink: 0 }} />
               <p style={{ margin: 0, color: C.textDim, fontSize: 14, lineHeight: 1.6 }}>{scorecard.verdict || "Verdict pending — see Scorecard tab."}</p>
@@ -1288,7 +1332,7 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
 
         {tab === "ai" && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 17, margin: "0 0 12px 0", display: "flex", alignItems: "center", gap: 8 }}>
               <Lightbulb size={16} color={C.gold} /> AI Recommendations
             </h3>
             {aiRecommendations ? (
@@ -1299,13 +1343,13 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
 
         {tab === "top10" && (
           <div>
-            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
               <Trophy size={17} color={C.gold} /> Top 10 UX Improvements
             </h3>
             {top10.length === 0 && <EmptyIssueState />}
             {top10.map((item) => (
               <div key={item.rank} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 10, display: "flex", gap: 12 }}>
-                <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: C.gold, width: 28, flexShrink: 0 }}>{String(item.rank).padStart(2, "0")}</div>
+                <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 18, color: C.gold, width: 28, flexShrink: 0 }}>{String(item.rank).padStart(2, "0")}</div>
                 <div>
                   <p style={{ margin: "0 0 8px 0", color: C.text, fontSize: 14.5, lineHeight: 1.5, fontWeight: 500 }}>{item.recommendation}</p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -1329,7 +1373,7 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
 
         {tab === "scorecard" && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-            <h3 style={{ fontFamily: "'Fraunces', serif", color: C.text, fontSize: 17, margin: "0 0 16px 0" }}>Final Scorecard</h3>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 17, margin: "0 0 16px 0" }}>Final Scorecard</h3>
             <ScoreBar label="Usability" value={scorecard.usability} />
             <ScoreBar label="Accessibility" value={scorecard.accessibility} />
             <ScoreBar label="Visual Design" value={scorecard.visual} />
@@ -1349,7 +1393,7 @@ function ReportScreen({ report, images, source, onReset, isLoggedIn, onRequireLo
       </div>
 
       <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 22, flexWrap: "wrap" }}>
-        <button onClick={onDownload} style={{ ...exportBtnStyle, background: C.gold, color: "#FBF1EC", border: "none", fontWeight: 600 }}>
+        <button onClick={onDownload} style={{ ...exportBtnStyle, background: C.now, color: C.dark, borderRadius: 999, border: "none", fontWeight: 600 }}>
           <Download size={14} /> View slide deck
         </button>
         <a href={mailtoHref} style={{ ...exportBtnStyle, textDecoration: "none" }}>
@@ -1396,7 +1440,7 @@ function buildDeckHtml(report, source) {
         <div class="why">${esc(iss.why)}</div>
         <div class="fix"><div class="fixlabel">FIX</div>${esc(iss.recommendation)}</div>
       </div>`).join("");
-    return `<section class="slide"><div class="kicker">FINDINGS</div><h2>${esc(title)}</h2>
+    return `<section class="slide"><div class="kicker">Findings</div><h2>${esc(title)}</h2><div class="rule"></div>
       <div class="cards">${cards || '<p class="empty">No structured findings for this area.</p>'}</div>${footer()}</section>`;
   };
 
@@ -1409,38 +1453,39 @@ function buildDeckHtml(report, source) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Redline UX Audit — ${srcLabel}</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 * { box-sizing: border-box; margin: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 body { background: #555; font-family: 'Inter', sans-serif; color: ${C.text}; }
 .hint { text-align:center; color:#fff; font-size:13px; padding:14px; }
-.slide { width: 296mm; height: 166mm; background: ${C.bg}; margin: 6mm auto; padding: 14mm 16mm; position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
-.kicker { font-family: 'IBM Plex Mono', monospace; font-size: 10pt; letter-spacing: 2px; color: ${C.gold}; margin-bottom: 3mm; }
-h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22pt; margin-bottom: 5mm; }
+.slide { width: 296mm; height: 166mm; background: ${C.goldSoft}; border: 1.2mm solid ${C.gold}; margin: 6mm auto; padding: 14mm 16mm; position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 4px 18px rgba(0,0,0,.28); }
+.kicker { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 10pt; letter-spacing: 2px; color: ${C.gold}; margin-bottom: 3mm; text-transform: uppercase; }
+h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 26pt; margin-bottom: 3mm; color: ${C.dark}; letter-spacing: -0.5pt; }
+.rule { width: 26mm; height: 1.2mm; background: ${C.gold}; border-radius: 99px; margin-bottom: 6mm; }
 .ft { position: absolute; bottom: 8mm; left: 16mm; right: 16mm; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 8pt; color: ${C.muted}; }
 .cards { display: flex; gap: 6mm; flex: 1; }
-.card { flex: 1; background: ${C.surface}; border: 1px solid ${C.border}; border-radius: 3mm; padding: 6mm; display: flex; flex-direction: column; gap: 3mm; }
+.card { flex: 1; background: #FFFFFF; border: 0.4mm solid ${C.gold}; border-radius: 3mm; padding: 6mm; display: flex; flex-direction: column; gap: 3mm; }
 .cardhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; }
-.ctitle { font-family: 'Fraunces', serif; font-weight: 600; font-size: 12pt; line-height: 1.25; }
+.ctitle { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 12pt; line-height: 1.25; color: ${C.dark}; }
 .sev { font-family: 'IBM Plex Mono', monospace; font-size: 7.5pt; border: 1px solid; border-radius: 99px; padding: 1mm 3mm; white-space: nowrap; }
 .why { font-size: 9pt; line-height: 1.45; color: ${C.textDim}; }
-.fix { margin-top: auto; background: ${C.goldSoft}; border-radius: 2mm; padding: 3.5mm; font-size: 9pt; line-height: 1.4; }
-.fixlabel { font-family: 'IBM Plex Mono', monospace; font-size: 7pt; letter-spacing: 1px; color: ${C.gold}; margin-bottom: 1.5mm; }
+.fix { margin-top: auto; border-top: 0.3mm solid ${C.border}; padding-top: 3.5mm; font-size: 9pt; line-height: 1.4; }
+.fixlabel { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 8pt; letter-spacing: 0.5px; color: ${C.gold}; margin-bottom: 1.5mm; text-transform: uppercase; }
 .empty { color: ${C.muted}; font-style: italic; }
 .cols { display: flex; gap: 8mm; flex: 1; }
-.panel { flex: 1; border-radius: 3mm; padding: 6mm; }
-.plabel { font-family: 'IBM Plex Mono', monospace; font-size: 8pt; letter-spacing: 1px; margin-bottom: 3mm; }
+.panel { flex: 1; border-radius: 3mm; padding: 6mm; background: #FFFFFF; border: 0.4mm solid ${C.gold}; }
+.plabel { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 8.5pt; letter-spacing: 1px; margin-bottom: 3mm; text-transform: uppercase; }
 .li { font-size: 10.5pt; line-height: 1.4; margin-bottom: 3mm; display: flex; gap: 2.5mm; }
 .grid10 { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; flex: 1; align-content: start; }
 .t10 { display: flex; gap: 3mm; align-items: baseline; border-bottom: 1px solid ${C.borderSoft}; padding-bottom: 2.5mm; }
-.rank { font-family: 'Fraunces', serif; font-weight: 600; font-size: 13pt; color: ${C.gold}; min-width: 7mm; }
+.rank { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 13pt; color: ${C.gold}; min-width: 7mm; }
 .t10 span:last-child { font-size: 9.5pt; line-height: 1.35; }
 .bar-row { display: flex; align-items: center; gap: 5mm; margin-bottom: 5mm; }
 .bar-label { width: 38mm; font-size: 10.5pt; }
-.bar-track { flex: 1; height: 5mm; background: ${C.surfaceAlt}; border-radius: 99px; overflow: hidden; }
+.bar-track { flex: 1; height: 5mm; background: #FFFFFF; border: 0.3mm solid ${C.border}; border-radius: 99px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 99px; }
 .bar-val { font-family: 'IBM Plex Mono', monospace; font-size: 10.5pt; width: 16mm; text-align: right; }
 .center { justify-content: center; align-items: center; text-align: center; }
-.bigscore { font-family: 'Fraunces', serif; font-weight: 600; font-size: 64pt; }
+.bigscore { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 68pt; }
 .disc { position: absolute; bottom: 16mm; left: 16mm; right: 16mm; font-size: 7.5pt; color: ${C.muted}; line-height: 1.4; }
 @media print {
   @page { size: 296mm 166mm; margin: 0; }
@@ -1452,8 +1497,8 @@ h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22pt; margin-b
 <div class="hint">To make this a PDF: open your browser's menu → Print → choose "Save as PDF".</div>
 
 <section class="slide center">
-  <div class="kicker">SENIOR UX REVIEW</div>
-  <div style="font-family:'Fraunces',serif;font-weight:600;font-size:40pt;margin-bottom:4mm">Redline UX Audit</div>
+  <div class="kicker">Senior UX Review</div>
+  <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:40pt;margin-bottom:4mm">Redline UX Audit</div>
   <div style="font-family:'IBM Plex Mono',monospace;font-size:11pt;color:${C.textDim};margin-bottom:10mm">${srcLabel}</div>
   <div><span class="bigscore" style="color:${scoreColor(summary.score ?? 0)}">${summary.score ?? "—"}</span>
   <span style="font-size:16pt;color:${C.muted}">/100 · ${esc(summary.assessment ?? "Unrated")}</span></div>
@@ -1461,12 +1506,12 @@ h2 { font-family: 'Fraunces', serif; font-weight: 600; font-size: 22pt; margin-b
 </section>
 
 <section class="slide">
-  <div class="kicker">OVERVIEW</div><h2>Executive Summary</h2>
+  <div class="kicker">Overview</div><h2>Executive Summary</h2><div class="rule"></div>
   <p style="font-size:11pt;line-height:1.55;color:${C.textDim};max-width:220mm;margin-bottom:6mm">${esc(summary.intro)}</p>
   <div class="cols">
-    <div class="panel" style="background:${C.lowSoft};border:1px solid ${C.low}44"><div class="plabel" style="color:${C.low}">TOP STRENGTHS</div>
+    <div class="panel" style="border-color:${C.low}"><div class="plabel" style="color:${C.low}">TOP STRENGTHS</div>
       ${summary.strengths.map((s) => `<div class="li"><span style="color:${C.low}">▸</span><span>${esc(s)}</span></div>`).join("")}</div>
-    <div class="panel" style="background:${C.criticalSoft};border:1px solid ${C.critical}44"><div class="plabel" style="color:${C.critical}">TOP CONCERNS</div>
+    <div class="panel" style="border-color:${C.critical}"><div class="plabel" style="color:${C.critical}">TOP CONCERNS</div>
       ${summary.concerns.map((s) => `<div class="li"><span style="color:${C.critical}">▸</span><span>${esc(s)}</span></div>`).join("")}</div>
   </div>
   ${footer()}
@@ -1480,32 +1525,32 @@ ${issueSlide("Conversion", conversion)}
 ${issueSlide("Cognitive Load", cognitive)}
 
 <section class="slide">
-  <div class="kicker">PRIORITIES</div><h2>Top 10 Improvements</h2>
+  <div class="kicker">Priorities</div><h2>Top 10 Improvements</h2><div class="rule"></div>
   <div class="grid10">${top10.slice(0, 10).map((t) => `<div class="t10"><span class="rank">${String(t.rank).padStart(2, "0")}</span><span>${esc(t.recommendation)}</span></div>`).join("")}</div>
   ${footer()}
 </section>
 
 <section class="slide">
-  <div class="kicker">ROADMAP</div><h2>Quick Wins vs. Strategic Bets</h2>
+  <div class="kicker">Roadmap</div><h2>Quick Wins vs. Strategic Bets</h2><div class="rule"></div>
   <div class="cols">
-    <div class="panel" style="background:${C.surface};border:1px solid ${C.border}"><div class="plabel" style="color:${C.low}">QUICK WINS · UNDER A DAY</div>
+    <div class="panel"><div class="plabel" style="color:${C.low}">QUICK WINS · UNDER A DAY</div>
       ${quickWins.slice(0, 6).map((q) => `<div class="li" style="font-size:10pt"><span style="color:${C.low}">✓</span><span>${esc(q)}</span></div>`).join("")}</div>
-    <div class="panel" style="background:${C.surface};border:1px solid ${C.border}"><div class="plabel" style="color:${C.gold}">STRATEGIC · REAL DESIGN EFFORT</div>
+    <div class="panel"><div class="plabel" style="color:${C.gold}">STRATEGIC · REAL DESIGN EFFORT</div>
       ${strategic.slice(0, 6).map((s) => `<div class="li" style="font-size:10pt"><span style="color:${C.gold}">◆</span><span>${esc(s)}</span></div>`).join("")}</div>
   </div>
   ${footer()}
 </section>
 
 <section class="slide">
-  <div class="kicker">SCORECARD</div><h2>Final Scores</h2>
+  <div class="kicker">Scorecard</div><h2>Final Scores</h2><div class="rule"></div>
   <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:230mm">${bars}</div>
   ${footer()}
 </section>
 
 <section class="slide" style="justify-content:center">
-  <div class="kicker">DECISION</div><h2>Final Verdict</h2>
+  <div class="kicker">Decision</div><h2>Final Verdict</h2><div class="rule"></div>
   <p style="font-size:13pt;line-height:1.6;max-width:220mm;margin-bottom:6mm">${esc(scorecard.verdict || "—")}</p>
-  ${aiRecommendations ? `<div class="panel" style="background:${C.surface};border:1px solid ${C.border};max-width:230mm;flex:none"><div class="plabel" style="color:${C.gold}">WHERE TO INVEST NEXT</div><p style="font-size:10pt;line-height:1.5;color:${C.textDim}">${esc(aiRecommendations)}</p></div>` : ""}
+  ${aiRecommendations ? `<div class="panel" style="max-width:230mm;flex:none"><div class="plabel" style="color:${C.gold}">WHERE TO INVEST NEXT</div><p style="font-size:10pt;line-height:1.5;color:${C.textDim}">${esc(aiRecommendations)}</p></div>` : ""}
   <p class="disc">AI-generated analysis by Redline. Not a certified accessibility audit, legal advice, or professional UX research. Validate critical findings with qualified professionals.</p>
   ${footer()}
 </section>
@@ -1515,13 +1560,23 @@ ${issueSlide("Cognitive Load", cognitive)}
 const SLIDE = {
   page: {
     width: "296mm", height: "166mm", boxSizing: "border-box", padding: "14mm 16mm",
-    background: C.bg, color: C.text, pageBreakAfter: "always", position: "relative",
-    fontFamily: "'Inter', sans-serif", overflow: "hidden", display: "flex", flexDirection: "column",
+    background: C.goldSoft, color: C.text, pageBreakAfter: "always", position: "relative",
+    fontFamily: "'Plus Jakarta Sans', sans-serif", overflow: "hidden", display: "flex", flexDirection: "column",
+    border: `1.2mm solid ${C.gold}`,
   },
-  kicker: { fontFamily: "'IBM Plex Mono', monospace", fontSize: "10pt", letterSpacing: 2, color: C.gold, marginBottom: "3mm" },
-  title: { fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "22pt", margin: "0 0 5mm 0", color: C.text },
+  kicker: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "10pt", letterSpacing: 2, color: C.gold, marginBottom: "3mm", textTransform: "uppercase" },
+  title: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "26pt", margin: "0 0 3mm 0", color: C.dark, letterSpacing: "-0.5pt" },
+  rule: { width: "26mm", height: "1.2mm", background: C.gold, borderRadius: 99, marginBottom: "6mm" },
   footer: { position: "absolute", bottom: "8mm", left: "16mm", right: "16mm", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", color: C.muted },
 };
+
+function SlideIconBadge({ icon: Icon, size = 14 }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "9mm", height: "9mm", borderRadius: "50%", background: C.gold, flexShrink: 0 }}>
+      <Icon size={size} color="#FFFFFF" />
+    </span>
+  );
+}
 
 function SlideFooter({ n, total, sourceLabel }) {
   return (
@@ -1541,24 +1596,28 @@ function SevChip({ severity }) {
   );
 }
 
-function IssueSlide({ title, data, n, total, sourceLabel }) {
+function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   const issues = data.issues.slice(0, 3);
   return (
     <div style={SLIDE.page}>
-      <div style={SLIDE.kicker}>FINDINGS</div>
+      <div style={SLIDE.kicker}>Findings</div>
       <h2 style={SLIDE.title}>{title}</h2>
+      <div style={SLIDE.rule} />
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
         {issues.map((iss, i) => (
-          <div key={i} style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderTop: `2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: "3mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm" }}>
+          <div key={i} style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
-              <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "12pt", lineHeight: 1.25 }}>{iss.title}</div>
+              <div style={{ fontWeight: 800, fontSize: "12pt", lineHeight: 1.25, color: C.dark }}>{iss.title}</div>
               <SevChip severity={iss.severity} />
             </div>
             <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
-            <div style={{ marginTop: "auto", background: C.goldSoft, borderRadius: "2mm", padding: "3.5mm" }}>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7pt", letterSpacing: 1, color: C.gold, marginBottom: "1.5mm" }}>FIX</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
+            <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${C.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
+              <SlideIconBadge icon={Check} size={12} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.gold, marginBottom: "1mm", textTransform: "uppercase" }}>Fix</div>
+                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
+              </div>
             </div>
           </div>
         ))}
@@ -1581,11 +1640,11 @@ function DeckSlides({ report, source }) {
     <div>
       {/* 1 — Title */}
       <div style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-        <div style={SLIDE.kicker}>SENIOR UX REVIEW</div>
-        <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Redline UX Audit</div>
+        <div style={SLIDE.kicker}>Senior UX Review</div>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Redline UX Audit</div>
         <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "3mm" }}>
-          <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
+          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
           <span style={{ fontSize: "16pt", color: C.muted }}>/100 · {summary.assessment ?? "Unrated"}</span>
         </div>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
@@ -1593,17 +1652,18 @@ function DeckSlides({ report, source }) {
 
       {/* 2 — Executive Summary */}
       <div style={SLIDE.page}>
-        <div style={SLIDE.kicker}>OVERVIEW</div>
+        <div style={SLIDE.kicker}>Overview</div>
         <h2 style={SLIDE.title}>Executive Summary</h2>
+        <div style={SLIDE.rule} />
         <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{summary.intro}</p>
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
-          <div style={{ flex: 1, background: C.lowSoft, border: `1px solid ${C.low}44`, borderRadius: "3mm", padding: "6mm" }}>
+          <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.low}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>TOP STRENGTHS</div>
             {summary.strengths.map((s, i) => (
               <div key={i} style={{ fontSize: "10.5pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.low }}>▸</span><span>{s}</span></div>
             ))}
           </div>
-          <div style={{ flex: 1, background: C.criticalSoft, border: `1px solid ${C.critical}44`, borderRadius: "3mm", padding: "6mm" }}>
+          <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.critical}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.critical, marginBottom: "3mm" }}>TOP CONCERNS</div>
             {summary.concerns.map((s, i) => (
               <div key={i} style={{ fontSize: "10.5pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.critical }}>▸</span><span>{s}</span></div>
@@ -1614,21 +1674,22 @@ function DeckSlides({ report, source }) {
       </div>
 
       {/* 3–8 — Section slides */}
-      <IssueSlide title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
 
       {/* 9 — Top 10 */}
       <div style={SLIDE.page}>
-        <div style={SLIDE.kicker}>PRIORITIES</div>
+        <div style={SLIDE.kicker}>Priorities</div>
         <h2 style={SLIDE.title}>Top 10 Improvements</h2>
+        <div style={SLIDE.rule} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3mm 8mm", flex: 1, alignContent: "start" }}>
           {top10.slice(0, 10).map((t) => (
             <div key={t.rank} style={{ display: "flex", gap: "3mm", alignItems: "baseline", borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: "2.5mm" }}>
-              <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: "13pt", color: C.gold, minWidth: "7mm" }}>{String(t.rank).padStart(2, "0")}</span>
+              <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "13pt", color: C.gold, minWidth: "7mm" }}>{String(t.rank).padStart(2, "0")}</span>
               <span style={{ fontSize: "9.5pt", lineHeight: 1.35 }}>{t.recommendation}</span>
             </div>
           ))}
@@ -1638,16 +1699,17 @@ function DeckSlides({ report, source }) {
 
       {/* 10 — Roadmap */}
       <div style={SLIDE.page}>
-        <div style={SLIDE.kicker}>ROADMAP</div>
+        <div style={SLIDE.kicker}>Roadmap</div>
         <h2 style={SLIDE.title}>Quick Wins vs. Strategic Bets</h2>
+        <div style={SLIDE.rule} />
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
-          <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm" }}>
+          <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>QUICK WINS · UNDER A DAY</div>
             {quickWins.slice(0, 6).map((q, i) => (
               <div key={i} style={{ fontSize: "10pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.low }}>✓</span><span>{q}</span></div>
             ))}
           </div>
-          <div style={{ flex: 1, background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm" }}>
+          <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.gold, marginBottom: "3mm" }}>STRATEGIC · REAL DESIGN EFFORT</div>
             {strategic.slice(0, 6).map((s, i) => (
               <div key={i} style={{ fontSize: "10pt", lineHeight: 1.4, marginBottom: "3mm", display: "flex", gap: "2.5mm" }}><span style={{ color: C.gold }}>◆</span><span>{s}</span></div>
@@ -1659,8 +1721,9 @@ function DeckSlides({ report, source }) {
 
       {/* 11 — Scorecard */}
       <div style={SLIDE.page}>
-        <div style={SLIDE.kicker}>SCORECARD</div>
+        <div style={SLIDE.kicker}>Scorecard</div>
         <h2 style={SLIDE.title}>Final Scores</h2>
+        <div style={SLIDE.rule} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "5mm", maxWidth: "230mm" }}>
           {[["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]].map(([label, v]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "5mm" }}>
@@ -1677,8 +1740,9 @@ function DeckSlides({ report, source }) {
 
       {/* 12 — Verdict & disclaimer */}
       <div style={{ ...SLIDE.page, justifyContent: "center" }}>
-        <div style={SLIDE.kicker}>DECISION</div>
+        <div style={SLIDE.kicker}>Decision</div>
         <h2 style={SLIDE.title}>Final Verdict</h2>
+        <div style={SLIDE.rule} />
         <p style={{ fontSize: "13pt", lineHeight: 1.6, color: C.text, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{scorecard.verdict || "—"}</p>
         {aiRecommendations && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm", maxWidth: "230mm" }}>
@@ -1721,7 +1785,7 @@ function DeckViewer({ report, source, onClose, onTryPrint }) {
       <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(58,49,41,0.95)", backdropFilter: "blur(4px)" }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#D8CBB6" }}>SLIDE DECK · PINCH OR ROTATE TO ZOOM</span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onTryPrint} style={{ background: C.gold, color: "#FBF1EC", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Print / Save PDF
           </button>
           <button onClick={onClose} style={{ background: "transparent", color: "#D8CBB6", border: "1px solid #6B5D4D", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
@@ -1748,7 +1812,7 @@ function HistoryPanel({ entries, onOpen, onClose, loading }) {
     <Modal onClose={onClose} maxWidth={460}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <HistoryIcon size={18} color={C.gold} />
-        <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, color: C.text }}>Saved audits</h3>
+        <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 18, color: C.text }}>Saved audits</h3>
       </div>
       {loading ? (
         <div style={{ textAlign: "center", padding: 20, color: C.muted }}>
@@ -1773,7 +1837,7 @@ function HistoryPanel({ entries, onOpen, onClose, loading }) {
               </div>
               <div style={{ fontSize: 11, color: C.muted }}>{new Date(e.date).toLocaleDateString()} · {e.assessment || "Unrated"}</div>
             </div>
-            <div style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: C.gold }}>{e.score ?? "—"}</div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 18, color: C.gold }}>{e.score ?? "—"}</div>
           </button>
         ))
       )}
@@ -1784,6 +1848,344 @@ function HistoryPanel({ entries, onOpen, onClose, loading }) {
 /* ----------------------------------------------------------------------- */
 /* Root App                                                                 */
 /* ----------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------- */
+/* Marketing landing page                                                   */
+/* ----------------------------------------------------------------------- */
+const FEATURES = [
+  { icon: ImageIcon, img: "/images/feature-screenshots.jpg", title: "Screenshot Analysis", desc: "Upload up to 5 screens (20 on Pro) for a full visual UX review." },
+  { icon: FileType2, img: "/images/feature-pdf.jpg", title: "PDF Upload", desc: "Submit design documents, wireframes, or prototypes as PDFs." },
+  { icon: Globe, img: "/images/feature-url.jpg", title: "URL Crawl & Review", desc: "Enter a URL and Redline explores the top pages for a site-wide audit." },
+  { icon: FileText, img: "/images/feature-reports.jpg", title: "Structured Reports", desc: "Findings across usability, accessibility, visual design, trust & conversion." },
+  { icon: Lightbulb, img: "/images/feature-ai.jpg", title: "AI Recommendations", desc: "Prioritized, actionable recommendations ranked by impact." },
+  { icon: Download, img: "/images/feature-deck.jpg", title: "Slide-Deck Report", desc: "A 12-slide presentation deck ready to share with your team." },
+];
+
+const DIMENSIONS = [
+  { icon: NavIcon, img: "/images/dim-usability.jpg", title: "Usability", desc: "Navigation, task completion, user flow analysis" },
+  { icon: Palette, img: "/images/dim-visualdesign.jpg", title: "Visual Design", desc: "Layout, typography, color, and visual hierarchy" },
+  { icon: A11yIcon, img: "/images/dim-accessibility.jpg", title: "Accessibility", desc: "WCAG compliance and inclusive design standards" },
+  { icon: ShieldCheck, img: "/images/dim-trust.jpg", title: "Trust & Credibility", desc: "Security signals, social proof, and brand perception" },
+  { icon: TrendingUp, img: "/images/dim-conversion.jpg", title: "Conversion", desc: "CTA effectiveness, friction points, and persuasion patterns" },
+  { icon: Brain, img: "/images/dim-cognitive.jpg", title: "Cognitive Load", desc: "Information density, mental models, and user comprehension" },
+];
+
+const STEPS = [
+  { n: "01", title: "Accept Terms", desc: "Review and accept our disclaimer before submitting." },
+  { n: "02", title: "Upload or Enter URL", desc: "Add screenshots, a PDF, or a website URL to analyze." },
+  { n: "03", title: "AI Analyzes", desc: "The engine performs a deep multi-framework UX audit." },
+  { n: "04", title: "Get Your Report", desc: "View the report online and export the slide deck." },
+];
+
+const SUITES = [
+  { icon: Users, title: "Redline Research", desc: "Uncover user insights with AI-powered research tools.", tools: ["Persona Generator", "Journey Maps", "Interview Summaries", "Survey Analysis"] },
+  { icon: Palette, title: "Redline Design", desc: "Elevate your design with AI critique and consistency checks.", tools: ["AI Design Critic", "Design Review", "Design System Checker", "UI Consistency Checker"] },
+  { icon: BarChart3, title: "Redline Strategy", desc: "Make data-driven strategic decisions with competitive insights.", tools: ["Competitor Benchmarking", "Feature Gap Analysis", "Product Requirements", "User Stories"] },
+  { icon: TestTube2, title: "Redline Testing", desc: "Optimize user experience with AI-powered testing insights.", tools: ["AI User Simulator", "Usability Testing", "A/B Test Ideas", "Heatmap Predictions"] },
+  { icon: MessageSquare, title: "Redline Copilot", desc: "Perfect your copy and design with AI assistance.", tools: ["UX Writing", "Microcopy Generator", "Accessibility Fixes", "Figma Assistant"] },
+];
+
+function SectionKicker({ children, onDark }) {
+  return <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, letterSpacing: 2, color: onDark ? C.now : C.gold, marginBottom: 14, textTransform: "uppercase" }}>{children}</div>;
+}
+
+function LandingPage({ onStart, onOpenLegal }) {
+  const h2 = { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: -0.8, color: C.text, margin: "0 0 10px 0", lineHeight: 1.2 };
+  const sect = { padding: "44px 0", textAlign: "center" };
+  return (
+    <div>
+      {/* Hero - full-bleed dark band */}
+      <div style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "56px 0 64px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, alignItems: "center" }}>
+          <div style={{ textAlign: "left" }}>
+            <SectionKicker onDark>AI-Powered UX Audit</SectionKicker>
+            <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 44, color: "#FFFFFF", margin: "0 0 16px 0", lineHeight: 1.08, letterSpacing: -1 }}>
+              Professional UX audits in minutes.
+            </h1>
+            <p style={{ color: "#BFD8D2", fontSize: 16, lineHeight: 1.6, margin: "0 0 24px 0", maxWidth: 420 }}>
+              AI-powered insight across 6 critical UX dimensions. Upload screenshots, PDFs, or enter a URL for a comprehensive, actionable audit report.
+            </p>
+            <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "15px 30px", fontSize: 15.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+              Start Free Audit <ArrowRight size={16} />
+            </button>
+            <div style={{ fontSize: 12.5, color: "#8FB3AB", marginTop: 14 }}>Free to try · No credit card required · Slide-deck report included</div>
+          </div>
+          <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+            <img src="/images/hero.jpg" alt="" loading="lazy" style={{ width: "100%", display: "block" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div style={sect}>
+        <SectionKicker>FEATURES</SectionKicker>
+        <h2 style={h2}>Everything You Need for a Complete UX Audit</h2>
+        <p style={{ color: C.muted, fontSize: 14, maxWidth: 480, margin: "0 auto 26px" }}>From upload to report delivery, every step is designed to give you expert-level UX insight.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, textAlign: "left" }}>
+          {FEATURES.map((f) => { const Icon = f.icon; return (
+            <div key={f.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", padding: 0, boxShadow: "0 6px 20px rgba(18,48,43,0.07)" }}>
+              <div style={{ position: "relative", height: 110, overflow: "hidden" }}>
+                <img src={f.img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <div style={{ position: "absolute", bottom: 10, left: 14, width: 34, height: 34, borderRadius: 9, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon size={17} color={C.gold} /></div>
+              </div>
+              <div style={{ padding: "12px 16px 16px" }}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15.5, marginBottom: 5, color: C.text }}>{f.title}</div>
+              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5, marginBottom: 10 }}>{f.desc}</div>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: C.gold }}>Learn more <ArrowRight size={13} /></span>
+              </div>
+            </div>
+          );})}
+        </div>
+      </div>
+
+      {/* Six Dimensions */}
+      <div style={sect}>
+        <SectionKicker>ANALYSIS FRAMEWORKS</SectionKicker>
+        <h2 style={h2}>Six Dimensions of UX Excellence</h2>
+        <p style={{ color: C.muted, fontSize: 14, maxWidth: 480, margin: "0 auto 26px" }}>Every design is evaluated across proven UX frameworks to deliver comprehensive, actionable insights.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, textAlign: "left" }}>
+          {DIMENSIONS.map((d) => { const Icon = d.icon; return (
+            <div key={d.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(18,48,43,0.07)" }}>
+              <div style={{ position: "relative", height: 84, overflow: "hidden" }}>
+                <img src={d.img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              </div>
+              <div style={{ padding: "12px 14px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <Icon size={17} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: C.text, marginBottom: 3 }}>{d.title}</div>
+                  <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.45 }}>{d.desc}</div>
+                </div>
+              </div>
+            </div>
+          );})}
+        </div>
+      </div>
+
+      {/* How it works */}
+      <div style={sect}>
+        <SectionKicker>HOW IT WORKS</SectionKicker>
+        <h2 style={h2}>Four Steps to Expert UX Insights</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginTop: 24, textAlign: "left" }}>
+          {STEPS.map((st) => (
+            <div key={st.n}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: C.gold, marginBottom: 6 }}>{st.n}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: C.text, marginBottom: 4 }}>{st.title}</div>
+              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{st.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pricing */}
+      <div style={sect}>
+        <SectionKicker>PRICING</SectionKicker>
+        <h2 style={h2}>Free today. Pro is coming.</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginTop: 24, textAlign: "left", maxWidth: 620, marginLeft: "auto", marginRight: "auto" }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>Free</div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "6px 0 14px" }}>$0<span style={{ fontSize: 13, color: C.muted, fontWeight: 400 }}>/month</span></div>
+            {["Up to 5 screenshots per audit", "PDF upload supported", "URL review (5 pages explored)", "Full report, all sections", "12-slide deck viewer", "Audit history (with login)"].map((f) => (
+              <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim, marginBottom: 8 }}><Check size={14} color={C.low} style={{ flexShrink: 0, marginTop: 2 }} />{f}</div>
+            ))}
+            <button onClick={onStart} style={{ width: "100%", marginTop: 10, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "11px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Get Started</button>
+          </div>
+          <div style={{ background: C.surface, border: `1px dashed ${C.gold}`, borderRadius: 14, padding: 22, position: "relative" }}>
+            <span style={{ position: "absolute", top: 14, right: 14, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, letterSpacing: 1, color: C.gold, background: C.goldSoft, borderRadius: 99, padding: "3px 9px" }}>COMING SOON</span>
+            <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>Pro</div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "6px 0 14px" }}>$19<span style={{ fontSize: 13, color: C.muted, fontWeight: 400 }}>/month</span></div>
+            {["Up to 20 screenshots per audit", "URL review (20 pages explored)", "Emailed PDF reports", "Priority processing", "Persistent team history"].map((f) => (
+              <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim, marginBottom: 8 }}><Check size={14} color={C.muted} style={{ flexShrink: 0, marginTop: 2 }} />{f}</div>
+            ))}
+            <div style={{ marginTop: 10, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>Pro isn't purchasable yet — we're building it in the open. Everything above ships when it's real, not before.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Early access (honest, in place of testimonials) */}
+      <div style={sect}>
+        <SectionKicker>EARLY ACCESS</SectionKicker>
+        <h2 style={h2}>Be one of the first design teams on Redline</h2>
+        <p style={{ color: C.textDim, fontSize: 14, maxWidth: 500, margin: "0 auto 8px", lineHeight: 1.6 }}>
+          Redline is new — we don't have a wall of testimonials yet, and we won't invent one. Run an audit, tell us what's sharp and what's off, and help shape the tool.
+        </p>
+      </div>
+
+      {/* Suites showcase */}
+      <div style={sect}>
+        <SectionKicker>COMING SOON</SectionKicker>
+        <h2 style={h2}>The Full Redline Toolkit</h2>
+        <p style={{ color: C.muted, fontSize: 14, maxWidth: 500, margin: "0 auto 26px" }}>Beyond audits, five product suites are in development to cover every UX challenge.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, textAlign: "left" }}>
+          {SUITES.map((su) => { const Icon = su.icon; return (
+            <div key={su.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16 }}>
+              <Icon size={18} color={C.gold} style={{ marginBottom: 8 }} />
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 14.5, color: C.text, marginBottom: 4 }}>{su.title}</div>
+              <div style={{ fontSize: 11.5, color: C.textDim, lineHeight: 1.45, marginBottom: 8 }}>{su.desc}</div>
+              {su.tools.map((t) => <div key={t} style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>· {t}</div>)}
+              <span style={{ display: "inline-block", marginTop: 8, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: 0.8, color: C.high, background: C.highSoft, borderRadius: 99, padding: "2px 8px" }}>COMING SOON</span>
+            </div>
+          );})}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div style={{ ...sect, position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "52px 18px", marginBottom: 0 }}>
+        <h2 style={{ ...h2, color: "#FFFFFF" }}>Ready to Transform Your UX?</h2>
+        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Start free, no credit card required.</p>
+        <button onClick={onStart} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          Start Your Free Audit <ArrowRight size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* Toolkit dashboard                                                        */
+/* ----------------------------------------------------------------------- */
+function DashboardPage({ onStartAudit }) {
+  return (
+    <div style={{ paddingTop: 8 }}>
+      <div style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "40px 0", marginBottom: 26 }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 18px" }}>
+          <SectionKicker onDark>Your UX Toolkit</SectionKicker>
+          <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, color: "#FFFFFF", margin: "0 0 6px 0", letterSpacing: -0.8 }}>Everything Redline can do</h1>
+          <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: 0 }}>One suite is live today. Five more are in active development.</p>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
+        <div style={{ background: C.goldSoft, border: `1.5px solid ${C.gold}`, borderRadius: 16, padding: 20, boxShadow: "0 6px 20px rgba(18,48,43,0.06)" }}>
+          <Zap size={19} color={C.gold} style={{ marginBottom: 8 }} />
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 4 }}>UX Audit</div>
+          <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5, marginBottom: 10 }}>AI-powered comprehensive UX analysis.</div>
+          {["Screenshot analysis", "PDF upload support", "URL exploration", "Slide-deck reports"].map((t) => (
+            <div key={t} style={{ display: "flex", gap: 6, fontSize: 12, color: C.text, marginBottom: 4 }}><Check size={13} color={C.low} style={{ marginTop: 2, flexShrink: 0 }} />{t}</div>
+          ))}
+          <button onClick={onStartAudit} style={{ width: "100%", marginTop: 10, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            Start Audit <ArrowRight size={14} />
+          </button>
+        </div>
+        {SUITES.map((su) => { const Icon = su.icon; return (
+          <div key={su.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, boxShadow: "0 6px 20px rgba(18,48,43,0.06)", opacity: 0.85 }}>
+            <Icon size={19} color={C.muted} style={{ marginBottom: 8 }} />
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 4 }}>{su.title}</div>
+            <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5, marginBottom: 10 }}>{su.desc}</div>
+            {su.tools.map((t) => (
+              <div key={t} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: C.muted, marginBottom: 5 }}>
+                <span>{t}</span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 8.5, letterSpacing: 0.6, color: C.high, background: C.highSoft, borderRadius: 99, padding: "2px 7px", flexShrink: 0 }}>SOON</span>
+              </div>
+            ))}
+          </div>
+        );})}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------- */
+/* My Audits page                                                           */
+/* ----------------------------------------------------------------------- */
+function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("newest");
+
+  const refresh = useCallback(async () => {
+    if (!user) { setLoading(false); return; }
+    setLoading(true);
+    const list = await getHistoryList(user.emailHash);
+    setEntries(list);
+    setLoading(false);
+  }, [user]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const onDelete = async (id) => {
+    if (!user) return;
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+    try { await deleteHistoryEntry(user.emailHash, id); } catch { /* list already updated optimistically */ }
+  };
+
+  if (!user) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 20px" }}>
+        <HistoryIcon size={26} color={C.muted} style={{ marginBottom: 12 }} />
+        <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 20, color: C.text, margin: "0 0 8px" }}>My Audits</h2>
+        <p style={{ color: C.textDim, fontSize: 13.5, margin: "0 0 18px" }}>Log in to see your saved audits.</p>
+        <button onClick={() => onRequireLogin("save")} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Log in</button>
+      </div>
+    );
+  }
+
+  const filtered = entries
+    .filter((e) => {
+      if (!query.trim()) return true;
+      const q = query.toLowerCase();
+      return (e.title || "").toLowerCase().includes(q) || (e.url || "").toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (sort === "newest") return b.date - a.date;
+      if (sort === "oldest") return a.date - b.date;
+      if (sort === "highest") return (b.score ?? -1) - (a.score ?? -1);
+      return (a.score ?? 101) - (b.score ?? 101);
+    });
+
+  return (
+    <div style={{ paddingTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 26, color: C.text, margin: "0 0 2px" }}>My Audits</h1>
+          <div style={{ fontSize: 12.5, color: C.muted }}>{entries.length} audit{entries.length === 1 ? "" : "s"} saved</div>
+        </div>
+        <button onClick={onNewAudit} style={{ display: "flex", alignItems: "center", gap: 6, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          <Plus size={14} /> New Audit
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 180, position: "relative" }}>
+          <Search size={14} color={C.muted} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search audits…" style={{ ...inputStyle, paddingLeft: 34 }} />
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ ...inputStyle, width: "auto", cursor: "pointer" }}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="highest">Highest score</option>
+          <option value="lowest">Lowest score</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 30, color: C.muted }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /></div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 20px", color: C.muted, fontSize: 13.5 }}>
+          {entries.length === 0 ? "No audits yet — run one and it'll be saved here." : "No audits match your search."}
+        </div>
+      ) : (
+        filtered.map((e) => (
+          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, color: C.text }}>
+                  {e.title || (e.mode === "url" ? (e.url || "").replace(/^https?:\/\//, "") : `${e.screenCount} screen${e.screenCount === 1 ? "" : "s"}`)}
+                </span>
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, letterSpacing: 0.6, color: C.low, background: C.lowSoft, borderRadius: 99, padding: "2px 8px" }}>COMPLETED</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: C.muted }}>
+                {new Date(e.date).toLocaleDateString()} · {e.mode === "url" ? (e.url || "").replace(/^https?:\/\//, "") : "screens/PDF"} · {e.assessment || "Unrated"}
+              </div>
+            </div>
+            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 22, color: C.gold, flexShrink: 0 }}>{e.score ?? "—"}</div>
+            <button onClick={() => onOpenEntry(e)} style={{ ...exportBtnStyle, flexShrink: 0 }}><Eye size={13} /> View</button>
+            <button onClick={() => onDelete(e.id)} title="Delete" style={{ ...iconBtnStyle, flexShrink: 0, borderColor: `${C.critical}44` }}><Trash2 size={14} color={C.critical} /></button>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 export default function RedlineApp() {
   const [mode, setMode] = useState("files");
   const [images, setImages] = useState([]);
@@ -1795,6 +2197,9 @@ export default function RedlineApp() {
   const [source, setSource] = useState({ mode: "files", url: "" });
   const [error, setError] = useState(null);
 
+  const [page, setPage] = useState("landing");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [auditTitle, setAuditTitle] = useState("");
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -2096,6 +2501,7 @@ export default function RedlineApp() {
         const entry = {
           id: `${Date.now()}`,
           date: Date.now(),
+          title: auditTitle.trim(),
           score: parsed.summary.score,
           assessment: parsed.summary.assessment,
           mode: which,
@@ -2157,6 +2563,7 @@ export default function RedlineApp() {
 
   const onReset = useCallback(() => {
     setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
+    setAuditTitle("");
   }, []);
 
   /* ---- auth ---- */
@@ -2179,6 +2586,7 @@ export default function RedlineApp() {
       const entry = {
         id: `${Date.now()}`,
         date: Date.now(),
+        title: auditTitle.trim(),
         score: report.summary.score,
         assessment: report.summary.assessment,
         mode: source.mode,
@@ -2263,6 +2671,12 @@ export default function RedlineApp() {
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
+        .nav-desktop { display: none !important; }
+        .nav-mobile { display: flex !important; }
+        @media (min-width: 640px) {
+          .nav-desktop { display: flex !important; }
+          .nav-mobile, .nav-mobile-menu { display: none !important; }
+        }
         ::-webkit-scrollbar { display: none; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes scanSweep { 0% { left: -60%; } 100% { left: 130%; } }
@@ -2296,29 +2710,76 @@ export default function RedlineApp() {
         }
       `}</style>
 
-      <header style={{ maxWidth: 720, margin: "0 auto 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 26, height: 26, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Eye size={14} color="#FBF1EC" strokeWidth={2.4} />
+      <header style={{ position: "sticky", top: 0, zIndex: 40, background: C.surface, boxShadow: "0 1px 0 rgba(18,48,43,0.08)", margin: "-20px -14px 18px", padding: "12px 14px" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div onClick={() => { setPage("landing"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <div style={{ width: 26, height: 26, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Eye size={14} color="#FFFFFF" strokeWidth={2.4} />
+            </div>
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 16, color: C.text, letterSpacing: -0.2 }}>Redline</span>
           </div>
-          <span style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 16, color: C.text, letterSpacing: -0.2 }}>Redline</span>
+
+          {/* Desktop nav — hidden on mobile via CSS class */}
+          <nav className="nav-desktop" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {[["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
+              <button key={key} onClick={() => { setPage(key); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", color: page === key && !legalPage ? C.gold : C.muted, fontSize: 12.5, fontWeight: 600, borderRadius: 99, padding: "6px 11px", cursor: "pointer" }}>
+                <Icon size={13} /> {label}
+              </button>
+            ))}
+            {user ? (
+              <>
+                <button onClick={simulatePro} title="Demo only — no real billing" style={{ display: "flex", alignItems: "center", gap: 5, background: isPro ? C.goldSoft : C.surface, border: `1px solid ${C.border}`, color: isPro ? C.gold : C.muted, fontSize: 11.5, borderRadius: 99, padding: "5px 10px", cursor: "pointer" }}>
+                  <Crown size={12} /> {isPro ? "Pro (demo)" : "Free"}
+                </button>
+                <button onClick={onLogout} style={iconBtnStyle} title="Log out"><LogOut size={15} color={C.muted} /></button>
+              </>
+            ) : (
+              <button onClick={() => { setAuthReason(""); pendingAuthActionRef.current = null; setShowAuth(true); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, fontWeight: 600, borderRadius: 99, padding: "7px 12px", cursor: "pointer" }}>
+                <LogIn size={13} /> Log in
+              </button>
+            )}
+          </nav>
+
+          {/* Mobile: New Audit pill + hamburger */}
+          <div className="nav-mobile" style={{ display: "none", alignItems: "center", gap: 8 }}>
+            <button onClick={() => { setPage("audit"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 14px", cursor: "pointer" }}>
+              <Zap size={13} /> New Audit
+            </button>
+            <button onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" style={{ ...iconBtnStyle, width: 36, height: 36 }}>
+              {menuOpen ? <X size={18} color={C.text} /> : <Menu size={18} color={C.text} />}
+            </button>
+          </div>
+
+          {/* Desktop New Audit CTA */}
+          <button className="nav-desktop" onClick={() => { setPage("audit"); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 16px", cursor: "pointer" }}>
+            <Zap size={13} /> New Audit
+          </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {user ? (
-            <>
-              <button onClick={simulatePro} title="Demo only — no real billing" style={{ display: "flex", alignItems: "center", gap: 5, background: isPro ? C.goldSoft : C.surface, border: `1px solid ${C.border}`, color: isPro ? C.gold : C.muted, fontSize: 11.5, borderRadius: 99, padding: "5px 10px", cursor: "pointer" }}>
-                <Crown size={12} /> {isPro ? "Pro (demo)" : "Free — simulate Pro"}
+        {/* Mobile dropdown menu */}
+        {menuOpen && (
+          <div className="nav-mobile-menu" style={{ maxWidth: 720, margin: "10px auto 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
+            {[["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
+              <button key={key} onClick={() => { setPage(key); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: page === key && !legalPage ? C.gold : C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
+                <Icon size={16} /> {label}
               </button>
-              <button onClick={openHistory} style={iconBtnStyle} title="History"><HistoryIcon size={15} color={C.muted} /></button>
-              <button onClick={onLogout} style={iconBtnStyle} title="Log out"><LogOut size={15} color={C.muted} /></button>
-            </>
-          ) : (
-            <button onClick={() => { setAuthReason(""); pendingAuthActionRef.current = null; setShowAuth(true); }} style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface, border: `1px solid ${C.border}`, color: C.text, fontSize: 12.5, borderRadius: 99, padding: "7px 12px", cursor: "pointer" }}>
-              <LogIn size={13} /> Log in
-            </button>
-          )}
-        </div>
+            ))}
+            {user ? (
+              <>
+                <button onClick={() => { simulatePro(); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
+                  <Crown size={16} color={isPro ? C.gold : C.muted} /> {isPro ? "Pro (demo) — switch to Free" : "Free — simulate Pro"}
+                </button>
+                <button onClick={() => { onLogout(); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", border: "none", color: C.critical, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
+                  <LogOut size={16} /> Log out ({user.email})
+                </button>
+              </>
+            ) : (
+              <button onClick={() => { setAuthReason(""); pendingAuthActionRef.current = null; setShowAuth(true); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", border: "none", color: C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
+                <LogIn size={16} /> Log in / Sign up
+              </button>
+            )}
+          </div>
+        )}
       </header>
       {user && user.ephemeral && (
         <div style={{ maxWidth: 720, margin: "0 auto 14px", fontSize: 11.5, color: C.high, background: C.highSoft, border: `1px solid ${C.high}44`, borderRadius: 8, padding: "8px 12px" }}>
@@ -2329,6 +2790,12 @@ export default function RedlineApp() {
       <main style={{ maxWidth: 720, margin: "0 auto" }}>
         {legalPage ? (
           <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
+        ) : page === "landing" && !analyzing && !report ? (
+          <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} />
+        ) : page === "dashboard" && !analyzing && !report ? (
+          <DashboardPage onStartAudit={() => setPage("audit")} />
+        ) : page === "myaudits" && !analyzing && !report ? (
+          <MyAuditsPage user={user} onOpenEntry={(e) => { openHistoryEntry(e); setPage("audit"); }} onNewAudit={() => setPage("audit")} onRequireLogin={requireLogin} />
         ) : (
           <>
             {!analyzing && !report && (
@@ -2338,10 +2805,15 @@ export default function RedlineApp() {
                     <Stamp size={20} color={C.gold} strokeWidth={2} />
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: 2, color: C.gold }}>SENIOR UX REVIEW</span>
                   </div>
-                  <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "0 0 8px 0", letterSpacing: -0.3 }}>Redline</h1>
+                  <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "0 0 8px 0", letterSpacing: -0.3 }}>Redline</h1>
                   <p style={{ color: C.muted, fontSize: 14.5, lineHeight: 1.55, margin: "0 auto", maxWidth: 440 }}>
                     Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
                   </p>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.textDim, marginBottom: 6 }}>Audit title <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span></label>
+                  <input value={auditTitle} onChange={(e) => setAuditTitle(e.target.value)} placeholder="e.g. Homepage Redesign v2, Checkout Flow, Mobile App…" maxLength={80} style={inputStyle} />
                 </div>
 
                 <ModeTabs mode={mode} setMode={setMode} />
