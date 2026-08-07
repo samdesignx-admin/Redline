@@ -24,7 +24,6 @@ npm run dev            # frontend only
 
 ## Known prototype limitations (backend work pending)
 - Auth/history use in-browser fallbacks — replace with Supabase or similar
-- "Simulate Pro" is a demo toggle — real plans need Stripe
 - Email report opens a mailto: draft — real delivery needs Resend/SendGrid
 - Legal pages are placeholder templates — get lawyer review before charging
 - Rate limiting in `api/audit.js` is in-memory per instance — add Redis

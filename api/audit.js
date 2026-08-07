@@ -3,7 +3,7 @@
 // IMPORTANT: model calls routinely take 20-60s. Vercel's default function
 // timeout is 10s, which kills the request mid-flight and surfaces to the
 // browser as a network failure. maxDuration raises this (60s is the Hobby
-// plan ceiling; Pro allows more).
+// timeout ceiling on Vercel's free tier).
 // The API key lives in the ANTHROPIC_API_KEY environment variable — never in
 // frontend code. Includes a simple in-memory per-IP rate limit as a first
 // line of defense (note: in-memory state resets per serverless instance, so

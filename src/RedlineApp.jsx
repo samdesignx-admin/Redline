@@ -6,7 +6,7 @@ import {
   AlertTriangle, AlertCircle, Info, ShieldCheck, Eye, Gauge, Trophy,
   Zap, FileText, Stamp, Navigation as NavIcon, Palette,
   Accessibility as A11yIcon, TrendingUp, Brain, Rocket, CircleDot,
-  Mail, Download, History as HistoryIcon, Link2, Crown, ShieldAlert,
+  Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
   ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
   FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
 } from "lucide-react";
@@ -63,16 +63,14 @@ function severityFor(raw) {
 /* ----------------------------------------------------------------------- */
 const SITE_URL = "https://redline-sandy-sigma.vercel.app";
 
-const FREE_SCREEN_LIMIT = 5;
-const PRO_SCREEN_LIMIT = 20;
-const FREE_NAV_LIMIT = 5;
-const PRO_NAV_LIMIT = 20;
+const SCREEN_LIMIT = 20;
+const NAV_LIMIT = 20;
 
-function screenLimitFor(user) {
-  return user && user.plan === "pro" ? PRO_SCREEN_LIMIT : FREE_SCREEN_LIMIT;
+function screenLimitFor() {
+  return SCREEN_LIMIT;
 }
-function navLimitFor(user) {
-  return user && user.plan === "pro" ? PRO_NAV_LIMIT : FREE_NAV_LIMIT;
+function navLimitFor() {
+  return NAV_LIMIT;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -813,7 +811,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         };
         await setUserRecord(hash, record);
       }
-      onAuth({ email: cleanEmail, name: record.name || "", plan: record.plan || "free", emailHash: hash });
+      onAuth({ email: cleanEmail, name: record.name || "", plan: "free", emailHash: hash });
     } catch (e) {
       setError(`Couldn't complete Google sign-in: ${(e && e.message) || "unknown error"}`);
     } finally {
@@ -1141,7 +1139,7 @@ function ModeTabs({ mode, setMode }) {
   );
 }
 
-function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOver, error, screenLimit, isPro }) {
+function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOver, error, screenLimit }) {
   return (
     <div>
       <label
@@ -1168,7 +1166,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
             <Upload size={26} color={C.gold} strokeWidth={1.8} style={{ marginBottom: 10 }} />
             <div style={{ color: C.text, fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Drop screens or PDFs here, or tap to browse</div>
             <div style={{ color: C.muted, fontSize: 12.5 }}>
-              PNG, JPG, WEBP or PDF · up to {screenLimit} files {isPro ? "(Pro)" : "(Free plan)"}
+              PNG, JPG, WEBP or PDF · up to {screenLimit} files
             </div>
           </>
         ) : (
@@ -1202,7 +1200,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
       </label>
 
       <div style={{ fontSize: 11.5, color: C.muted, textAlign: "right", marginTop: 6 }}>
-        {images.length}/{screenLimit} used {!isPro && "· Free plan"}
+        {images.length}/{screenLimit} used
       </div>
 
       {error && (
@@ -1227,7 +1225,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
   );
 }
 
-function UrlScreen({ url, setUrl, onRun, error, navLimit, isPro }) {
+function UrlScreen({ url, setUrl, onRun, error, navLimit }) {
   return (
     <div>
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
@@ -1236,7 +1234,7 @@ function UrlScreen({ url, setUrl, onRun, error, navLimit, isPro }) {
           <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 16, color: C.text }}>Review a live website</span>
         </div>
         <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "0 0 14px 0" }}>
-          Redline reads the homepage and up to {navLimit} main navigation pages ({isPro ? "Pro" : "Free"} plan). This
+          Redline reads the homepage and up to {navLimit} main navigation pages. This
           is a content/structure-based review, not a pixel-level screenshot audit.
         </p>
         <input
@@ -2253,29 +2251,24 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         </div>
       </div>
 
-      {/* Pricing */}
+      {/* Free access */}
       <div style={sect}>
-        <SectionKicker>PRICING</SectionKicker>
-        <h2 style={h2}>Free today. Pro is coming.</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginTop: 24, textAlign: "left", maxWidth: 620, marginLeft: "auto", marginRight: "auto" }}>
-          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>Free</div>
-            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "6px 0 14px" }}>$0<span style={{ fontSize: 13, color: C.muted, fontWeight: 400 }}>/month</span></div>
-            {["Up to 5 screenshots per audit", "PDF upload supported", "URL review (5 pages explored)", "Full report, all sections", "12-slide deck viewer", "Audit history (with login)"].map((f) => (
-              <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim, marginBottom: 8 }}><Check size={14} color={C.low} style={{ flexShrink: 0, marginTop: 2 }} />{f}</div>
-            ))}
-            <button onClick={onStart} style={{ width: "100%", marginTop: 10, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "11px 0", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Get Started</button>
-          </div>
-          <div style={{ background: C.surface, border: `1px dashed ${C.gold}`, borderRadius: 14, padding: 22, position: "relative" }}>
-            <span style={{ position: "absolute", top: 14, right: 14, fontFamily: "'IBM Plex Mono', monospace", fontSize: 9.5, letterSpacing: 1, color: C.gold, background: C.goldSoft, borderRadius: 99, padding: "3px 9px" }}>COMING SOON</span>
-            <div style={{ fontWeight: 600, fontSize: 15, color: C.text }}>Pro</div>
-            <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "6px 0 14px" }}>$19<span style={{ fontSize: 13, color: C.muted, fontWeight: 400 }}>/month</span></div>
-            {["Up to 20 screenshots per audit", "URL review (20 pages explored)", "Emailed PDF reports", "Priority processing", "Persistent team history"].map((f) => (
-              <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim, marginBottom: 8 }}><Check size={14} color={C.muted} style={{ flexShrink: 0, marginTop: 2 }} />{f}</div>
-            ))}
-            <div style={{ marginTop: 10, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>Pro isn't purchasable yet — we're building it in the open. Everything above ships when it's real, not before.</div>
-          </div>
+        <SectionKicker>Pricing</SectionKicker>
+        <h2 style={h2}>Free while we're in early access</h2>
+        <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
+          Every feature is available to everyone, at no cost — up to {SCREEN_LIMIT} screens or {NAV_LIMIT} pages per audit,
+          full reports, the slide deck and PDF export.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
+          {["Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "Saved audit history", "No credit card, ever, while in beta"].map((f) => (
+            <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
+              <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
+            </div>
+          ))}
         </div>
+        <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "13px 26px", fontSize: 14.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          {isLoggedIn ? "Start an audit" : "Sign Up & Start Free"} <ArrowRight size={15} />
+        </button>
       </div>
 
       {/* Early access (honest, in place of testimonials) */}
@@ -2535,9 +2528,8 @@ export default function RedlineApp() {
   const [historyEntries, setHistoryEntries] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const screenLimit = screenLimitFor(user);
-  const navLimit = navLimitFor(user);
-  const isPro = !!(user && user.plan === "pro");
+  const screenLimit = screenLimitFor();
+  const navLimit = navLimitFor();
 
   /* ---- file handling ---- */
   /* Downscale images before upload: full-res phone screenshots are multi-MB
@@ -2571,7 +2563,7 @@ export default function RedlineApp() {
     setError(null);
     setImages((prev) => {
       if (prev.length >= screenLimit) {
-        setError(`Your plan allows up to ${screenLimit} files. ${isPro ? "" : "Upgrade to Pro for up to 20."}`);
+        setError(`You can include up to ${screenLimit} files in one audit.`);
         return prev;
       }
       return prev;
@@ -2602,7 +2594,7 @@ export default function RedlineApp() {
       reader.onerror = () => setError("Couldn't read one of the files — try a different one.");
       reader.readAsDataURL(file);
     });
-  }, [screenLimit, isPro]);
+  }, [screenLimit]);
 
   const onRemove = useCallback((id) => setImages((prev) => prev.filter((img) => img.id !== id)), []);
 
@@ -3018,18 +3010,6 @@ export default function RedlineApp() {
     setShowHistory(false);
   };
 
-  const simulatePro = async () => {
-    if (!user) return;
-    const nextPlan = user.plan === "pro" ? "free" : "pro";
-    const updated = { ...user, plan: nextPlan };
-    setUser(updated);
-    try {
-      const record = await getUserRecord(user.emailHash);
-      if (record) await setUserRecord(user.emailHash, { ...record, plan: nextPlan });
-    } catch {
-      // Plan still flips locally for this session even if the background save fails.
-    }
-  };
 
   const mailtoHref = report
     ? `mailto:?subject=${encodeURIComponent(`Redline UX Audit Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source, !!user && historySaved))}`
@@ -3097,9 +3077,6 @@ export default function RedlineApp() {
             ))}
             {user ? (
               <>
-                <button onClick={simulatePro} title="Demo only — no real billing" style={{ display: "flex", alignItems: "center", gap: 5, background: isPro ? C.goldSoft : C.surface, border: `1px solid ${C.border}`, color: isPro ? C.gold : C.muted, fontSize: 11.5, borderRadius: 99, padding: "5px 10px", cursor: "pointer" }}>
-                  <Crown size={12} /> {isPro ? "Pro (demo)" : "Free"}
-                </button>
                 <button onClick={onLogout} style={iconBtnStyle} title="Log out"><LogOut size={15} color={C.muted} /></button>
               </>
             ) : (
@@ -3135,9 +3112,6 @@ export default function RedlineApp() {
             ))}
             {user ? (
               <>
-                <button onClick={() => { simulatePro(); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
-                  <Crown size={16} color={isPro ? C.gold : C.muted} /> {isPro ? "Pro (demo) — switch to Free" : "Free — simulate Pro"}
-                </button>
                 <button onClick={() => { onLogout(); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: "transparent", border: "none", color: C.critical, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
                   <LogOut size={16} /> Log out ({user.email})
                 </button>
@@ -3188,9 +3162,9 @@ export default function RedlineApp() {
                 <ModeTabs mode={mode} setMode={setMode} />
 
                 {mode === "files" ? (
-                  <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} isPro={isPro} />
+                  <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} />
                 ) : (
-                  <UrlScreen url={urlInput} setUrl={setUrlInput} onRun={onRunUrl} error={error} navLimit={navLimit} isPro={isPro} />
+                  <UrlScreen url={urlInput} setUrl={setUrlInput} onRun={onRunUrl} error={error} navLimit={navLimit} />
                 )}
 
                 <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 22, flexWrap: "wrap" }}>
