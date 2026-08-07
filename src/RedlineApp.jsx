@@ -679,12 +679,106 @@ function DisclaimerModal({ onAccept, onCancel }) {
 /* ----------------------------------------------------------------------- */
 /* Auth modal                                                               */
 /* ----------------------------------------------------------------------- */
-function AuthModal({ onClose, onAuth, reason }) {
-  const [mode, setMode] = useState("login");
+function GoogleButton({ onCredential, disabled }) {
+  const ref = useRef(null);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!clientId) return;
+    let cancelled = false;
+    const init = () => {
+      if (cancelled || !window.google || !ref.current) return;
+      try {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (resp) => onCredential(resp && resp.credential),
+        });
+        window.google.accounts.id.renderButton(ref.current, {
+          theme: "outline", size: "large", width: 320, text: "continue_with",
+        });
+        setReady(true);
+      } catch { /* rendering failed; fall back to email form */ }
+    };
+    if (window.google) { init(); return () => { cancelled = true; }; }
+    const sc = document.createElement("script");
+    sc.src = "https://accounts.google.com/gsi/client";
+    sc.async = true;
+    sc.defer = true;
+    sc.onload = init;
+    document.head.appendChild(sc);
+    return () => { cancelled = true; };
+  }, [clientId, onCredential]);
+
+  if (!clientId) return null;
+  return (
+    <div style={{ marginBottom: 14, opacity: disabled ? 0.6 : 1 }}>
+      <div ref={ref} style={{ display: "flex", justifyContent: "center" }} />
+      {ready && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0 0" }}>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+          <span style={{ fontSize: 11, color: C.muted }}>or</span>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Decode the display fields from a Google ID token payload. The signature is
+   NOT verified here — that requires a server. Until the backend exists, treat
+   Google sign-in as convenience, not proof of identity. */
+function decodeJwtPayload(token) {
+  try {
+    const part = token.split(".")[1];
+    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(decodeURIComponent(escape(json)));
+  } catch {
+    return null;
+  }
+}
+
+function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
+  const [mode, setMode] = useState(initialMode);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const onGoogle = useCallback(async (credential) => {
+    if (!credential) return;
+    const payload = decodeJwtPayload(credential);
+    if (!payload || !payload.email) {
+      setError("Google sign-in didn't return an email address.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const cleanEmail = String(payload.email).toLowerCase();
+      const hash = await sha256Hex(cleanEmail);
+      let record = await getUserRecord(hash);
+      if (!record) {
+        record = {
+          email: cleanEmail,
+          name: payload.name || "",
+          company: "",
+          mobile: "",
+          provider: "google",
+          plan: "free",
+          createdAt: Date.now(),
+        };
+        await setUserRecord(hash, record);
+      }
+      onAuth({ email: cleanEmail, name: record.name || "", plan: record.plan || "free", emailHash: hash });
+    } catch (e) {
+      setError(`Couldn't complete Google sign-in: ${(e && e.message) || "unknown error"}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [onAuth]);
 
   const submit = async () => {
     setError(null);
@@ -696,6 +790,12 @@ function AuthModal({ onClose, onAuth, reason }) {
     if (password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
+    }
+    if (mode === "signup") {
+      if (name.trim().length < 2) { setError("Enter your name."); return; }
+      const digits = mobile.replace(/[^0-9]/g, "");
+      if (digits.length < 7) { setError("Enter a valid mobile number."); return; }
+      if (company.trim().length < 2) { setError("Enter your company (or 'Independent')."); return; }
     }
     setLoading(true);
     try {
@@ -709,9 +809,12 @@ function AuthModal({ onClose, onAuth, reason }) {
           setLoading(false);
           return;
         }
-        const record = { email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now() };
+        const record = {
+          email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now(),
+          name: name.trim(), mobile: mobile.trim(), company: company.trim(),
+        };
         const persisted = await setUserRecord(hash, record);
-        onAuth({ email: cleanEmail, plan: "free", emailHash: hash, ephemeral: !persisted });
+        onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted });
       } else {
         if (!existing) {
           setError("No account found with this email — sign up instead.");
@@ -723,7 +826,7 @@ function AuthModal({ onClose, onAuth, reason }) {
           setLoading(false);
           return;
         }
-        onAuth({ email: existing.email, plan: existing.plan || "free", emailHash: hash });
+        onAuth({ email: existing.email, name: existing.name || "", plan: existing.plan || "free", emailHash: hash });
       }
     } catch (e) {
       setError(`Couldn't complete that: ${(e && e.message) || "unknown error"}. Please try again.`);
@@ -736,27 +839,26 @@ function AuthModal({ onClose, onAuth, reason }) {
     <Modal onClose={onClose}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
         <Lock size={18} color={C.gold} />
-        <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 18, color: C.text }}>
+        <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 19, color: C.text }}>
           {mode === "login" ? "Log in" : "Create your account"}
         </h3>
       </div>
       {reason && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 14px 0" }}>{reason}</p>}
       {!reason && <div style={{ marginBottom: 14 }} />}
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={inputStyle}
-      />
-      <input
-        type="password"
-        placeholder="Password (min 6 characters)"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{ ...inputStyle, marginTop: 10 }}
-      />
+      <GoogleButton onCredential={onGoogle} disabled={loading} />
+
+      {mode === "signup" && (
+        <>
+          <input placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+          <input placeholder="Company" value={company} onChange={(e) => setCompany(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
+        </>
+      )}
+      <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, marginTop: mode === "signup" ? 10 : 0 }} />
+      {mode === "signup" && (
+        <input type="tel" placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
+      )}
+      <input type="password" placeholder="Password (min 6 characters)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
 
       {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
 
@@ -764,13 +866,13 @@ function AuthModal({ onClose, onAuth, reason }) {
         onClick={submit}
         disabled={loading}
         style={{
-          width: "100%", marginTop: 16, padding: "12px 0", borderRadius: 9, border: "none",
-          background: C.now, color: C.dark, borderRadius: 999, fontWeight: 600, fontSize: 14, cursor: "pointer",
+          width: "100%", marginTop: 16, padding: "13px 0", borderRadius: 999, border: "none",
+          background: C.now, color: C.dark, fontWeight: 700, fontSize: 14, cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}
       >
         {loading ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : mode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
-        {mode === "login" ? "Log in" : "Sign up"}
+        {mode === "login" ? "Log in" : "Create account"}
       </button>
 
       <div style={{ textAlign: "center", marginTop: 14, fontSize: 12.5, color: C.muted }}>
@@ -782,8 +884,9 @@ function AuthModal({ onClose, onAuth, reason }) {
       </div>
 
       <p style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
-        This is a lightweight demo account system for this prototype — your password is hashed before storage,
-        but there's no email verification or recovery, and it isn't built for handling sensitive production data.
+        This is a lightweight demo account system for this prototype — passwords are hashed before storage, but
+        there is no email verification or password recovery, and it is not built for sensitive production data.
+        Please don't reuse a password from another service.
       </p>
     </Modal>
   );
@@ -1920,7 +2023,7 @@ function SectionKicker({ children, onDark }) {
   return <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, letterSpacing: 2, color: onDark ? C.now : C.gold, marginBottom: 14, textTransform: "uppercase" }}>{children}</div>;
 }
 
-function LandingPage({ onStart, onOpenLegal }) {
+function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
   const h2 = { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: -0.8, color: C.text, margin: "0 0 10px 0", lineHeight: 1.2 };
   const sect = { padding: "44px 0", textAlign: "center" };
   return (
@@ -1937,7 +2040,7 @@ function LandingPage({ onStart, onOpenLegal }) {
               AI-powered insight across 6 critical UX dimensions. Upload screenshots, PDFs, or enter a URL for a comprehensive, actionable audit report.
             </p>
             <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "15px 30px", fontSize: 15.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              Start Free Audit <ArrowRight size={16} />
+              {isLoggedIn ? "Start Free Audit" : "Sign Up & Start Free"} <ArrowRight size={16} />
             </button>
             <div style={{ fontSize: 12.5, color: "#8FB3AB", marginTop: 14 }}>Free to try · No credit card required · Slide-deck report included</div>
           </div>
@@ -2264,6 +2367,7 @@ export default function RedlineApp() {
 
   const [user, setUser] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
   const [authReason, setAuthReason] = useState("");
   const pendingAuthActionRef = useRef(null);
   const [historySaved, setHistorySaved] = useState(false);
@@ -2619,6 +2723,7 @@ export default function RedlineApp() {
   const onRunFiles = () => {
     setError(null);
     if (!images.length) return;
+    if (!user) { requireLogin("runAudit"); return; }
     startRun("files");
   };
   const onRunUrl = () => {
@@ -2637,6 +2742,7 @@ export default function RedlineApp() {
       return;
     }
     if (v !== urlInput.trim()) setUrlInput(v);
+    if (!user) { requireLogin("runAudit"); return; }
     startRun("url");
   };
 
@@ -2650,9 +2756,11 @@ export default function RedlineApp() {
   const requireLogin = (action) => {
     pendingAuthActionRef.current = action;
     const reasons = {
+      runAudit: "Create a free account to run your audit — it keeps your reports in one place.",
       save: "Log in to save this audit to your history.",
     };
     setAuthReason(reasons[action] || "");
+    setAuthMode(action === "runAudit" ? "signup" : "login");
     setShowAuth(true);
   };
 
@@ -2661,6 +2769,11 @@ export default function RedlineApp() {
     setShowAuth(false);
     const action = pendingAuthActionRef.current;
     pendingAuthActionRef.current = null;
+    if (action === "runAudit") {
+      // Resume the audit the person was starting when we asked them to sign up.
+      setTimeout(() => startRun(mode === "url" ? "url" : "files"), 0);
+      return;
+    }
 
     if (report && !historySaved) {
       const entry = {
@@ -2883,7 +2996,7 @@ export default function RedlineApp() {
         {legalPage ? (
           <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
         ) : page === "landing" && !analyzing ? (
-          <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} />
+          <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} isLoggedIn={!!user} />
         ) : page === "dashboard" && !analyzing ? (
           <DashboardPage onStartAudit={() => setPage("audit")} />
         ) : page === "myaudits" && !analyzing ? (
@@ -2946,7 +3059,7 @@ export default function RedlineApp() {
       </main>
 
       {showDisclaimer && <DisclaimerModal onAccept={onAcceptDisclaimer} onCancel={() => { setShowDisclaimer(false); pendingRunRef.current = null; }} />}
-      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={onAuthSuccess} reason={authReason} />}
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={onAuthSuccess} reason={authReason} initialMode={authMode} />}
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (

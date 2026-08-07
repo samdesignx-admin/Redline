@@ -32,3 +32,16 @@ npm run dev            # frontend only
 
 ## Version
 v1.0 benchmark — see git tags.
+
+## Google sign-in (optional)
+
+Set `VITE_GOOGLE_CLIENT_ID` in Vercel's Environment Variables to a Google OAuth
+Web client ID (console.cloud.google.com → APIs & Services → Credentials), with
+your deployed origin listed under "Authorised JavaScript origins". The Google
+button only renders when this variable is present; otherwise the email/password
+form is used on its own.
+
+Note: the ID token returned by Google is currently decoded client-side for the
+user's email and name. It is NOT signature-verified, which requires a server.
+Treat Google sign-in as sign-in convenience, not identity proof, until the
+backend verifies tokens.
