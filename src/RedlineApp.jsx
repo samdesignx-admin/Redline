@@ -423,20 +423,43 @@ async function sha256Hex(text) {
   return fnv1aHex(text);
 }
 
-/* Storage: prefer window.storage (persists across sessions). If it's missing
-   or failing, fall back to an in-memory map so login still works for the
-   current session, and tell the user persistence is off. */
+/* Storage layer, in order of preference:
+   1. localStorage — persists across sessions on a real domain. This is the
+      normal path for the deployed site.
+   2. window.storage — the Claude artifact sandbox API, used when the app runs
+      inside a preview where localStorage is unavailable.
+   3. In-memory Map — last resort so the app still works for one session
+      (private browsing with storage blocked, etc.).
+   Note: this is still per-browser storage. Accounts do not sync across
+   devices, and clearing site data removes them. A real backend is required
+   for cross-device accounts. */
 const memoryStore = new Map();
 let storageDegraded = false;
 
+function localStorageWorks() {
+  try {
+    const k = "__redline_probe__";
+    window.localStorage.setItem(k, "1");
+    window.localStorage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const HAS_LOCAL = typeof window !== "undefined" && localStorageWorks();
+
 async function kvGet(key) {
-  if (window.storage && !storageDegraded) {
+  if (HAS_LOCAL) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch { /* fall through */ }
+  }
+  if (typeof window !== "undefined" && window.storage) {
     try {
       const res = await window.storage.get(key, true);
       return res ? res.value : null;
-    } catch (e) {
-      // get() throws for missing keys — only degrade if storage itself is absent
-      if (!window.storage) storageDegraded = true;
+    } catch {
       return memoryStore.has(key) ? memoryStore.get(key) : null;
     }
   }
@@ -445,7 +468,15 @@ async function kvGet(key) {
 
 async function kvSet(key, value) {
   memoryStore.set(key, value);
-  if (window.storage) {
+  if (HAS_LOCAL) {
+    try {
+      window.localStorage.setItem(key, value);
+      return true;
+    } catch {
+      storageDegraded = true;
+    }
+  }
+  if (typeof window !== "undefined" && window.storage) {
     try {
       await window.storage.set(key, value, true);
       return true;
@@ -454,15 +485,8 @@ async function kvSet(key, value) {
       return false;
     }
   }
-  storageDegraded = true;
-  return false;
-}
-
-function userKey(emailHash) {
-  return `redline:user:${emailHash}`;
-}
-function historyKey(emailHash) {
-  return `redline:history:${emailHash}`;
+  if (!HAS_LOCAL) storageDegraded = true;
+  return HAS_LOCAL && !storageDegraded;
 }
 
 async function getUserRecord(emailHash) {
@@ -814,7 +838,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
           name: name.trim(), mobile: mobile.trim(), company: company.trim(),
         };
         const persisted = await setUserRecord(hash, record);
-        onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted });
+        onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted && !HAS_LOCAL });
       } else {
         if (!existing) {
           setError("No account found with this email — sign up instead.");
@@ -2366,6 +2390,22 @@ export default function RedlineApp() {
   const pendingRunRef = useRef(null);
 
   const [user, setUser] = useState(null);
+
+  // Restore the signed-in user on load so accounts survive a refresh.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await kvGet("redline:session");
+        if (!raw) return;
+        const sess = JSON.parse(raw);
+        if (!sess || !sess.emailHash) return;
+        const rec = await getUserRecord(sess.emailHash);
+        if (rec) {
+          setUser({ email: rec.email, name: rec.name || "", plan: rec.plan || "free", emailHash: sess.emailHash });
+        }
+      } catch { /* no valid session */ }
+    })();
+  }, []);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [authReason, setAuthReason] = useState("");
@@ -2766,6 +2806,7 @@ export default function RedlineApp() {
 
   const onAuthSuccess = async (u) => {
     setUser(u);
+    kvSet("redline:session", JSON.stringify({ emailHash: u.emailHash })).catch(() => {});
     setShowAuth(false);
     const action = pendingAuthActionRef.current;
     pendingAuthActionRef.current = null;
@@ -2793,7 +2834,11 @@ export default function RedlineApp() {
 
   };
 
-  const onLogout = () => { setUser(null); setShowHistory(false); };
+  const onLogout = () => {
+    setUser(null);
+    setShowHistory(false);
+    try { if (HAS_LOCAL) window.localStorage.removeItem("redline:session"); } catch { /* ignore */ }
+  };
 
   const doDownloadPdf = useCallback(() => {
     if (!report) return;
