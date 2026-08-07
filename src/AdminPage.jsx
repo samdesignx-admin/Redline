@@ -7,29 +7,43 @@ import {
 /* ------------------------------------------------------------------ */
 /* Data collection                                                     */
 /* ------------------------------------------------------------------ */
-/* Reads every Redline account and audit stored in this browser. Because
-   accounts are browser-local, this reflects activity on THIS device only —
-   it is not a view of all users. Once accounts move to a database, the
-   same component works by swapping this loader for an API call. */
-function loadAll() {
-  const accounts = [];
-  const audits = [];
-  if (typeof window === "undefined" || !window.localStorage) return { accounts, audits };
+/* Loads every account and audit from the database via /api/admin, which
+   requires the ADMIN_KEY. This is a real view across all users. */
+async function loadAll(key) {
+  const r = await fetch("/api/admin", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
 
-  for (let i = 0; i < window.localStorage.length; i++) {
-    const key = window.localStorage.key(i);
-    if (!key) continue;
-    try {
-      if (key.startsWith("redline:user:")) {
-        const rec = JSON.parse(window.localStorage.getItem(key));
-        if (rec && rec.email) accounts.push({ ...rec, emailHash: key.replace("redline:user:", "") });
-      } else if (key.startsWith("redline:history:")) {
-        const list = JSON.parse(window.localStorage.getItem(key));
-        const hash = key.replace("redline:history:", "");
-        if (Array.isArray(list)) list.forEach((a) => audits.push({ ...a, emailHash: hash }));
-      }
-    } catch { /* skip malformed entries */ }
-  }
+  // Normalise database rows into the shape the charts expect.
+  const accounts = (data.accounts || []).map((a) => ({
+    emailHash: a.id,
+    email: a.email,
+    name: a.name,
+    company: a.company,
+    mobile: a.mobile,
+    provider: a.provider,
+    emailVerified: a.email_verified,
+    auditsUsed: a.audits_used,
+    createdAt: a.created_at ? new Date(a.created_at).getTime() : null,
+    lastLoginAt: a.last_login_at ? new Date(a.last_login_at).getTime() : null,
+  }));
+  const audits = (data.audits || []).map((x) => ({
+    id: x.id,
+    email: x.email,
+    date: x.created_at ? new Date(x.created_at).getTime() : Date.now(),
+    title: x.title,
+    mode: x.mode,
+    url: x.url,
+    screenCount: x.screen_count,
+    score: x.score,
+    assessment: x.assessment,
+    scorecard: x.scorecard,
+    severities: x.severities,
+  }));
   return { accounts, audits };
 }
 
@@ -121,15 +135,22 @@ function Sparkline({ data, C }) {
 /* Admin page                                                          */
 /* ------------------------------------------------------------------ */
 export default function AdminPage({ C, onExit }) {
-  const adminKey = import.meta.env.VITE_ADMIN_KEY;
-  const [authed, setAuthed] = useState(!adminKey);
+  const [authed, setAuthed] = useState(false);
   const [entered, setEntered] = useState("");
   const [authError, setAuthError] = useState("");
   const [{ accounts, audits }, setData] = useState({ accounts: [], audits: [] });
   const [refreshedAt, setRefreshedAt] = useState(Date.now());
 
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    if (authed) setData(loadAll());
+    if (!authed) return;
+    setLoading(true);
+    loadAll(entered)
+      .then((d) => { setData(d); setLoadError(""); })
+      .catch((e) => setLoadError(e.message))
+      .finally(() => setLoading(false));
   }, [authed, refreshedAt]);
 
   const stats = useMemo(() => {
@@ -159,16 +180,20 @@ export default function AdminPage({ C, onExit }) {
     ].map((b) => ({ ...b, count: scored.filter((a) => a.score >= b.min && a.score <= b.max).length }));
 
     // Dimension averages, parsed from the stored report text
-    const dims = ["Usability", "Accessibility", "Visual Design", "Trust", "Conversion"].map((label) => {
-      const vals = audits.map((a) => scoreFor(parseSection(a.rawText, "Final Scorecard"), label)).filter((v) => typeof v === "number");
+    const dimKeys = [["Usability", "usability"], ["Accessibility", "accessibility"], ["Visual Design", "visual"], ["Trust", "trust"], ["Conversion", "conversion"]];
+    const dims = dimKeys.map(([label, key]) => {
+      const vals = audits.map((a) => a.scorecard && a.scorecard[key]).filter((v) => typeof v === "number");
       return { label, avg: vals.length ? Math.round(vals.reduce((t, v) => t + v, 0) / vals.length) : null, n: vals.length };
     });
 
     // Severity totals
     const sev = { Critical: 0, High: 0, Medium: 0, Low: 0 };
     audits.forEach((a) => {
-      const c = countSeverities(a.rawText);
-      Object.keys(sev).forEach((k) => { sev[k] += c[k]; });
+      const c = a.severities || {};
+      sev.Critical += Number(c.critical) || 0;
+      sev.High += Number(c.high) || 0;
+      sev.Medium += Number(c.medium) || 0;
+      sev.Low += Number(c.low) || 0;
     });
 
     // Domains audited
@@ -240,7 +265,15 @@ export default function AdminPage({ C, onExit }) {
         />
         {authError && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{authError}</div>}
         <button
-          onClick={() => (entered === adminKey ? setAuthed(true) : setAuthError("That key isn't right."))}
+          onClick={async () => {
+            setAuthError("");
+            try {
+              await loadAll(entered);
+              setAuthed(true);
+            } catch (e) {
+              setAuthError(e.message || "That key isn't right.");
+            }
+          }}
           style={{ width: "100%", marginTop: 14, padding: "12px 0", borderRadius: 999, border: "none", background: C.now, color: C.dark, fontWeight: 700, fontSize: 14, cursor: "pointer" }}
         >
           Unlock
@@ -270,11 +303,11 @@ export default function AdminPage({ C, onExit }) {
         </div>
       </div>
 
-      <div style={{ background: C.highSoft, border: `1px solid ${C.high}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 11.5, color: C.textDim, lineHeight: 1.5 }}>
-        <strong style={{ color: C.text }}>Scope:</strong> accounts and audits are stored in each visitor's own browser, so this
-        page reports activity on <em>this device only</em> — not your whole user base. It becomes a true dashboard once accounts
-        move to a database. For site-wide traffic in the meantime, enable Vercel Analytics.
-      </div>
+      {loadError && (
+        <div style={{ background: C.criticalSoft, border: `1px solid ${C.critical}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12.5, color: C.critical }}>
+          {loadError}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 14 }}>
         <StatCard C={C} icon={Users} label="Accounts" value={accounts.length} sub={`${stats.verified} email-verified`} />

@@ -98,3 +98,29 @@ Vercel Analytics in the project dashboard.
 dashboard (project → Analytics → Enable) for real site-wide traffic data:
 page views, visitors, referrers and top pages. This is independent of the
 `/#admin` dashboard, which reads browser-local account data.
+
+## Database setup (Supabase)
+
+1. Create a free project at supabase.com
+2. SQL Editor → paste `db/schema.sql` → Run
+3. Project Settings → API → copy the URL and the **service_role** key
+4. Add these environment variables in Vercel, then redeploy:
+
+| Variable | Value |
+|---|---|
+| `SUPABASE_URL` | your project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role key — server-only, never expose to the browser |
+| `SESSION_SECRET` | any long random string |
+| `ADMIN_KEY` | the key you'll type at `/#admin` |
+| `AUDIT_QUOTA` | optional, defaults to 1 |
+| `GOOGLE_CLIENT_ID` | optional; if set, Google ID tokens are checked against it |
+
+### What moved server-side
+- **Accounts** — passwords hashed with scrypt on the server; the browser never
+  handles a hash. Sessions are HMAC-signed tokens with a 30-day expiry.
+- **Audits** — stored in Postgres, so history follows users across devices.
+- **Quota** — enforced in `api/audits.js` before an audit is saved, so clearing
+  browser storage no longer resets it.
+- **Google sign-in** — the ID token is now verified with Google server-side
+  rather than decoded in the browser.
+- **Admin** — `/#admin` reads aggregate data for every account and audit.

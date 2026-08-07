@@ -490,57 +490,44 @@ async function kvSet(key, value) {
   return HAS_LOCAL && !storageDegraded;
 }
 
-async function getAuditsUsed(emailHash) {
-  const rec = await getUserRecord(emailHash);
-  return (rec && Number(rec.auditsUsed)) || 0;
+
+
+/* ---------------------------------------------------------------- */
+/* Server API (Postgres via serverless functions)                     */
+/* ---------------------------------------------------------------- */
+const SESSION_KEY = "redline:token";
+
+function getToken() {
+  try { return window.localStorage.getItem(SESSION_KEY) || ""; } catch { return ""; }
+}
+function setToken(t) {
+  try { t ? window.localStorage.setItem(SESSION_KEY, t) : window.localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
 }
 
-async function incrementAuditsUsed(emailHash) {
-  const rec = await getUserRecord(emailHash);
-  if (!rec) return 0;
-  const next = ((Number(rec.auditsUsed) || 0) + 1);
-  await setUserRecord(emailHash, { ...rec, auditsUsed: next });
-  return next;
+async function apiPost(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await r.json(); } catch { /* non-JSON response */ }
+  if (!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
+  return data;
 }
 
-function userKey(emailHash) {
-  return `redline:user:${emailHash}`;
-}
-function historyKey(emailHash) {
-  return `redline:history:${emailHash}`;
-}
+const api = {
+  session: (token) => apiPost("/api/account", { action: "session", token }),
+  signup: (payload) => apiPost("/api/account", { action: "signup", ...payload }),
+  login: (email, password) => apiPost("/api/account", { action: "login", email, password }),
+  google: (credential) => apiPost("/api/account", { action: "google", credential }),
+  listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
+  quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
+  saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
+  deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
+};
 
-async function getUserRecord(emailHash) {
-  try {
-    const val = await kvGet(userKey(emailHash));
-    return val ? JSON.parse(val) : null;
-  } catch {
-    return null;
-  }
-}
-async function setUserRecord(emailHash, record) {
-  return kvSet(userKey(emailHash), JSON.stringify(record));
-}
-async function getHistoryList(emailHash) {
-  try {
-    const val = await kvGet(historyKey(emailHash));
-    return val ? JSON.parse(val) : [];
-  } catch {
-    return [];
-  }
-}
-async function appendHistoryEntry(emailHash, entry) {
-  const list = await getHistoryList(emailHash);
-  const next = [entry, ...list].slice(0, 20);
-  await kvSet(historyKey(emailHash), JSON.stringify(next));
-  return next;
-}
-async function deleteHistoryEntry(emailHash, id) {
-  const list = await getHistoryList(emailHash);
-  const next = list.filter((e) => e.id !== id);
-  await kvSet(historyKey(emailHash), JSON.stringify(next));
-  return next;
-}
+
 
 /* ----------------------------------------------------------------------- */
 /* Small UI atoms                                                           */
@@ -805,31 +792,14 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
 
   const onGoogle = useCallback(async (credential) => {
     if (!credential) return;
-    const payload = decodeJwtPayload(credential);
-    if (!payload || !payload.email) {
-      setError("Google sign-in didn't return an email address.");
-      return;
-    }
     setLoading(true);
+    setError(null);
     try {
-      const cleanEmail = String(payload.email).toLowerCase();
-      const hash = await sha256Hex(cleanEmail);
-      let record = await getUserRecord(hash);
-      if (!record) {
-        record = {
-          email: cleanEmail,
-          name: payload.name || "",
-          company: "",
-          mobile: "",
-          provider: "google",
-          plan: "free",
-          createdAt: Date.now(),
-        };
-        await setUserRecord(hash, record);
-      }
-      onAuth({ email: cleanEmail, name: record.name || "", plan: "free", emailHash: hash });
+      const { account, token } = await api.google(credential);
+      setToken(token);
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
     } catch (e) {
-      setError(`Couldn't complete Google sign-in: ${(e && e.message) || "unknown error"}`);
+      setError(e.message || "Google sign-in failed.");
     } finally {
       setLoading(false);
     }
@@ -878,15 +848,16 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       const body = await r.json().catch(() => ({}));
       if (!r.ok || !body.verified) throw new Error(body.error || "Verification failed.");
 
-      const hash = await sha256Hex(cleanEmail);
-      const passwordHash = await sha256Hex(`${cleanEmail}:${password}`);
-      const record = {
-        email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now(),
-        name: name.trim(), mobile: mobile.trim(), company: company.trim(),
+      const { account, token } = await api.signup({
+        email: cleanEmail,
+        password,
+        name: name.trim(),
+        company: company.trim(),
+        mobile: mobile.trim(),
         emailVerified: true,
-      };
-      const persisted = await setUserRecord(hash, record);
-      onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted && !HAS_LOCAL });
+      });
+      setToken(token);
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
     } catch (e) {
       setError(e.message || "Verification failed.");
     } finally {
@@ -913,16 +884,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     }
     setLoading(true);
     try {
-      const hash = await sha256Hex(cleanEmail);
-      const passwordHash = await sha256Hex(`${cleanEmail}:${password}`);
-      const existing = await getUserRecord(hash);
-
       if (mode === "signup") {
-        if (existing) {
-          setError("An account with this email already exists — log in instead.");
-          setLoading(false);
-          return;
-        }
         // Send a verification code; the account is created only after the
         // code is confirmed, so unverified addresses never become accounts.
         try {
@@ -936,17 +898,9 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         setLoading(false);
         return;
       } else {
-        if (!existing) {
-          setError("No account found with this email — sign up instead.");
-          setLoading(false);
-          return;
-        }
-        if (existing.passwordHash !== passwordHash) {
-          setError("Incorrect email or password.");
-          setLoading(false);
-          return;
-        }
-        onAuth({ email: existing.email, name: existing.name || "", plan: existing.plan || "free", emailHash: hash });
+        const { account, token } = await api.login(cleanEmail, password);
+        setToken(token);
+        onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
       }
     } catch (e) {
       setError(`Couldn't complete that: ${(e && e.message) || "unknown error"}. Please try again.`);
@@ -2381,9 +2335,24 @@ function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
   const refresh = useCallback(async () => {
     if (!user) { setLoading(false); return; }
     setLoading(true);
-    const list = await getHistoryList(user.emailHash);
-    setEntries(list);
-    setLoading(false);
+    try {
+      const { audits } = await api.listAudits();
+      setEntries((audits || []).map((a) => ({
+        id: a.id,
+        date: new Date(a.created_at).getTime(),
+        title: a.title || "",
+        mode: a.mode,
+        url: a.url || "",
+        screenCount: a.screen_count || 0,
+        score: a.score,
+        assessment: a.assessment,
+        rawText: a.raw_text || "",
+      })));
+    } catch {
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -2391,7 +2360,7 @@ function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
   const onDelete = async (id) => {
     if (!user) return;
     setEntries((prev) => prev.filter((e) => e.id !== id));
-    try { await deleteHistoryEntry(user.emailHash, id); } catch { /* list already updated optimistically */ }
+    try { await api.deleteAudit(id); } catch { /* list already updated optimistically */ }
   };
 
   if (!user) {
@@ -2520,20 +2489,20 @@ export default function RedlineApp() {
 
   const [user, setUser] = useState(null);
 
-  // Restore the signed-in user on load so accounts survive a refresh.
+  // Restore the signed-in user from the server session token.
   useEffect(() => {
     (async () => {
+      const token = getToken();
+      if (!token) return;
       try {
-        const raw = await kvGet("redline:session");
-        if (!raw) return;
-        const sess = JSON.parse(raw);
-        if (!sess || !sess.emailHash) return;
-        const rec = await getUserRecord(sess.emailHash);
-        if (rec) {
-          setUser({ email: rec.email, name: rec.name || "", plan: rec.plan || "free", emailHash: sess.emailHash });
-          setAuditsUsed(Number(rec.auditsUsed) || 0);
+        const { account } = await api.session(token);
+        if (account) {
+          setUser({ email: account.email, name: account.name, plan: account.plan, id: account.id });
+          setAuditsUsed(account.auditsUsed || 0);
+        } else {
+          setToken("");
         }
-      } catch { /* no valid session */ }
+      } catch { /* offline or server unavailable; stay logged out */ }
     })();
   }, []);
   const [showAuth, setShowAuth] = useState(false);
@@ -2850,21 +2819,30 @@ export default function RedlineApp() {
       setSource(which === "url" ? { mode: "url", url: urlInput.trim() } : { mode: "files", url: "" });
 
       if (user) {
-        const entry = {
-          id: `${Date.now()}`,
-          date: Date.now(),
-          title: auditTitle.trim(),
-          score: parsed.summary.score,
-          assessment: parsed.summary.assessment,
-          mode: which,
-          url: which === "url" ? urlInput.trim() : "",
-          screenCount: which === "files" ? images.length : 0,
-          rawText: text.slice(0, 20000),
-        };
-        appendHistoryEntry(user.emailHash, entry).catch(() => {});
-        setHistorySaved(true);
-        // Count the audit only once a report actually came back.
-        incrementAuditsUsed(user.emailHash).then(setAuditsUsed).catch(() => {});
+        try {
+          const saved = await api.saveAudit({
+            title: auditTitle.trim(),
+            mode: which,
+            url: which === "url" ? urlInput.trim() : "",
+            screenCount: which === "files" ? images.length : 0,
+            score: parsed.summary.score,
+            assessment: parsed.summary.assessment,
+            scorecard: parsed.scorecard,
+            severities: {
+              critical: [parsed.usability, parsed.visual, parsed.accessibility, parsed.trust, parsed.conversion, parsed.cognitive]
+                .flatMap((sec) => sec.issues).filter((i) => i.severity === "Critical").length,
+              high: [parsed.usability, parsed.visual, parsed.accessibility, parsed.trust, parsed.conversion, parsed.cognitive]
+                .flatMap((sec) => sec.issues).filter((i) => i.severity === "High").length,
+            },
+            pages: auditedPages,
+            rawText: text,
+          });
+          setHistorySaved(true);
+          if (typeof saved.used === "number") setAuditsUsed(saved.used);
+        } catch (saveErr) {
+          // The report is already on screen; saving is best-effort.
+          setHistorySaved(false);
+        }
       }
     } catch (e) {
       const msg = e && e.message;
@@ -2939,7 +2917,7 @@ export default function RedlineApp() {
 
   const onAuthSuccess = async (u) => {
     setUser(u);
-    getAuditsUsed(u.emailHash).then(setAuditsUsed).catch(() => {});
+    setAuditsUsed(u.auditsUsed || 0);
     kvSet("redline:session", JSON.stringify({ emailHash: u.emailHash })).catch(() => {});
     setShowAuth(false);
     const action = pendingAuthActionRef.current;
@@ -2950,20 +2928,22 @@ export default function RedlineApp() {
       return;
     }
 
+    // Save a report that was generated before this login.
     if (report && !historySaved) {
-      const entry = {
-        id: `${Date.now()}`,
-        date: Date.now(),
+      api.saveAudit({
         title: auditTitle.trim(),
-        score: report.summary.score,
-        assessment: report.summary.assessment,
         mode: source.mode,
         url: source.url,
         screenCount: source.mode === "files" ? images.length : 0,
-        rawText: rawReport.slice(0, 20000),
-      };
-      appendHistoryEntry(u.emailHash, entry).catch(() => {});
-      setHistorySaved(true);
+        score: report.summary.score,
+        assessment: report.summary.assessment,
+        scorecard: report.scorecard,
+        pages: auditedPages,
+        rawText: rawReport,
+      }).then((saved) => {
+        setHistorySaved(true);
+        if (typeof saved.used === "number") setAuditsUsed(saved.used);
+      }).catch(() => {});
     }
 
   };
@@ -2972,7 +2952,7 @@ export default function RedlineApp() {
     setUser(null);
     setAuditsUsed(0);
     setShowHistory(false);
-    try { if (HAS_LOCAL) window.localStorage.removeItem("redline:session"); } catch { /* ignore */ }
+    setToken("");
   };
 
   const doDownloadPdf = useCallback(() => {
@@ -3020,8 +3000,16 @@ export default function RedlineApp() {
     if (!user) return;
     setShowHistory(true);
     setHistoryLoading(true);
-    const list = await getHistoryList(user.emailHash);
-    setHistoryEntries(list);
+    try {
+      const { audits } = await api.listAudits();
+      setHistoryEntries((audits || []).map((a) => ({
+        id: a.id, date: new Date(a.created_at).getTime(), title: a.title || "",
+        mode: a.mode, url: a.url || "", screenCount: a.screen_count || 0,
+        score: a.score, assessment: a.assessment, rawText: a.raw_text || "",
+      })));
+    } catch {
+      setHistoryEntries([]);
+    }
     setHistoryLoading(false);
   };
 
