@@ -489,6 +489,13 @@ async function kvSet(key, value) {
   return HAS_LOCAL && !storageDegraded;
 }
 
+function userKey(emailHash) {
+  return `redline:user:${emailHash}`;
+}
+function historyKey(emailHash) {
+  return `redline:history:${emailHash}`;
+}
+
 async function getUserRecord(emailHash) {
   try {
     const val = await kvGet(userKey(emailHash));
