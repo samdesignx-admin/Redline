@@ -45,3 +45,23 @@ Note: the ID token returned by Google is currently decoded client-side for the
 user's email and name. It is NOT signature-verified, which requires a server.
 Treat Google sign-in as sign-in convenience, not identity proof, until the
 backend verifies tokens.
+
+## Email verification
+
+Signup sends a 6-digit code before the account is created. Requires these
+environment variables in Vercel:
+
+| Variable | Where from |
+|---|---|
+| `RESEND_API_KEY` | resend.com → API Keys (free tier: 3,000 emails/month) |
+| `VERIFY_SECRET` | any long random string you generate |
+| `VERIFY_FROM` | a verified sender, e.g. `Redline <noreply@yourdomain.com>`. Resend allows `onboarding@resend.dev` for testing, which only delivers to your own account email. |
+
+Codes are never stored server-side: `api/verify.js` issues an HMAC-signed token
+carrying the expiry, and validates the submitted code by recomputing the
+signature (10 minute TTL, rate limited per IP and per address).
+
+Known limit: the `emailVerified` flag is stored in browser storage along with
+the rest of the account, so a determined user could set it locally. The code
+exchange genuinely proves control of the address at signup; making that
+tamper-proof requires the account database.

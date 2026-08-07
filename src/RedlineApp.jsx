@@ -771,6 +771,16 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [step, setStep] = useState("form");       // form | verify
+  const [code, setCode] = useState("");
+  const [verifyToken, setVerifyToken] = useState("");
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   const onGoogle = useCallback(async (credential) => {
     if (!credential) return;
@@ -804,6 +814,65 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     }
   }, [onAuth]);
 
+  const sendCode = async (targetEmail) => {
+    const r = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "send", email: targetEmail }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || "Couldn't send the verification email.");
+    return body.token;
+  };
+
+  const resend = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const t = await sendCode(email.trim().toLowerCase());
+      setVerifyToken(t);
+      setResendIn(30);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* Second step of signup: confirm the emailed code, then create the account. */
+  const confirmCode = async () => {
+    setError(null);
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const r = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "verify", email: cleanEmail, code: code.trim(), token: verifyToken }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || !body.verified) throw new Error(body.error || "Verification failed.");
+
+      const hash = await sha256Hex(cleanEmail);
+      const passwordHash = await sha256Hex(`${cleanEmail}:${password}`);
+      const record = {
+        email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now(),
+        name: name.trim(), mobile: mobile.trim(), company: company.trim(),
+        emailVerified: true,
+      };
+      const persisted = await setUserRecord(hash, record);
+      onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted && !HAS_LOCAL });
+    } catch (e) {
+      setError(e.message || "Verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const submit = async () => {
     setError(null);
     const cleanEmail = email.trim().toLowerCase();
@@ -833,12 +902,18 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
           setLoading(false);
           return;
         }
-        const record = {
-          email: cleanEmail, passwordHash, plan: "free", createdAt: Date.now(),
-          name: name.trim(), mobile: mobile.trim(), company: company.trim(),
-        };
-        const persisted = await setUserRecord(hash, record);
-        onAuth({ email: cleanEmail, name: record.name, plan: "free", emailHash: hash, ephemeral: !persisted && !HAS_LOCAL });
+        // Send a verification code; the account is created only after the
+        // code is confirmed, so unverified addresses never become accounts.
+        try {
+          const t = await sendCode(cleanEmail);
+          setVerifyToken(t);
+          setResendIn(30);
+          setStep("verify");
+        } catch (err) {
+          setError(err.message);
+        }
+        setLoading(false);
+        return;
       } else {
         if (!existing) {
           setError("No account found with this email — sign up instead.");
@@ -870,6 +945,41 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       {reason && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 14px 0" }}>{reason}</p>}
       {!reason && <div style={{ marginBottom: 14 }} />}
 
+      {step === "verify" ? (
+        <div>
+          <p style={{ fontSize: 13, color: C.textDim, lineHeight: 1.6, margin: "0 0 14px" }}>
+            We sent a 6-digit code to <strong style={{ color: C.text }}>{email.trim().toLowerCase()}</strong>. Enter it below to finish creating your account.
+          </p>
+          <input
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))}
+            style={{ ...inputStyle, textAlign: "center", fontSize: 24, letterSpacing: 8, fontWeight: 700 }}
+          />
+          {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
+          <button
+            onClick={confirmCode}
+            disabled={loading}
+            style={{ width: "100%", marginTop: 16, padding: "13px 0", borderRadius: 999, border: "none", background: C.now, color: C.dark, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            {loading ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={15} />}
+            Verify & create account
+          </button>
+          <div style={{ textAlign: "center", marginTop: 14, fontSize: 12.5, color: C.muted }}>
+            {resendIn > 0 ? (
+              <>Didn't get it? Resend in {resendIn}s</>
+            ) : (
+              <>Didn't get it? <button onClick={resend} style={linkBtnStyle}>Resend code</button></>
+            )}
+            <div style={{ marginTop: 6 }}>
+              <button onClick={() => { setStep("form"); setError(null); setCode(""); }} style={linkBtnStyle}>Change details</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+      <>
       <GoogleButton onCredential={onGoogle} disabled={loading} />
 
       {mode === "signup" && (
@@ -907,10 +1017,12 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         )}
       </div>
 
+      </>
+      )}
+
       <p style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
-        This is a lightweight demo account system for this prototype — passwords are hashed before storage, but
-        there is no email verification or password recovery, and it is not built for sensitive production data.
-        Please don't reuse a password from another service.
+        Early access: accounts are stored in your browser and passwords are hashed. There's no password
+        recovery yet, so please use a unique password.
       </p>
     </Modal>
   );
