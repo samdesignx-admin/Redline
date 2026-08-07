@@ -64,3 +64,14 @@ Known limit: the `emailVerified` flag is stored in browser storage along with
 the rest of the account, so a determined user could set it locally. The code
 exchange genuinely proves control of the address at signup; making that
 tamper-proof requires the account database.
+
+## Usage limits
+
+Each account includes `AUDIT_QUOTA` (currently 1) completed audit, with up to
+5 screens or 5 crawled pages per audit. The counter lives on the account record
+in browser storage and increments only when a report is successfully returned.
+
+Known limit: because accounts are browser-side, the quota is not tamper-proof —
+clearing site data or registering another address resets it. Enforcing it
+properly requires the account database, where the counter would live server-side
+and be checked before the audit runs.

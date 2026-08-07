@@ -63,8 +63,10 @@ function severityFor(raw) {
 /* ----------------------------------------------------------------------- */
 const SITE_URL = "https://redline-sandy-sigma.vercel.app";
 
-const SCREEN_LIMIT = 20;
-const NAV_LIMIT = 20;
+const SCREEN_LIMIT = 5;
+const NAV_LIMIT = 5;
+const AUDIT_QUOTA = 1; // reports included per account
+const QUOTA_MESSAGE = "You've used your included audit. Your existing report stays available in My Audits.";
 
 function screenLimitFor() {
   return SCREEN_LIMIT;
@@ -485,6 +487,19 @@ async function kvSet(key, value) {
   }
   if (!HAS_LOCAL) storageDegraded = true;
   return HAS_LOCAL && !storageDegraded;
+}
+
+async function getAuditsUsed(emailHash) {
+  const rec = await getUserRecord(emailHash);
+  return (rec && Number(rec.auditsUsed)) || 0;
+}
+
+async function incrementAuditsUsed(emailHash) {
+  const rec = await getUserRecord(emailHash);
+  if (!rec) return 0;
+  const next = ((Number(rec.auditsUsed) || 0) + 1);
+  await setUserRecord(emailHash, { ...rec, auditsUsed: next });
+  return next;
 }
 
 function userKey(emailHash) {
@@ -2254,13 +2269,13 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* Free access */}
       <div style={sect}>
         <SectionKicker>Pricing</SectionKicker>
-        <h2 style={h2}>Free while we're in early access</h2>
+        <h2 style={h2}>One free audit per account</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          Every feature is available to everyone, at no cost — up to {SCREEN_LIMIT} screens or {NAV_LIMIT} pages per audit,
-          full reports, the slide deck and PDF export.
+          During early access every account includes one complete audit, free — up to {SCREEN_LIMIT} screens
+          or {NAV_LIMIT} pages, with the full report, slide deck and PDF export.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "Saved audit history", "No credit card, ever, while in beta"].map((f) => (
+          {[`Up to ${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No credit card required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
@@ -2496,6 +2511,7 @@ export default function RedlineApp() {
   }, []);
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
+  const [auditsUsed, setAuditsUsed] = useState(0);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -2514,6 +2530,7 @@ export default function RedlineApp() {
         const rec = await getUserRecord(sess.emailHash);
         if (rec) {
           setUser({ email: rec.email, name: rec.name || "", plan: rec.plan || "free", emailHash: sess.emailHash });
+          setAuditsUsed(Number(rec.auditsUsed) || 0);
         }
       } catch { /* no valid session */ }
     })();
@@ -2845,6 +2862,8 @@ export default function RedlineApp() {
         };
         appendHistoryEntry(user.emailHash, entry).catch(() => {});
         setHistorySaved(true);
+        // Count the audit only once a report actually came back.
+        incrementAuditsUsed(user.emailHash).then(setAuditsUsed).catch(() => {});
       }
     } catch (e) {
       const msg = e && e.message;
@@ -2875,6 +2894,7 @@ export default function RedlineApp() {
     setError(null);
     if (!images.length) return;
     if (!user) { requireLogin("runAudit"); return; }
+    if (auditsUsed >= AUDIT_QUOTA) { setError(QUOTA_MESSAGE); return; }
     startRun("files");
   };
   const onRunUrl = () => {
@@ -2894,6 +2914,7 @@ export default function RedlineApp() {
     }
     if (v !== urlInput.trim()) setUrlInput(v);
     if (!user) { requireLogin("runAudit"); return; }
+    if (auditsUsed >= AUDIT_QUOTA) { setError(QUOTA_MESSAGE); return; }
     startRun("url");
   };
 
@@ -2917,6 +2938,7 @@ export default function RedlineApp() {
 
   const onAuthSuccess = async (u) => {
     setUser(u);
+    getAuditsUsed(u.emailHash).then(setAuditsUsed).catch(() => {});
     kvSet("redline:session", JSON.stringify({ emailHash: u.emailHash })).catch(() => {});
     setShowAuth(false);
     const action = pendingAuthActionRef.current;
@@ -2947,6 +2969,7 @@ export default function RedlineApp() {
 
   const onLogout = () => {
     setUser(null);
+    setAuditsUsed(0);
     setShowHistory(false);
     try { if (HAS_LOCAL) window.localStorage.removeItem("redline:session"); } catch { /* ignore */ }
   };
@@ -3153,6 +3176,17 @@ export default function RedlineApp() {
                     Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
                   </p>
                 </div>
+
+                {user && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: auditsUsed >= AUDIT_QUOTA ? C.highSoft : C.goldSoft, border: `1px solid ${auditsUsed >= AUDIT_QUOTA ? C.high : C.gold}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+                    <FileText size={15} color={auditsUsed >= AUDIT_QUOTA ? C.high : C.gold} style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 12.5, color: C.text }}>
+                      {auditsUsed >= AUDIT_QUOTA
+                        ? QUOTA_MESSAGE
+                        : `${AUDIT_QUOTA - auditsUsed} of ${AUDIT_QUOTA} audit${AUDIT_QUOTA === 1 ? "" : "s"} remaining on your account.`}
+                    </span>
+                  </div>
+                )}
 
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.textDim, marginBottom: 6 }}>Audit title <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span></label>
