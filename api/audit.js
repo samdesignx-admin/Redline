@@ -1,8 +1,15 @@
 // Vercel serverless function: proxies audit requests to the Anthropic API.
+//
+// IMPORTANT: model calls routinely take 20-60s. Vercel's default function
+// timeout is 10s, which kills the request mid-flight and surfaces to the
+// browser as a network failure. maxDuration raises this (60s is the Hobby
+// plan ceiling; Pro allows more).
 // The API key lives in the ANTHROPIC_API_KEY environment variable — never in
 // frontend code. Includes a simple in-memory per-IP rate limit as a first
 // line of defense (note: in-memory state resets per serverless instance, so
 // for real protection add Upstash Redis or similar before going public).
+
+export const maxDuration = 60;
 
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour

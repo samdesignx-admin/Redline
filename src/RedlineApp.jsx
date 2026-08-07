@@ -2523,7 +2523,7 @@ export default function RedlineApp() {
       });
     } catch (networkErr) {
       if (attempt >= 4) {
-        throw new Error("Couldn't reach the audit service. If you're viewing this outside the Claude app's artifact preview, the API isn't available — otherwise check your connection and retry.");
+        throw new Error("Couldn't reach the audit service. This usually means the server took too long or the API key isn't configured. Check your connection and try again — if it keeps happening, try fewer screens per audit.");
       }
       setRunProgress((p) => ({ ...p, status: `Connection hiccup — retrying (${attempt + 1}/4)…` }));
       await waitInterruptible(Math.min(1000 * 2 ** attempt, 6000) + Math.random() * 800);
