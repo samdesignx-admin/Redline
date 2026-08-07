@@ -75,3 +75,19 @@ Known limit: because accounts are browser-side, the quota is not tamper-proof â€
 clearing site data or registering another address resets it. Enforcing it
 properly requires the account database, where the counter would live server-side
 and be checked before the audit runs.
+
+## Admin analytics
+
+Visit `/#admin` for the analytics dashboard: signups, audits over time, score
+distribution, average score per dimension, findings by severity, most-audited
+domains, companies and an account table with CSV export.
+
+Set `VITE_ADMIN_KEY` in Vercel to require a key before the page opens. If the
+variable is unset the page is open to anyone who knows the URL, so set it
+before sharing the site.
+
+Scope: because accounts live in browser storage, the dashboard reports activity
+on the device it is opened from, not across all users. It becomes a true
+dashboard once accounts move to a database â€” only the loader function at the
+top of `src/AdminPage.jsx` needs to change. For site-wide traffic today, enable
+Vercel Analytics in the project dashboard.

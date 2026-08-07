@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import AdminPage from "./AdminPage.jsx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -2483,7 +2484,7 @@ export default function RedlineApp() {
   const [source, setSource] = useState({ mode: "files", url: "" });
   const [error, setError] = useState(null);
 
-  const VALID_PAGES = ["landing", "audit", "myaudits", "dashboard"];
+  const VALID_PAGES = ["landing", "audit", "myaudits", "dashboard", "admin"];
   const [page, setPage] = useState(() => {
     const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
     return VALID_PAGES.includes(h) ? h : "landing";
@@ -3158,6 +3159,8 @@ export default function RedlineApp() {
           <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
         ) : page === "landing" && !analyzing ? (
           <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} isLoggedIn={!!user} />
+        ) : page === "admin" ? (
+          <AdminPage C={C} onExit={() => setPage("landing")} />
         ) : page === "dashboard" && !analyzing ? (
           <DashboardPage onStartAudit={() => setPage("audit")} />
         ) : page === "myaudits" && !analyzing ? (
