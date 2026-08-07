@@ -91,3 +91,10 @@ on the device it is opened from, not across all users. It becomes a true
 dashboard once accounts move to a database — only the loader function at the
 top of `src/AdminPage.jsx` needs to change. For site-wide traffic today, enable
 Vercel Analytics in the project dashboard.
+
+## Vercel Analytics
+
+`@vercel/analytics` is wired into `src/main.jsx`. Enable it in the Vercel
+dashboard (project → Analytics → Enable) for real site-wide traffic data:
+page views, visitors, referrers and top pages. This is independent of the
+`/#admin` dashboard, which reads browser-local account data.
