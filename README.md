@@ -124,3 +124,20 @@ page views, visitors, referrers and top pages. This is independent of the
 - **Google sign-in** — the ID token is now verified with Google server-side
   rather than decoded in the browser.
 - **Admin** — `/#admin` reads aggregate data for every account and audit.
+
+## Naming convention
+
+**UXNest** is the company and platform (uxnest.ai). Individual products carry
+the **Nest** prefix:
+
+| Product | Status |
+|---|---|
+| Nest Audit | Live |
+| Nest Research | Planned |
+| Nest Design | Planned |
+| Nest Strategy | Planned |
+| Nest Testing | Planned |
+| Nest Copilot | Planned |
+
+Reports, slide decks and emails are branded "Nest Audit"; the site chrome,
+legal pages and account emails are branded "UXNest".

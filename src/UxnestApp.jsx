@@ -411,7 +411,7 @@ function buildPlainTextSummary(report, source, saved) {
   // many mail clients and browsers.
   const lines = [];
   const src = source && source.mode === "url" && source.url ? source.url : "uploaded screens";
-  lines.push(`UXNest Audit — ${src}`);
+  lines.push(`Nest Audit — ${src}`);
   lines.push(`Overall score: ${report.summary.score ?? "—"}/100 (${report.summary.assessment ?? "Unrated"})`);
   if (report.summary.concerns.length) {
     lines.push("", "Top concerns:");
@@ -1700,7 +1700,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
   const TOTAL = 12;
   let n = 0;
-  const footer = () => `<div class="ft"><span>UXNEST UX AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
+  const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
   const issueSlide = (title, data) => {
     const cards = data.issues.slice(0, 3).map((iss) => `
@@ -1721,7 +1721,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
       <span class="bar-val">${v ?? "—"}</span></div>`).join("");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UXNest Audit Report — ${srcLabel}</title>
+<title>Nest Audit Report — ${srcLabel}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 * { box-sizing: border-box; margin: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1769,7 +1769,7 @@ h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 
 
 <section class="slide center">
   <div class="kicker">Senior UX Review</div>
-  <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:40pt;margin-bottom:4mm">UXNest Audit Report</div>
+  <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;font-size:40pt;margin-bottom:4mm">Nest Audit Report</div>
   <div style="font-family:'IBM Plex Mono',monospace;font-size:11pt;color:${C.textDim};margin-bottom:10mm">${srcLabel}</div>
   <div><span class="bigscore" style="color:${scoreColor(summary.score ?? 0)}">${summary.score ?? "—"}</span>
   <span style="font-size:16pt;color:${C.muted}">/100 · ${esc(summary.assessment ?? "Unrated")}</span></div>
@@ -1857,7 +1857,7 @@ function SlideIconBadge({ icon: Icon, size = 14 }) {
 function SlideFooter({ n, total, sourceLabel }) {
   return (
     <div style={SLIDE.footer}>
-      <span>UXNEST UX AUDIT · {sourceLabel}</span>
+      <span>NEST AUDIT · {sourceLabel}</span>
       <span>{n} / {total}</span>
     </div>
   );
@@ -1920,7 +1920,7 @@ function DeckSlides({ report, source, auditedPages = [] }) {
       {/* 1 — Title */}
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
         <div style={SLIDE.kicker}>Senior UX Review</div>
-        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>UXNest Audit Report</div>
+        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Nest Audit Report</div>
         <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "3mm" }}>
           <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
@@ -2156,11 +2156,11 @@ const STEPS = [
 ];
 
 const SUITES = [
-  { icon: Users, title: "UXNest Research", desc: "Uncover user insights with AI-powered research tools.", tools: ["Persona Generator", "Journey Maps", "Interview Summaries", "Survey Analysis"] },
-  { icon: Palette, title: "UXNest Design", desc: "Elevate your design with AI critique and consistency checks.", tools: ["AI Design Critic", "Design Review", "Design System Checker", "UI Consistency Checker"] },
-  { icon: BarChart3, title: "UXNest Strategy", desc: "Make data-driven strategic decisions with competitive insights.", tools: ["Competitor Benchmarking", "Feature Gap Analysis", "Product Requirements", "User Stories"] },
-  { icon: TestTube2, title: "UXNest Testing", desc: "Optimize user experience with AI-powered testing insights.", tools: ["AI User Simulator", "Usability Testing", "A/B Test Ideas", "Heatmap Predictions"] },
-  { icon: MessageSquare, title: "UXNest Copilot", desc: "Perfect your copy and design with AI assistance.", tools: ["UX Writing", "Microcopy Generator", "Accessibility Fixes", "Figma Assistant"] },
+  { icon: Users, title: "Nest Research", desc: "Uncover user insights with AI-powered research tools.", tools: ["Persona Generator", "Journey Maps", "Interview Summaries", "Survey Analysis"] },
+  { icon: Palette, title: "Nest Design", desc: "Elevate your design with AI critique and consistency checks.", tools: ["AI Design Critic", "Design Review", "Design System Checker", "UI Consistency Checker"] },
+  { icon: BarChart3, title: "Nest Strategy", desc: "Make data-driven strategic decisions with competitive insights.", tools: ["Competitor Benchmarking", "Feature Gap Analysis", "Product Requirements", "User Stories"] },
+  { icon: TestTube2, title: "Nest Testing", desc: "Optimize user experience with AI-powered testing insights.", tools: ["AI User Simulator", "Usability Testing", "A/B Test Ideas", "Heatmap Predictions"] },
+  { icon: MessageSquare, title: "Nest Copilot", desc: "Perfect your copy and design with AI assistance.", tools: ["UX Writing", "Microcopy Generator", "Accessibility Fixes", "Figma Assistant"] },
 ];
 
 function SectionKicker({ children, onDark }) {
@@ -2396,7 +2396,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* Suites showcase */}
       <div style={sect}>
         <SectionKicker>COMING SOON</SectionKicker>
-        <h2 style={h2}>The Full UXNest Toolkit</h2>
+        <h2 style={h2}>The Full Nest Toolkit</h2>
         <p style={{ color: C.muted, fontSize: 14, maxWidth: 500, margin: "0 auto 26px" }}>Beyond audits, five product suites are in development to cover every UX challenge.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, textAlign: "left" }}>
           {SUITES.map((su) => { const Icon = su.icon; return (
@@ -2432,14 +2432,14 @@ function DashboardPage({ onStartAudit }) {
       <div style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "40px 0", marginBottom: 26 }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 18px" }}>
           <SectionKicker onDark>Your UX Toolkit</SectionKicker>
-          <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, color: "#FFFFFF", margin: "0 0 6px 0", letterSpacing: -0.8 }}>Everything UXNest can do</h1>
+          <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, color: "#FFFFFF", margin: "0 0 6px 0", letterSpacing: -0.8 }}>Everything Nest can do</h1>
           <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: 0 }}>One suite is live today. Five more are in active development.</p>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 14 }}>
         <div style={{ background: C.goldSoft, border: `1.5px solid ${C.gold}`, borderRadius: 16, padding: 20, boxShadow: "0 6px 20px rgba(18,48,43,0.06)" }}>
           <Zap size={19} color={C.gold} style={{ marginBottom: 8 }} />
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 4 }}>UX Audit</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16, color: C.text, marginBottom: 4 }}>Nest Audit</div>
           <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5, marginBottom: 10 }}>AI-powered comprehensive UX analysis.</div>
           {["Screenshot analysis", "PDF upload support", "URL exploration", "Slide-deck reports"].map((t) => (
             <div key={t} style={{ display: "flex", gap: 6, fontSize: 12, color: C.text, marginBottom: 4 }}><Check size={13} color={C.low} style={{ marginTop: 2, flexShrink: 0 }} />{t}</div>
@@ -3167,7 +3167,7 @@ export default function UxnestApp() {
 
 
   const mailtoHref = report
-    ? `mailto:?subject=${encodeURIComponent(`UXNest Audit Report Report — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source, !!user && historySaved))}`
+    ? `mailto:?subject=${encodeURIComponent(`Nest Audit — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source, !!user && historySaved))}`
     : "#";
 
   return (
