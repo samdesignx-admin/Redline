@@ -142,7 +142,7 @@ the **Nest** prefix:
 Reports, slide decks and emails are branded "Nest Audit"; the site chrome,
 legal pages and account emails are branded "UXNest".
 
-## Support chat
+## AI Assistant
 
 A chat widget appears on every page. It answers from a fixed knowledge base in
 `src/SupportChat.jsx` — deliberately explicit so the agent can't invent
@@ -152,6 +152,12 @@ emails the full conversation to you via Resend.
 
 Requires `SUPPORT_EMAIL` in Vercel (where tickets are sent). Replies go to the
 user directly because the email sets reply-to to their address.
+
+When a report is open it is passed to the assistant as a compact brief
+(`buildReportBrief`) containing scores, every finding with its severity and
+recommendation, and the ranked improvements — so users can ask "what should I
+fix first?" or "why is my accessibility score low?" and get answers grounded in
+their own audit rather than generic advice.
 
 Keep the knowledge base in `SUPPORT_CONTEXT` current — it lists known
 limitations (no password reset, no shareable links) so the agent is honest
