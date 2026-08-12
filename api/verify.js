@@ -8,7 +8,7 @@
 // Required environment variables:
 //   RESEND_API_KEY  - from resend.com
 //   VERIFY_SECRET   - any long random string
-//   VERIFY_FROM     - verified sender, e.g. "Redline <noreply@yourdomain.com>"
+//   VERIFY_FROM     - verified sender, e.g. "UXNest <noreply@yourdomain.com>"
 //                     (during testing Resend allows onboarding@resend.dev)
 
 import crypto from "crypto";
@@ -78,13 +78,13 @@ export default async function handler(req, res) {
           authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: process.env.VERIFY_FROM || "Redline <onboarding@resend.dev>",
+          from: process.env.VERIFY_FROM || "UXNest <onboarding@resend.dev>",
           to: [cleanEmail],
-          subject: `${generated} is your Redline verification code`,
-          text: `Your Redline verification code is ${generated}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+          subject: `${generated} is your UXNest verification code`,
+          text: `Your UXNest verification code is ${generated}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
           html: `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#12302B">
             <h2 style="margin:0 0 8px;font-size:20px">Verify your email</h2>
-            <p style="color:#3E5A54;font-size:14px;line-height:1.6;margin:0 0 20px">Enter this code in Redline to finish creating your account.</p>
+            <p style="color:#3E5A54;font-size:14px;line-height:1.6;margin:0 0 20px">Enter this code in UXNest to finish creating your account.</p>
             <div style="font-size:32px;font-weight:800;letter-spacing:6px;background:#DFF3EC;color:#0C7D62;padding:16px;text-align:center;border-radius:12px">${generated}</div>
             <p style="color:#6E8681;font-size:12px;margin:20px 0 0">This code expires in 10 minutes. If you didn't request it, ignore this email.</p>
           </div>`,

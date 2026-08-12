@@ -1,4 +1,4 @@
-# Redline — Senior UX Audit
+# UXNest — Senior UX Audit
 
 AI-powered UX audit tool. Upload screenshots/PDFs or enter a website URL and
 get a structured audit (Nielsen heuristics, WCAG, trust, conversion, cognitive
@@ -6,7 +6,7 @@ load) styled as feedback from a senior UX design director — including a
 12-slide presentation deck.
 
 ## Stack
-- React + Vite frontend (single-component app: `src/RedlineApp.jsx`)
+- React + Vite frontend (single-component app: `src/UxnestApp.jsx`)
 - Vercel serverless proxy (`api/audit.js`) that holds the Anthropic API key
 
 ## Deploy (Vercel)
@@ -54,7 +54,7 @@ environment variables in Vercel:
 |---|---|
 | `RESEND_API_KEY` | resend.com → API Keys (free tier: 3,000 emails/month) |
 | `VERIFY_SECRET` | any long random string you generate |
-| `VERIFY_FROM` | a verified sender, e.g. `Redline <noreply@yourdomain.com>`. Resend allows `onboarding@resend.dev` for testing, which only delivers to your own account email. |
+| `VERIFY_FROM` | a verified sender, e.g. `UXNest <noreply@yourdomain.com>`. Resend allows `onboarding@resend.dev` for testing, which only delivers to your own account email. |
 
 Codes are never stored server-side: `api/verify.js` issues an HMAC-signed token
 carrying the expiry, and validates the submitted code by recomputing the

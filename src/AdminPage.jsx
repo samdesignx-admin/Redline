@@ -243,7 +243,7 @@ export default function AdminPage({ C, onExit }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `redline-audits-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `uxnest-audits-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -278,7 +278,7 @@ export default function AdminPage({ C, onExit }) {
         >
           Unlock
         </button>
-        <button onClick={onExit} style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, marginTop: 12, cursor: "pointer" }}>Back to Redline</button>
+        <button onClick={onExit} style={{ background: "none", border: "none", color: C.muted, fontSize: 12.5, marginTop: 12, cursor: "pointer" }}>Back to UXNest</button>
       </div>
     );
   }
@@ -390,7 +390,7 @@ export default function AdminPage({ C, onExit }) {
       </Panel>
 
       <button onClick={onExit} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12.5, borderRadius: 999, padding: "9px 16px", cursor: "pointer" }}>
-        Back to Redline
+        Back to UXNest
       </button>
     </div>
   );

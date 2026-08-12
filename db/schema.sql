@@ -1,4 +1,4 @@
--- Redline database schema (Supabase / Postgres)
+-- UXNest database schema (Supabase / Postgres)
 -- Run this in the Supabase SQL editor: Dashboard -> SQL Editor -> New query.
 
 create table if not exists accounts (
