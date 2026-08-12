@@ -141,3 +141,18 @@ the **Nest** prefix:
 
 Reports, slide decks and emails are branded "Nest Audit"; the site chrome,
 legal pages and account emails are branded "UXNest".
+
+## Support chat
+
+A chat widget appears on every page. It answers from a fixed knowledge base in
+`src/SupportChat.jsx` — deliberately explicit so the agent can't invent
+features, prices or policies. When it can't resolve something it emits an
+`[ESCALATE]` token, the widget asks for the user's email, and `api/support.js`
+emails the full conversation to you via Resend.
+
+Requires `SUPPORT_EMAIL` in Vercel (where tickets are sent). Replies go to the
+user directly because the email sets reply-to to their address.
+
+Keep the knowledge base in `SUPPORT_CONTEXT` current — it lists known
+limitations (no password reset, no shareable links) so the agent is honest
+about them rather than guessing.

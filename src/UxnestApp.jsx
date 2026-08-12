@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
+import SupportChat from "./SupportChat.jsx";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -3371,6 +3372,7 @@ export default function UxnestApp() {
       {showDeck && report && (
         <DeckViewer report={report} source={source} auditedPages={auditedPages} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
+      <SupportChat C={C} user={user} />
       <PrintableReport report={report} source={source} auditedPages={auditedPages} />
     </div>
   );

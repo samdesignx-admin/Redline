@@ -15,7 +15,7 @@ const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour
 // The landing-page preview is unauthenticated, so it gets a tighter cap of
 // its own: single short call, low token ceiling, few per hour per IP.
-const MAX_PREVIEWS_PER_WINDOW = 8;
+const MAX_PREVIEWS_PER_WINDOW = 30; // covers landing previews and support chat turns
 const previewHits = new Map();
 const hits = new Map();
 
@@ -50,8 +50,8 @@ export default async function handler(req, res) {
     return;
   }
 
-  // A preview is a single small unauthenticated call. Identify it by its low
-  // token ceiling and rate limit it separately and more tightly.
+  // Preview and support-chat calls are small and unauthenticated. Identify
+  // them by their low token ceiling and rate limit them separately.
   const isPreview = Number((req.body || {}).max_tokens) <= 700;
   if (isPreview) {
     const now = Date.now();
