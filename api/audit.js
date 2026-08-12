@@ -13,6 +13,10 @@ export const maxDuration = 60;
 
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour
+// The landing-page preview is unauthenticated, so it gets a tighter cap of
+// its own: single short call, low token ceiling, few per hour per IP.
+const MAX_PREVIEWS_PER_WINDOW = 8;
+const previewHits = new Map();
 const hits = new Map();
 
 function rateLimited(ip) {
@@ -44,6 +48,21 @@ export default async function handler(req, res) {
   if (rateLimited(ip)) {
     res.status(429).json({ error: "Rate limit exceeded. Try again later." });
     return;
+  }
+
+  // A preview is a single small unauthenticated call. Identify it by its low
+  // token ceiling and rate limit it separately and more tightly.
+  const isPreview = Number((req.body || {}).max_tokens) <= 700;
+  if (isPreview) {
+    const now = Date.now();
+    const entry = previewHits.get(ip) || { count: 0, start: now };
+    if (now - entry.start > WINDOW_MS) { entry.count = 0; entry.start = now; }
+    entry.count++;
+    previewHits.set(ip, entry);
+    if (entry.count > MAX_PREVIEWS_PER_WINDOW) {
+      res.status(429).json({ error: "You've used the free previews for now. Sign up for full audits, or try again later." });
+      return;
+    }
   }
 
   // Allowlist of fields forwarded to the API — prevents clients from

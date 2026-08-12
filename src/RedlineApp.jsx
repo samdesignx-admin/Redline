@@ -66,8 +66,8 @@ const SITE_URL = "https://redline-sandy-sigma.vercel.app";
 
 const SCREEN_LIMIT = 5;
 const NAV_LIMIT = 5;
-const AUDIT_QUOTA = 1; // reports included per account
-const QUOTA_MESSAGE = "You've used your included audit. Your existing report stays available in My Audits.";
+const AUDIT_QUOTA = 5; // full reports included per account
+const QUOTA_MESSAGE = "You've used all your included audits. Your reports stay available in My Audits.";
 
 function screenLimitFor() {
   return SCREEN_LIMIT;
@@ -182,6 +182,39 @@ Sections to write:
 ${batchSections}
 
 Begin now.`;
+}
+
+function buildPreviewPrompt(url) {
+  return `You are a Senior UX Design Director. Use web search to open ${url} once and skim it. Be fast — a single fetch is enough.
+
+Then output ONLY this, with no preamble and no extra sections:
+
+SCORE: <0-100 integer>
+ASSESSMENT: <one of: Excellent, Good, Average, Poor>
+SUMMARY: <one sentence, max 25 words, on the overall UX quality>
+ISSUE: <short title> | <severity: Critical|High|Medium|Low> | <one sentence on why it matters, max 20 words>
+ISSUE: <short title> | <severity> | <why it matters>
+ISSUE: <short title> | <severity> | <why it matters>
+
+Exactly three ISSUE lines, ranked by impact. Be specific to this page, not generic.`;
+}
+
+function parsePreview(raw) {
+  const t = (raw || "").replace(/\r\n/g, "\n");
+  const scoreM = t.match(/SCORE:\s*(\d+)/i);
+  const assessM = t.match(/ASSESSMENT:\s*(Excellent|Good|Average|Poor)/i);
+  const sumM = t.match(/SUMMARY:\s*(.+)/i);
+  const issues = [...t.matchAll(/ISSUE:\s*([^|\n]+)\|([^|\n]+)\|([^\n]+)/gi)].map((m) => ({
+    title: m[1].trim(),
+    severity: severityFor(m[2]),
+    why: m[3].trim(),
+  }));
+  return {
+    score: scoreM ? Number(scoreM[1]) : null,
+    assessment: assessM ? assessM[1] : null,
+    summary: sumM ? sumM[1].trim() : "",
+    issues: issues.slice(0, 3),
+  };
 }
 
 const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its main navigation destinations. Be efficient — a handful of fetches is enough. If a page won't load, note that and move on rather than retrying.
@@ -879,7 +912,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     if (mode === "signup") {
       if (name.trim().length < 2) { setError("Enter your name."); return; }
       const digits = mobile.replace(/[^0-9]/g, "");
-      if (digits.length < 7) { setError("Enter a valid mobile number."); return; }
+      if (digits.length > 0 && digits.length < 7) { setError("That mobile number looks too short — leave it blank to skip."); return; }
       if (company.trim().length < 2) { setError("Enter your company (or 'Independent')."); return; }
     }
     setLoading(true);
@@ -965,7 +998,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       )}
       <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, marginTop: mode === "signup" ? 10 : 0 }} />
       {mode === "signup" && (
-        <input type="tel" placeholder="Mobile number" value={mobile} onChange={(e) => setMobile(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
+        <input type="tel" placeholder="Mobile number (optional)" value={mobile} onChange={(e) => setMobile(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
       )}
       <input type="password" placeholder="Password (min 6 characters)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
 
@@ -2134,6 +2167,116 @@ function SectionKicker({ children, onDark }) {
   return <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, letterSpacing: 2, color: onDark ? C.now : C.gold, marginBottom: 14, textTransform: "uppercase" }}>{children}</div>;
 }
 
+function InstantPreview({ onSignup, isLoggedIn }) {
+  const [url, setUrl] = useState("");
+  const [state, setState] = useState("idle"); // idle | running | done | error
+  const [result, setResult] = useState(null);
+  const [message, setMessage] = useState("");
+
+  const run = async () => {
+    let v = url.trim();
+    if (!v) return;
+    if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+    try {
+      const u = new URL(v);
+      if (!u.hostname.includes(".")) throw new Error();
+    } catch {
+      setMessage("That doesn't look like a valid website address.");
+      setState("error");
+      return;
+    }
+    setState("running");
+    setMessage("");
+    try {
+      const r = await fetch("/api/audit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          max_tokens: 700,
+          messages: [{ role: "user", content: [{ type: "text", text: buildPreviewPrompt(v) }] }],
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error?.message || data.error || "Preview failed");
+      const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      const parsed = parsePreview(text);
+      if (parsed.score == null && parsed.issues.length === 0) throw new Error("Couldn't read that page — it may block automated access.");
+      setResult({ ...parsed, url: v });
+      setState("done");
+    } catch (e) {
+      setMessage(e.message || "Something went wrong. Please try again.");
+      setState("error");
+    }
+  };
+
+  const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
+
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, maxWidth: 560, margin: "0 auto", boxShadow: "0 8px 26px rgba(18,48,43,0.08)" }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 17, color: C.text, marginBottom: 4 }}>Try it now — free, no account</div>
+      <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 14 }}>Paste a URL for an instant score and your top three issues.</div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && state !== "running" && run()}
+          placeholder="example.com"
+          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
+        />
+        <button
+          onClick={run}
+          disabled={state === "running" || !url.trim()}
+          style={{ background: url.trim() && state !== "running" ? C.now : C.surfaceAlt, color: url.trim() && state !== "running" ? C.dark : C.muted, border: "none", borderRadius: 999, padding: "12px 22px", fontSize: 14, fontWeight: 700, cursor: state === "running" ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 7 }}
+        >
+          {state === "running" ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={15} />}
+          {state === "running" ? "Analyzing…" : "Analyze"}
+        </button>
+      </div>
+
+      {state === "error" && <div style={{ marginTop: 12, fontSize: 12.5, color: C.critical }}>{message}</div>}
+
+      {state === "running" && (
+        <div style={{ marginTop: 14, fontSize: 12.5, color: C.muted }}>Reading the page and scoring it — about 15 seconds.</div>
+      )}
+
+      {state === "done" && result && (
+        <div style={{ marginTop: 18, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 16, textAlign: "left" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 40, color: scoreColor(result.score ?? 0), lineHeight: 1 }}>{result.score ?? "—"}</span>
+            <span style={{ fontSize: 14, color: C.muted }}>/100 · {result.assessment || "Unrated"}</span>
+          </div>
+          {result.summary && <p style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.55, margin: "0 0 14px" }}>{result.summary}</p>}
+
+          {result.issues.map((iss, i) => {
+            const sev = SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium;
+            return (
+              <div key={i} style={{ borderLeft: `3px solid ${sev.color}`, background: C.bg, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", marginBottom: 3 }}>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>{iss.title}</span>
+                  <SeverityBadge severity={iss.severity} />
+                </div>
+                <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{iss.why}</div>
+              </div>
+            );
+          })}
+
+          <div style={{ background: C.goldSoft, borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text, marginBottom: 4 }}>That's the preview. The full audit adds:</div>
+            <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.7, marginBottom: 12 }}>
+              All six dimensions · every finding with fixes · Top 10 ranked improvements · quick wins and strategy · a 12-slide deck and PDF · screenshots and PDFs as input
+            </div>
+            <button onClick={onSignup} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "11px 20px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
+              {isLoggedIn ? "Run the full audit" : "Get the full report — free"} <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
   const h2 = { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: -0.8, color: C.text, margin: "0 0 10px 0", lineHeight: 1.2 };
   const sect = { padding: "44px 0", textAlign: "center" };
@@ -2153,10 +2296,10 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
             <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "15px 30px", fontSize: 15.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
               {isLoggedIn ? "Start Free Audit" : "Sign Up & Start Free"} <ArrowRight size={16} />
             </button>
-            <div style={{ fontSize: 12.5, color: "#8FB3AB", marginTop: 14 }}>Free to try · No credit card required · Slide-deck report included</div>
+            <div style={{ fontSize: 12.5, color: "#8FB3AB", marginTop: 14 }}>Instant preview, no account · Full report free after signup</div>
           </div>
-          <div style={{ position: "relative", borderRadius: 18, overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
-            <img src="/images/hero.jpg" alt="" loading="lazy" style={{ width: "100%", display: "block" }} />
+          <div>
+            <InstantPreview onSignup={onStart} isLoggedIn={isLoggedIn} />
           </div>
         </div>
       </div>
@@ -2224,13 +2367,13 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* Free access */}
       <div style={sect}>
         <SectionKicker>Pricing</SectionKicker>
-        <h2 style={h2}>One free audit per account</h2>
+        <h2 style={h2}>Free during early access</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          During early access every account includes one complete audit, free — up to {SCREEN_LIMIT} screens
-          or {NAV_LIMIT} pages, with the full report, slide deck and PDF export.
+          Try any URL instantly without an account. Sign up free and every account includes {AUDIT_QUOTA} complete
+          audits — up to {SCREEN_LIMIT} screens or {NAV_LIMIT} pages each, with the full report, slide deck and PDF export.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {[`Up to ${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No credit card required"].map((f) => (
+          {["Instant preview with no account", `${AUDIT_QUOTA} full audits, ${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages each`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No credit card required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
