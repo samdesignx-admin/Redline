@@ -79,6 +79,19 @@ export default async function handler(req, res) {
   };
   if (Array.isArray(tools)) body.tools = tools;
 
+  // Keep a safety margin below Vercel's 60s function ceiling. Without an
+  // explicit timeout, Vercel can terminate the function at the platform
+  // boundary and the browser only sees a generic network/fetch failure.
+  const REQUEST_TIMEOUT_MS = 50_000;
+  const requestId = req.headers["x-uxnest-request-id"] || crypto.randomUUID();
+  const stage = String(req.headers["x-uxnest-stage"] || "audit").slice(0, 80);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const startedAt = Date.now();
+
+  res.setHeader("cache-control", "no-store");
+  res.setHeader("x-uxnest-request-id", requestId);
+
   try {
     const upstream = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -88,13 +101,57 @@ export default async function handler(req, res) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
-    const data = await upstream.json();
-    // Pass through status + retry-after so the frontend's backoff logic works
+
     const retryAfter = upstream.headers.get("retry-after");
     if (retryAfter) res.setHeader("retry-after", retryAfter);
+
+    let data;
+    try {
+      data = await upstream.json();
+    } catch {
+      data = { error: "The audit provider returned an unreadable response" };
+    }
+
+    if (!upstream.ok) {
+      console.error(JSON.stringify({
+        event: "audit_upstream_error",
+        requestId,
+        stage,
+        status: upstream.status,
+        durationMs: Date.now() - startedAt,
+      }));
+    }
+
     res.status(upstream.status).json(data);
   } catch (err) {
-    res.status(502).json({ error: "Upstream request failed" });
+    const timedOut = err && err.name === "AbortError";
+    console.error(JSON.stringify({
+      event: timedOut ? "audit_upstream_timeout" : "audit_upstream_network_error",
+      requestId,
+      stage,
+      durationMs: Date.now() - startedAt,
+      message: err instanceof Error ? err.message : String(err),
+    }));
+
+    if (timedOut) {
+      res.status(504).json({
+        error: "This audit step timed out before the AI service responded.",
+        code: "UPSTREAM_TIMEOUT",
+        retryable: true,
+        requestId,
+      });
+      return;
+    }
+
+    res.status(502).json({
+      error: "Couldn't reach the AI service for this audit step.",
+      code: "UPSTREAM_NETWORK_ERROR",
+      retryable: true,
+      requestId,
+    });
+  } finally {
+    clearTimeout(timer);
   }
 }
