@@ -1563,12 +1563,14 @@ function DeckSlides({ report, source, auditedPages = [] }) {
     <div>
       {/* 1 — Title */}
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-        <div style={SLIDE.kicker}>Senior UX Review</div>
-        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Nest Audit Report</div>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "3mm" }}>
-          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
-          <span style={{ fontSize: "16pt", color: C.muted }}>/100 · {summary.assessment ?? "Unrated"}</span>
+        <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
+          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2 }}>Senior UX Review</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 56, lineHeight: 1.05, color: C.dark, whiteSpace: "nowrap" }}>Nest Audit Report</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, lineHeight: 1.3, color: C.textDim }}>{sourceLabel}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, lineHeight: 1, marginTop: 12 }}>
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 96, lineHeight: 0.9, color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
+            <span style={{ fontSize: 22, lineHeight: 1.1, color: C.muted, whiteSpace: "nowrap" }}>/100 · {summary.assessment ?? "Unrated"}</span>
+          </div>
         </div>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
       </div>
