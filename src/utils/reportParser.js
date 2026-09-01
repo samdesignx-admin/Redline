@@ -1,6 +1,13 @@
 import { severityFor } from "../config/severity.js";
 import { SITE_URL } from "../config/index.js";
 
+const KNOWN_SECTIONS = [
+  "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
+  "Trust & Credibility Review", "Trust and Credibility Review", "Conversion Optimization Review",
+  "Cognitive Load Assessment", "AI Recommendations", "Top 10 UX Improvements", "Quick Wins",
+  "Strategic Improvements", "Final Scorecard",
+];
+
 function stripDashLines(s) {
   return (s || "")
     .split("\n")

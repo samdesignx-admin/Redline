@@ -8,4 +8,13 @@ const SEVERITY_STYLES = {
   Low: { color: C.low, bg: C.lowSoft, icon: CircleDot, label: "Low" },
 };
 
-export { SEVERITY_STYLES };
+function severityFor(raw) {
+  const s = (raw || "").toLowerCase();
+  if (s.includes("critical")) return "Critical";
+  if (s.includes("high")) return "High";
+  if (s.includes("medium")) return "Medium";
+  if (s.includes("low")) return "Low";
+  return "Medium";
+}
+
+export { SEVERITY_STYLES, severityFor };

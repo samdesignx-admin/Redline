@@ -20,7 +20,7 @@ import {
   Upload, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, Copy, Check,
   AlertTriangle, AlertCircle, Info, ShieldCheck, Eye, Gauge, Trophy,
   Zap, FileText, Stamp, Navigation as NavIcon, Palette,
-  Accessibility as A11yIcon, TrendingUp, Brain, Rocket
+  Accessibility as A11yIcon, TrendingUp, Brain, Rocket,
   Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
   ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
   FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
@@ -29,14 +29,6 @@ import {
 /* ----------------------------------------------------------------------- */
 /* Warm "paper & red ink" theme tokens                                     */
 /* ----------------------------------------------------------------------- */
-function severityFor(raw) {
-  const s = (raw || "").toLowerCase();
-  if (s.includes("critical")) return "Critical";
-  if (s.includes("high")) return "High";
-  if (s.includes("medium")) return "Medium";
-  if (s.includes("low")) return "Low";
-  return "Medium";
-}
 
 /* ----------------------------------------------------------------------- */
 /* Plan limits                                                              */
@@ -217,12 +209,7 @@ Begin now for ${url}.`;
 /* ----------------------------------------------------------------------- */
 /* Parsing                                                                  */
 /* ----------------------------------------------------------------------- */
-const KNOWN_SECTIONS = [
-  "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
-  "Trust & Credibility Review", "Trust and Credibility Review", "Conversion Optimization Review",
-  "Cognitive Load Assessment", "AI Recommendations", "Top 10 UX Improvements", "Quick Wins",
-  "Strategic Improvements", "Final Scorecard",
-];
+
 
 /* ----------------------------------------------------------------------- */
 /* Storage / lightweight accounts                                          */
