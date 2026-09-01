@@ -1,5 +1,5 @@
 import { CircleDot } from "lucide-react";
-import { C, SEVERITY_STYLES } from "../config/index.js";
+import { C, SEVERITY_STYLES } from "../../config/index.js";
 
 /* ----------------------------------------------------------------------- */
 /* Small UI atoms                                                           */
