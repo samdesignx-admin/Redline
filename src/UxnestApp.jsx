@@ -1718,7 +1718,7 @@ function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, ex
           </button>
         </div>
       </div>
-      <div style={{ width: SLIDE_W * scale, margin: "10px auto 40px" }}>
+      <div style={{ width: exporting ? SLIDE_W : SLIDE_W * scale, margin: "10px auto 40px" }}>
         <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
             <DeckSlides report={report} source={source} auditedPages={auditedPages} />
@@ -2756,13 +2756,19 @@ export default function UxnestApp() {
      open so the slides exist in the DOM at full size. */
   const tryExportDeck = useCallback(async () => {
     if (!report || exporting) return;
-    const slides = Array.from(document.querySelectorAll(".deck-screen .deck-slide"));
-    if (!slides.length) {
-      setError("Open the slide deck first, then export.");
-      return;
-    }
     setExporting(true);
     try {
+      // Wait for the deck to re-render at its full, unscaled size before capture.
+      // This prevents html2canvas from rasterizing a mobile-scaled slide.
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const slides = Array.from(document.querySelectorAll(".deck-screen .deck-slide"));
+      if (!slides.length) {
+        setError("Open the slide deck first, then export.");
+        return;
+      }
+
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [296, 166] });
       for (let i = 0; i < slides.length; i++) {
         const canvas = await html2canvas(slides[i], {
