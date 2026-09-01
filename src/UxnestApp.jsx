@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
 import SupportChat from "./SupportChat.jsx";
+import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, QUOTA_MESSAGE } from "./config/index.js";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -16,41 +17,6 @@ import {
 /* ----------------------------------------------------------------------- */
 /* Warm "paper & red ink" theme tokens                                     */
 /* ----------------------------------------------------------------------- */
-const C = {
-  bg: "#F3F6F5",
-  surface: "#FFFFFF",
-  surfaceAlt: "#E8EFED",
-  raised: "#FFFFFF",
-  border: "#D5E0DC",
-  borderSoft: "#E4ECE9",
-  text: "#12302B",
-  textDim: "#3E5A54",
-  muted: "#6E8681",
-  gold: "#0C7D62",
-  now: "#62D84E",
-  dark: "#0B3B36",
-  darkAlt: "#12463F",
-  goldSoft: "#DFF3EC",
-  critical: "#C74634",
-  criticalSoft: "#FAE4E0",
-  high: "#B5791E",
-  highSoft: "#F6ECD8",
-  medium: "#2E6E8E",
-  mediumSoft: "#DFEDF3",
-  low: "#1E8A5A",
-  lowSoft: "#DDF2E7",
-};
-
-const FONT_IMPORT =
-  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');";
-
-const SEVERITY_STYLES = {
-  Critical: { color: C.critical, bg: C.criticalSoft, icon: AlertCircle, label: "Critical" },
-  High: { color: C.high, bg: C.highSoft, icon: AlertTriangle, label: "High" },
-  Medium: { color: C.medium, bg: C.mediumSoft, icon: Info, label: "Medium" },
-  Low: { color: C.low, bg: C.lowSoft, icon: CircleDot, label: "Low" },
-};
-
 function severityFor(raw) {
   const s = (raw || "").toLowerCase();
   if (s.includes("critical")) return "Critical";
@@ -63,13 +29,6 @@ function severityFor(raw) {
 /* ----------------------------------------------------------------------- */
 /* Plan limits                                                              */
 /* ----------------------------------------------------------------------- */
-const SITE_URL = "https://uxnest.ai";
-
-const SCREEN_LIMIT = 5;
-const NAV_LIMIT = 5;
-const AUDIT_QUOTA = 5; // full reports included per account
-const QUOTA_MESSAGE = "You've used all your included audits. Your reports stay available in My Audits.";
-
 function screenLimitFor() {
   return SCREEN_LIMIT;
 }
