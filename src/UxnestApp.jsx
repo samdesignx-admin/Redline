@@ -37,7 +37,9 @@ function screenLimitFor() {
   return SCREEN_LIMIT;
 }
 function navLimitFor() {
-  return NAV_LIMIT;
+  // Fast Audit intentionally samples the homepage plus at most two key pages.
+  // This keeps exploration bounded and predictable for beta users.
+  return Math.min(NAV_LIMIT, 2);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -181,7 +183,7 @@ function parsePreview(raw) {
   };
 }
 
-const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its main navigation destinations. Be efficient — a handful of fetches is enough. If a page won't load, note that and move on rather than retrying.
+const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its most important main-navigation destinations. SPEED IS THE PRIORITY: open the homepage and at most two additional pages total. Do not retry failed pages. Do not follow secondary links. Stop exploring once you have enough information to describe the core experience.
 
 First, output a line listing every page URL you successfully opened, in this exact format:
 PAGES AUDITED: <url1> | <url2> | <url3>
@@ -2421,15 +2423,15 @@ export default function UxnestApp() {
       });
     } catch (networkErr) {
       clearTimeout(clientTimeout);
-      if (attempt >= 4) {
+      if (attempt >= 1) {
         const timeout = networkErr && networkErr.name === "AbortError";
         throw new Error(timeout
-          ? "The audit service timed out repeatedly while processing this step. Please try again in a moment."
-          : "Couldn't reach the audit service after several retries. Check your connection and try again.");
+          ? "This audit step timed out twice. Please try again in a moment."
+          : "Couldn't reach the audit service after a retry. Check your connection and try again.");
       }
       const timeout = networkErr && networkErr.name === "AbortError";
-      setRunProgress((p) => ({ ...p, status: timeout ? `This step is taking longer than expected — retrying (${attempt + 1}/4)…` : `Connection hiccup — retrying (${attempt + 1}/4)…` }));
-      await waitInterruptible(Math.min(1000 * 2 ** attempt, 6000) + Math.random() * 800);
+      setRunProgress((p) => ({ ...p, status: timeout ? "This step is taking longer than expected — retrying once…" : "Connection hiccup — retrying once…" }));
+      await waitInterruptible(800 + Math.random() * 400);
       return callClaude(messages, tools, attempt + 1, stage);
     } finally {
       clearTimeout(clientTimeout);
@@ -2511,10 +2513,10 @@ export default function UxnestApp() {
     let completed = 0;
     setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
 
-    // Two in-flight requests is intentional. The previous value of 3 could
-    // overload mobile/network paths and create avoidable connection failures.
-    const CONCURRENCY = 2;
-    const STAGGER_MS = 900;
+    // Three parallel sections keep the audit fast. Server-side timeouts and
+    // structured diagnostics now protect reliability at the request boundary.
+    const CONCURRENCY = 3;
+    const STAGGER_MS = 350;
     const results = new Array(REPORT_BATCHES.length);
     let nextIndex = 0;
 
