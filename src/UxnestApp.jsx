@@ -2396,25 +2396,43 @@ export default function UxnestApp() {
     checkRunState();
   }
 
-  async function callClaude(messages, tools, attempt = 0) {
+  async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
     const body = { model: "claude-sonnet-4-6", max_tokens: 1000, messages };
     if (tools) body.tools = tools;
+
+    const requestId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const clientTimeout = setTimeout(() => controller.abort(), 55_000);
 
     let response;
     try {
       response = await fetch("/api/audit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-UXNest-Stage": stage,
+          "X-UXNest-Request-Id": requestId,
+        },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
     } catch (networkErr) {
+      clearTimeout(clientTimeout);
       if (attempt >= 4) {
-        throw new Error("Couldn't reach the audit service. This usually means the server took too long or the API key isn't configured. Check your connection and try again — if it keeps happening, try fewer screens per audit.");
+        const timeout = networkErr && networkErr.name === "AbortError";
+        throw new Error(timeout
+          ? "The audit service timed out repeatedly while processing this step. Please try again in a moment."
+          : "Couldn't reach the audit service after several retries. Check your connection and try again.");
       }
-      setRunProgress((p) => ({ ...p, status: `Connection hiccup — retrying (${attempt + 1}/4)…` }));
+      const timeout = networkErr && networkErr.name === "AbortError";
+      setRunProgress((p) => ({ ...p, status: timeout ? `This step is taking longer than expected — retrying (${attempt + 1}/4)…` : `Connection hiccup — retrying (${attempt + 1}/4)…` }));
       await waitInterruptible(Math.min(1000 * 2 ** attempt, 6000) + Math.random() * 800);
-      return callClaude(messages, tools, attempt + 1);
+      return callClaude(messages, tools, attempt + 1, stage);
+    } finally {
+      clearTimeout(clientTimeout);
     }
 
     if (response.status === 429 || response.status >= 500) {
@@ -2434,7 +2452,7 @@ export default function UxnestApp() {
       const waitMs = retryAfter ? Math.min(Number(retryAfter) * 1000, 8000) : Math.min(1000 * 2 ** attempt, 4000);
       setRunProgress((p) => ({ ...p, status: `Service busy — retrying (${attempt + 1}/3)…` }));
       await waitInterruptible(waitMs);
-      return callClaude(messages, tools, attempt + 1);
+      return callClaude(messages, tools, attempt + 1, stage);
     }
     if (!response.ok) {
       let msg = "";
@@ -2451,18 +2469,18 @@ export default function UxnestApp() {
     } catch {
       if (attempt >= 3) throw new Error("Received an unreadable response from the audit service. Please try again.");
       await waitInterruptible(Math.min(1000 * 2 ** attempt, 4000));
-      return callClaude(messages, tools, attempt + 1);
+      return callClaude(messages, tools, attempt + 1, stage);
     }
   }
 
-  async function runWithContinuation(initialMessages, tools, onRound) {
+  async function runWithContinuation(initialMessages, tools, onRound, stage = "audit") {
     let messages = initialMessages;
     let fullText = "";
     let iterations = 0;
     while (iterations < 10) {
       iterations++;
       if (onRound) onRound(iterations);
-      const data = await callClaude(messages, tools);
+      const data = await callClaude(messages, tools, 0, stage);
       const blocks = data.content || [];
       fullText += blocks.filter((b) => b.type === "text").map((b) => b.text).join("");
       // pause_turn: the model paused mid-search — resume by returning its turn.
@@ -2493,8 +2511,10 @@ export default function UxnestApp() {
     let completed = 0;
     setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
 
-    const CONCURRENCY = 3;
-    const STAGGER_MS = 500;
+    // Two in-flight requests is intentional. The previous value of 3 could
+    // overload mobile/network paths and create avoidable connection failures.
+    const CONCURRENCY = 2;
+    const STAGGER_MS = 900;
     const results = new Array(REPORT_BATCHES.length);
     let nextIndex = 0;
 
@@ -2508,7 +2528,12 @@ export default function UxnestApp() {
           { type: "text", text: buildPromptForBatch(REPORT_BATCHES[i]) },
         ];
         try {
-          const text = await runWithContinuation([{ role: "user", content }], tools);
+          const text = await runWithContinuation(
+            [{ role: "user", content }],
+            tools,
+            undefined,
+            `report-section-${i + 1}`
+          );
           results[i] = { status: "fulfilled", value: text };
         } catch (e) {
           results[i] = { status: "rejected", reason: e };
@@ -2565,7 +2590,9 @@ export default function UxnestApp() {
     setRunProgress({ round: 0, status: "Exploring the site…", done: 0, total: REPORT_BATCHES.length + 1 });
     const dossier = await runWithContinuation(
       [{ role: "user", content: [{ type: "text", text: EXPLORATION_PROMPT(cleanUrl, navLimit) }] }],
-      tools
+      tools,
+      undefined,
+      "url-exploration"
     );
     const pagesMatch = dossier.match(/PAGES AUDITED:\s*(.+)/i);
     const pages = pagesMatch
