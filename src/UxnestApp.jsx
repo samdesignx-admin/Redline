@@ -2513,10 +2513,12 @@ export default function UxnestApp() {
     let completed = 0;
     setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
 
-    // Three parallel sections keep the audit fast. Server-side timeouts and
-    // structured diagnostics now protect reliability at the request boundary.
-    const CONCURRENCY = 3;
-    const STAGGER_MS = 350;
+    // Keep only two report requests in flight. Three concurrent long-lived
+    // requests reproduce a mobile/browser connection failure where later
+    // requests fail before reaching /api/audit. Two still provide parallelism
+    // while keeping the transport stable.
+    const CONCURRENCY = 2;
+    const STAGGER_MS = 250;
     const results = new Array(REPORT_BATCHES.length);
     let nextIndex = 0;
 
