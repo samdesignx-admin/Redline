@@ -82,7 +82,7 @@ export default async function handler(req, res) {
   // Keep a safety margin below Vercel's 60s function ceiling. Without an
   // explicit timeout, Vercel can terminate the function at the platform
   // boundary and the browser only sees a generic network/fetch failure.
-  const REQUEST_TIMEOUT_MS = 50_000;
+  const REQUEST_TIMEOUT_MS = 45_000;
   const requestId = req.headers["x-uxnest-request-id"] || crypto.randomUUID();
   const stage = String(req.headers["x-uxnest-stage"] || "audit").slice(0, 80);
   const controller = new AbortController();
