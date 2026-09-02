@@ -2406,9 +2406,11 @@ export default function UxnestApp() {
     const requestId = typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const controller = new AbortController();
-    const clientTimeout = setTimeout(() => controller.abort(), 55_000);
 
+    // Do not race a browser AbortController against the server's controlled
+    // upstream timeout. The API returns a structured timeout before Vercel's
+    // function ceiling, while a client abort can turn an otherwise valid late
+    // response into the generic "fetch failed" message.
     let response;
     try {
       response = await fetch("/api/audit", {
@@ -2419,10 +2421,8 @@ export default function UxnestApp() {
           "X-UXNest-Request-Id": requestId,
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
       });
     } catch (networkErr) {
-      clearTimeout(clientTimeout);
       if (attempt >= 1) {
         const timeout = networkErr && networkErr.name === "AbortError";
         throw new Error(timeout
@@ -2434,7 +2434,8 @@ export default function UxnestApp() {
       await waitInterruptible(800 + Math.random() * 400);
       return callClaude(messages, tools, attempt + 1, stage);
     } finally {
-      clearTimeout(clientTimeout);
+      // The server owns request timeout handling so valid responses are not
+      // discarded by a competing browser-side timer.
     }
 
     if (response.status === 429 || response.status >= 500) {
