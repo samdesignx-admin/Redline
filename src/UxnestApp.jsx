@@ -1590,7 +1590,17 @@ function DeckSlides({ report, source, auditedPages = [] }) {
         <div style={SLIDE.kicker}>Overview</div>
         <h2 style={SLIDE.title}>Executive Summary</h2>
         <div style={SLIDE.rule} />
-        <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{summary.intro}</p>
+        <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 5mm 0" }}>{summary.intro}</p>
+        {source?.mode === "url" && (
+          <div style={{ background: C.surfaceAlt, border: `0.35mm solid ${C.border}`, borderRadius: "2.5mm", padding: "3.5mm 4mm", marginBottom: "5mm", maxWidth: "240mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 0.8, color: C.gold, marginBottom: "2mm" }}>PAGES TESTED IN THIS AUDIT</div>
+            {auditedPages.length > 0 ? auditedPages.map((url) => (
+              <div key={url} style={{ fontSize: "8.5pt", color: C.textDim, lineHeight: 1.45, wordBreak: "break-all" }}>• {url}</div>
+            )) : (
+              <div style={{ fontSize: "8.5pt", color: C.muted }}>No individual page list was captured for this legacy audit.</div>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
           <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.low}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>TOP STRENGTHS</div>
@@ -2280,6 +2290,9 @@ export default function UxnestApp() {
   }, []);
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
+  // State is for rendering; the ref guarantees the exact tested URLs survive
+  // the async audit/save flow and are included in saved reports and decks.
+  const auditedPagesRef = useRef([]);
   const [auditsUsed, setAuditsUsed] = useState(0);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
@@ -2599,53 +2612,49 @@ export default function UxnestApp() {
     if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`;
     try {
       const parsedUrl = new URL(cleanUrl);
-      if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) {
-        throw new Error();
-      }
+      if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) throw new Error();
       cleanUrl = parsedUrl.toString();
     } catch {
       throw new Error("Enter a valid website address, for example uxnest.ai or https://uxnest.ai.");
     }
-    const tools = [{ type: "web_search_20250305", name: "web_search" }];
 
-    // Stage 1: one exploration pass produces a factual dossier of the site.
-    setRunProgress({ round: 0, status: "Exploring the site…", done: 0, total: REPORT_BATCHES.length + 1 });
-    const dossier = await runWithContinuation(
-      [{ role: "user", content: [{ type: "text", text: EXPLORATION_PROMPT(cleanUrl, navLimit) }] }],
-      tools,
-      undefined,
-      "url-exploration"
-    );
-    const pagesMatch = dossier.match(/PAGES AUDITED:\s*(.+)/i);
-    const pages = pagesMatch
-      ? pagesMatch[1].split("|").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
-      : [];
-    setAuditedPages(pages);
+    // Stage 1: retrieve the actual public website directly. Search indexing is
+    // supplementary information, not a prerequisite for auditing a live URL.
+    setRunProgress({ round: 0, status: "Retrieving the live website…", done: 0, total: REPORT_BATCHES.length + 1 });
+    const response = await fetch("/api/fetch-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: cleanUrl, navLimit }),
+    });
+    const evidence = await response.json().catch(() => ({}));
 
-    const evidenceStatusMatch = dossier.match(/EVIDENCE STATUS:\s*(SUFFICIENT|INSUFFICIENT)/i);
-    const evidenceReasonMatch = dossier.match(/EVIDENCE REASON:\s*(.+)/i);
-    const evidenceStatus = evidenceStatusMatch ? evidenceStatusMatch[1].toUpperCase() : null;
-    const evidenceReason = evidenceReasonMatch ? evidenceReasonMatch[1].trim() : "";
-
-    // Evidence gate: never turn a retrieval failure into a 0/100 UX report.
-    // A valid audit requires at least one page the explorer says it successfully
-    // opened, meaningful dossier content, and no explicit insufficient-evidence
-    // status. The page requirement is intentionally deterministic so an AI
-    // explanation cannot accidentally pass the gate by being long.
-    const noEvidenceSignals = /(?:no content (?:could be )?retrieved|could not (?:be )?(?:retriev|access|open)|unable to (?:retrieve|access|verify|audit)|cannot be assessed|zero retrievable content|no site content|insufficient evidence)/i;
-    const hasMeaningfulDossier = dossier && dossier.trim().length >= 100 && !noEvidenceSignals.test(dossier);
-
-    if (!hasMeaningfulDossier || pages.length === 0 || evidenceStatus === "INSUFFICIENT") {
+    if (!response.ok || evidence.evidenceStatus !== "SUFFICIENT") {
       const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
       err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
-      err.evidenceReason = evidenceReason;
+      err.evidenceReason = evidence.reason || evidence.error || "The website could not be retrieved.";
       throw err;
     }
 
-    setRunProgress((p) => ({ ...p, status: "", done: 1 }));
+    const pages = Array.isArray(evidence.pages)
+      ? evidence.pages.filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
+      : [];
+    const dossier = String(evidence.dossier || "").trim();
 
-    // Stage 2: batches consume the dossier as plain text — no tools, fast.
-    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier.trim(), batch), [], undefined, 1);
+    if (!dossier || dossier.length < 100 || pages.length === 0) {
+      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = "No meaningful public page content was returned.";
+      throw err;
+    }
+
+    // Keep the exact URLs that were actually retrieved. These are shown in the
+    // report and slide deck and are also persisted with the saved audit.
+    auditedPagesRef.current = pages;
+    setAuditedPages(pages);
+    setRunProgress((p) => ({ ...p, status: "Analyzing retrieved pages…", done: 1 }));
+
+    // Stage 2: batches consume deterministic retrieved evidence as plain text.
+    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
   };
 
   const startRun = (which) => {
@@ -2690,7 +2699,7 @@ export default function UxnestApp() {
               high: [parsed.usability, parsed.visual, parsed.accessibility, parsed.trust, parsed.conversion, parsed.cognitive]
                 .flatMap((sec) => sec.issues).filter((i) => i.severity === "High").length,
             },
-            pages: auditedPages,
+            pages: auditedPagesRef.current,
             rawText: text,
           });
           setHistorySaved(true);
@@ -2760,6 +2769,7 @@ export default function UxnestApp() {
     setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
     setAuditedPages([]);
+    auditedPagesRef.current = [];
   }, []);
 
   /* ---- auth ---- */
@@ -2797,7 +2807,7 @@ export default function UxnestApp() {
         score: report.summary.score,
         assessment: report.summary.assessment,
         scorecard: report.scorecard,
-        pages: auditedPages,
+        pages: auditedPagesRef.current,
         rawText: rawReport,
       }).then((saved) => {
         setHistorySaved(true);
@@ -2870,7 +2880,7 @@ export default function UxnestApp() {
       setHistoryEntries((audits || []).map((a) => ({
         id: a.id, date: new Date(a.created_at).getTime(), title: a.title || "",
         mode: a.mode, url: a.url || "", screenCount: a.screen_count || 0,
-        score: a.score, assessment: a.assessment, rawText: a.raw_text || "",
+        score: a.score, assessment: a.assessment, rawText: a.raw_text || "", pages: Array.isArray(a.pages) ? a.pages : [],
       })));
     } catch {
       setHistoryEntries([]);
@@ -2883,6 +2893,9 @@ export default function UxnestApp() {
     setReport(parsed);
     setRawReport(entry.rawText);
     setSource({ mode: entry.mode, url: entry.url || "" });
+    const savedPages = Array.isArray(entry.pages) ? entry.pages : [];
+    auditedPagesRef.current = savedPages;
+    setAuditedPages(savedPages);
     setImages([]);
     setShowHistory(false);
   };
