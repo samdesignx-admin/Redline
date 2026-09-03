@@ -131,8 +131,24 @@ async function fetchPublicPage(value) {
     const type = response.headers.get("content-type") || "";
     if (!/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("The URL did not return an HTML page.");
     const html = (await response.text()).slice(0, MAX_HTML_BYTES);
-    if (cleanText(html).length < 80) throw new Error("The page returned too little readable public content.");
-    return extractPage(html, current);
+    const page = extractPage(html, current);
+
+    // Modern SPA shells often contain almost no readable body text because the
+    // browser renders the application client-side. Do not reject a live page
+    // solely because its server HTML is sparse. We can still preserve verified
+    // metadata/navigation evidence, but require at least some independently
+    // useful signal before calling it a retrievable page.
+    const hasStructuredEvidence = Boolean(
+      page.title ||
+      page.description ||
+      page.headings.length ||
+      page.buttons.length ||
+      page.links.length
+    );
+    if (page.text.length < 80 && !hasStructuredEvidence) {
+      throw new Error("The page returned too little readable public content.");
+    }
+    return page;
   }
   throw new Error("Too many redirects.");
 }
@@ -172,6 +188,20 @@ export default async function handler(req, res) {
     }
 
     const dossier = buildDossier(pages);
+    const meaningfulPage = pages.some((page) =>
+      page.text.length >= 250 ||
+      page.headings.length >= 2 ||
+      page.description.length >= 40 ||
+      page.buttons.length >= 3
+    );
+    if (!meaningfulPage) {
+      return res.status(422).json({
+        code: "AUDIT_INSUFFICIENT_EVIDENCE",
+        evidenceStatus: "INSUFFICIENT",
+        reason: "The website is reachable, but its server HTML is an almost-empty client-rendered application shell. UXNest needs browser-rendered content or screenshots to audit the actual interface reliably.",
+        pages: pages.map((page) => page.url),
+      });
+    }
     res.setHeader("cache-control", "no-store");
     return res.status(200).json({
       evidenceStatus: "SUFFICIENT",
