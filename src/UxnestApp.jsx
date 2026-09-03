@@ -188,7 +188,15 @@ const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capabil
 First, output a line listing every page URL you successfully opened, in this exact format:
 PAGES AUDITED: <url1> | <url2> | <url3>
 
-Then write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.`;
+Then output exactly one evidence status line:
+EVIDENCE STATUS: <SUFFICIENT or INSUFFICIENT>
+EVIDENCE REASON: <brief factual reason>
+
+Mark EVIDENCE STATUS as INSUFFICIENT if you could not successfully open at least one page with meaningful public content. Do not treat search snippets, guesses, DNS results, robots.txt, or an inability to access the site as evidence of the site's UX.
+
+If evidence is sufficient, write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.
+
+If evidence is insufficient, do not invent a dossier and do not analyze the website. Briefly state only what access failed and why, if known.`;
 
 function buildUrlBatchPrompt(url, dossier, batchSections) {
   return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
@@ -2613,9 +2621,27 @@ export default function UxnestApp() {
       ? pagesMatch[1].split("|").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
       : [];
     setAuditedPages(pages);
-    if (!dossier || dossier.trim().length < 100) {
-      throw new Error("Couldn't gather enough content from that site to audit it — it may block automated access. Try a different URL or upload screenshots instead.");
+
+    const evidenceStatusMatch = dossier.match(/EVIDENCE STATUS:\s*(SUFFICIENT|INSUFFICIENT)/i);
+    const evidenceReasonMatch = dossier.match(/EVIDENCE REASON:\s*(.+)/i);
+    const evidenceStatus = evidenceStatusMatch ? evidenceStatusMatch[1].toUpperCase() : null;
+    const evidenceReason = evidenceReasonMatch ? evidenceReasonMatch[1].trim() : "";
+
+    // Evidence gate: never turn a retrieval failure into a 0/100 UX report.
+    // A valid audit requires at least one page the explorer says it successfully
+    // opened, meaningful dossier content, and no explicit insufficient-evidence
+    // status. The page requirement is intentionally deterministic so an AI
+    // explanation cannot accidentally pass the gate by being long.
+    const noEvidenceSignals = /(?:no content (?:could be )?retrieved|could not (?:be )?(?:retriev|access|open)|unable to (?:retrieve|access|verify|audit)|cannot be assessed|zero retrievable content|no site content|insufficient evidence)/i;
+    const hasMeaningfulDossier = dossier && dossier.trim().length >= 100 && !noEvidenceSignals.test(dossier);
+
+    if (!hasMeaningfulDossier || pages.length === 0 || evidenceStatus === "INSUFFICIENT") {
+      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = evidenceReason;
+      throw err;
     }
+
     setRunProgress((p) => ({ ...p, status: "", done: 1 }));
 
     // Stage 2: batches consume the dossier as plain text — no tools, fast.
@@ -2680,6 +2706,9 @@ export default function UxnestApp() {
         setError(null); // user chose to stop; no error banner needed
       } else if (msg === "DEADLINE") {
         setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
+      } else if (e && e.code === "AUDIT_INSUFFICIENT_EVIDENCE") {
+        const detail = e.evidenceReason ? ` Reason: ${e.evidenceReason}` : "";
+        setError(`We couldn't complete this audit because UXNest couldn't verify enough public website content. We won't generate a score based on guesses.${detail} Try a specific public page, retry later, or upload screenshots instead.`);
       } else {
         setError(msg || "Something went wrong running the audit. Please try again.");
       }
