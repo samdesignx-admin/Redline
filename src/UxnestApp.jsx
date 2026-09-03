@@ -217,6 +217,61 @@ Begin now for ${url}.`;
 }
 
 /* ----------------------------------------------------------------------- */
+/* Visual evidence mapping                                                  */
+/* ----------------------------------------------------------------------- */
+
+// Visual evidence is intentionally a separate pass: the main audit remains
+// grounded in retrieved content, while this pass only maps findings that are
+// actually visible in the rendered screenshot. Coordinates are normalized so
+// they remain responsive in the report and PDF.
+function buildVisualEvidencePrompt(issues) {
+  const list = issues.map((issue, i) => \`\${i + 1}. [\${issue.section}] \${issue.title} — \${issue.why}\`).join("\\n");
+  return \`You are mapping UX findings to a screenshot of the audited website.
+
+Only annotate findings that are clearly visible in this screenshot. Do not invent locations for findings about hidden pages, source code, accessibility internals, or facts you cannot see.
+
+Return JSON only, using this exact schema:
+[
+  {
+    "issueTitle": "exact issue title from the list",
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0,
+    "explanation": "Explain exactly what the highlighted area shows and why it supports the finding, max 28 words"
+  }
+]
+
+Coordinates are percentages of the full screenshot. x/y are top-left; w/h are box size. Keep values between 0 and 100. Return at most 6 objects, or [] if no finding can be located confidently.
+
+FINDINGS:
+\${list}\`;
+}
+
+function parseVisualEvidence(raw, allowedTitles) {
+  const text = String(raw || "").trim();
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const data = JSON.parse(match[0]);
+    if (!Array.isArray(data)) return [];
+    const allowed = new Set(allowedTitles);
+    return data.filter((item) => item && allowed.has(String(item.issueTitle || ""))).map((item, index) => {
+      const clamp = (value, fallback) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
+      };
+      const x = clamp(item.x, 0), y = clamp(item.y, 0);
+      const w = Math.max(2, Math.min(100 - x, clamp(item.w, 20)));
+      const h = Math.max(2, Math.min(100 - y, clamp(item.h, 12)));
+      return { id: \`\${String(item.issueTitle).slice(0, 40)}-\${index}\`, issueTitle: String(item.issueTitle), x, y, w, h, explanation: String(item.explanation || "").trim().slice(0, 220) };
+    }).slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+/* ----------------------------------------------------------------------- */
 /* Parsing                                                                  */
 /* ----------------------------------------------------------------------- */
 
@@ -2291,6 +2346,7 @@ export default function UxnestApp() {
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
   const [auditScreenshot, setAuditScreenshot] = useState(null);
+  const [visualEvidence, setVisualEvidence] = useState([]);
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
   const auditedPagesRef = useRef([]);
@@ -2659,6 +2715,34 @@ export default function UxnestApp() {
     return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
   };
 
+
+  const generateVisualEvidence = async (parsed, screenshot) => {
+    if (!screenshot || typeof screenshot !== "string" || !screenshot.startsWith("data:image/")) return [];
+    const allIssues = [
+      ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
+      ["Trust & Credibility", parsed.trust], ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
+    ].flatMap(([section, data]) => (data?.issues || []).map((issue) => ({ ...issue, section })))
+      .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
+      .slice(0, 8);
+    if (!allIssues.length) return [];
+    const comma = screenshot.indexOf(",");
+    if (comma < 0) return [];
+    const header = screenshot.slice(0, comma);
+    const base64 = screenshot.slice(comma + 1);
+    const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+    try {
+      setRunProgress((p) => ({ ...p, status: "Mapping visible findings to the live screenshot…" }));
+      const data = await callClaude([{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+        { type: "text", text: buildVisualEvidencePrompt(allIssues) },
+      ] }], undefined, 0, "visual-evidence");
+      const raw = (data.content || []).filter((block) => block.type === "text").map((block) => block.text).join("");
+      return parseVisualEvidence(raw, allIssues.map((issue) => issue.title));
+    } catch {
+      return [];
+    }
+  };
+
   const startRun = (which) => {
     if (!showDisclaimer) {
       pendingRunRef.current = which;
@@ -2681,6 +2765,8 @@ export default function UxnestApp() {
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
+      const mappedEvidence = which === "url" && auditScreenshot ? await generateVisualEvidence(parsed, auditScreenshot) : [];
+      setVisualEvidence(mappedEvidence);
       setRawReport(text);
       setReport(parsed);
       setSource(which === "url" ? { mode: "url", url: urlInput.trim() } : { mode: "files", url: "" });
@@ -2772,6 +2858,7 @@ export default function UxnestApp() {
     setAuditTitle("");
     setAuditedPages([]);
     setAuditScreenshot(null);
+    setVisualEvidence([]);
     auditedPagesRef.current = [];
   }, []);
 
@@ -2900,6 +2987,7 @@ export default function UxnestApp() {
     auditedPagesRef.current = savedPages;
     setAuditedPages(savedPages);
     setAuditScreenshot(null);
+    setVisualEvidence([]);
     setImages([]);
     setShowHistory(false);
   };
