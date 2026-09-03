@@ -2409,6 +2409,7 @@ export default function UxnestApp() {
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
   const [auditScreenshot, setAuditScreenshot] = useState(null);
+  const auditScreenshotRef = useRef(null);
   const [visualEvidence, setVisualEvidence] = useState([]);
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
@@ -2771,6 +2772,7 @@ export default function UxnestApp() {
     // report and slide deck and are also persisted with the saved audit.
     auditedPagesRef.current = pages;
     setAuditedPages(pages);
+    auditScreenshotRef.current = evidence.screenshot || null;
     setAuditScreenshot(evidence.screenshot || null);
     setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
 
@@ -2828,7 +2830,7 @@ export default function UxnestApp() {
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
-      const mappedEvidence = which === "url" && auditScreenshot ? await generateVisualEvidence(parsed, auditScreenshot) : [];
+      const mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
       setVisualEvidence(mappedEvidence);
       setRawReport(text);
       setReport(parsed);
@@ -2921,6 +2923,7 @@ export default function UxnestApp() {
     setAuditTitle("");
     setAuditedPages([]);
     setAuditScreenshot(null);
+    auditScreenshotRef.current = null;
     setVisualEvidence([]);
     auditedPagesRef.current = [];
   }, []);
@@ -3050,6 +3053,7 @@ export default function UxnestApp() {
     auditedPagesRef.current = savedPages;
     setAuditedPages(savedPages);
     setAuditScreenshot(null);
+    auditScreenshotRef.current = null;
     setVisualEvidence([]);
     setImages([]);
     setShowHistory(false);
