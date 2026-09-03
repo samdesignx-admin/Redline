@@ -1,36 +1,35 @@
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
-const MAX_PAGES = 3;
-const FETCH_TIMEOUT_MS = 9000;
 const MAX_HTML_BYTES = 1_500_000;
+const DIRECT_TIMEOUT_MS = 10_000;
+const RENDER_TIMEOUT_MS = 25_000;
 
 function isPrivateIp(address) {
   if (net.isIP(address) === 4) {
     const [a, b] = address.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || a === 169 && b === 254 ||
-      a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 ||
-      a >= 224;
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
   }
-  const v = address.toLowerCase();
-  return v === "::1" || v.startsWith("fc") || v.startsWith("fd") ||
-    v.startsWith("fe80") || v === "::";
+  const v = String(address).toLowerCase();
+  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
 }
 
 async function assertPublicUrl(value) {
   const url = new URL(value);
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only http and https URLs are supported.");
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only public http and https URLs are supported.");
   if (url.username || url.password) throw new Error("URLs with embedded credentials are not supported.");
-  const host = url.hostname.replace(/^[|]$/g, "");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".localhost")) throw new Error("Local addresses are not supported.");
-  if (net.isIP(host) && isPrivateIp(host)) throw new Error("Private network addresses are not supported.");
-  if (!net.isIP(host)) {
-    const addresses = await lookup(host, { all: true });
-    if (!addresses.length || addresses.some((entry) => isPrivateIp(entry.address))) {
-      throw new Error("This address does not resolve to a public website.");
-    }
+  if (net.isIP(host)) {
+    if (isPrivateIp(host)) throw new Error("Private network addresses are not supported.");
+    return url;
+  }
+  const addresses = await lookup(host, { all: true });
+  if (!addresses.length || addresses.some((entry) => isPrivateIp(entry.address))) {
+    throw new Error("This address does not resolve to a public website.");
   }
   return url;
 }
@@ -42,15 +41,11 @@ function cleanText(value) {
     .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<!--([\s\S]*?)-->/g, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ").trim();
 }
 
-function matchAll(html, regex, limit = 20) {
+function matchAll(html, regex, limit) {
   const out = [];
   for (const match of html.matchAll(regex)) {
     const text = cleanText(match[1]);
@@ -61,332 +56,168 @@ function matchAll(html, regex, limit = 20) {
 }
 
 function extractLinks(html, baseUrl) {
-  const links = [];
-  const seen = new Set();
+  const out = [], seen = new Set();
   for (const match of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const href = match[1].trim();
-    const label = cleanText(match[2]);
     try {
-      const url = new URL(href, baseUrl);
+      const url = new URL(match[1], baseUrl);
       url.hash = "";
-      if (!["http:", "https:"].includes(url.protocol) || url.origin !== new URL(baseUrl).origin) continue;
-      const key = url.toString();
-      if (!seen.has(key)) {
-        seen.add(key);
-        links.push({ url: key, label });
+      if (url.origin !== new URL(baseUrl).origin || !/^https?:$/.test(url.protocol)) continue;
+      if (!seen.has(url.toString())) {
+        seen.add(url.toString());
+        out.push({ url: url.toString(), label: cleanText(match[2]) });
       }
     } catch {}
   }
-  return links;
+  return out;
 }
 
-async function fetchRenderedHtml(value) {
-  const token = process.env.BROWSERLESS_TOKEN;
-  if (!token) throw new Error("Browser rendering is not configured.");
-  const target = (await assertPublicUrl(value)).toString();
-  const endpoint = `https://production-sfo.browserless.io/content?token=${encodeURIComponent(token)}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", "cache-control": "no-cache" },
-      body: JSON.stringify({
-        url: target,
-        gotoOptions: { waitUntil: "networkidle2", timeout: 15000 },
-        bestAttempt: true,
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Browser renderer returned HTTP ${response.status}.`);
-    return { html: (await response.text()).slice(0, MAX_HTML_BYTES), url: target, rendered: true };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function captureRenderedScreenshot(value) {
-  const token = process.env.BROWSERLESS_TOKEN;
-  if (!token) return null;
-  const target = (await assertPublicUrl(value)).toString();
-  const endpoint = `https://production-sfo.browserless.io/screenshot?token=${encodeURIComponent(token)}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", "cache-control": "no-cache" },
-      body: JSON.stringify({
-        url: target,
-        bestAttempt: true,
-        scrollPage: true,
-        gotoOptions: { waitUntil: "networkidle2", timeout: 15000 },
-        options: { fullPage: true, type: "jpeg", quality: 70 },
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) return null;
-    const bytes = Buffer.from(await response.arrayBuffer());
-    // Keep the response bounded. The screenshot is evidence for the current run;
-    // persistent storage is intentionally deferred until the privacy model changes.
-    if (bytes.length > 4_000_000) return null;
-    return `data:image/jpeg;base64,${bytes.toString("base64")}`;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function extractPage(html, finalUrl) {
+function extractPage(html, url, rendered = false) {
   const title = cleanText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]);
-  const meta = (html.match(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:description|og:description)["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
-  const headings = matchAll(html, /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi, 18);
-  const buttons = matchAll(html, /<(?:button|a)\b[^>]*>([\s\S]*?)<\/(?:button|a)>/gi, 24);
-  const forms = [...html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/gi)].slice(0, 6).map((m) => {
-    const inputs = [...m[1].matchAll(/<(?:input|textarea|select)\b[^>]*(?:name|type|placeholder)\s*=\s*["']([^"']+)["'][^>]*>/gi)].map((x) => x[1]).slice(0, 10);
-    return inputs.join(", ");
-  }).filter(Boolean);
-  const text = cleanText(html).slice(0, 9000);
-  return {
-    url: finalUrl,
-    title,
-    description: cleanText(meta),
-    headings,
-    buttons: [...new Set(buttons)].slice(0, 20),
-    forms,
-    text,
-    links: extractLinks(html, finalUrl),
-  };
+  const meta = cleanText((html.match(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:description|og:description)["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1]);
+  const headings = matchAll(html, /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi, 20);
+  const buttons = [...new Set(matchAll(html, /<(?:button|a)\b[^>]*>([\s\S]*?)<\/(?:button|a)>/gi, 30))];
+  const text = cleanText(html).slice(0, 10000);
+  return { url, title, description: meta, headings, buttons, text, links: extractLinks(html, url), rendered };
 }
 
-async function fetchRenderedHtml(value) {
-  const token = process.env.BROWSERLESS_TOKEN;
-  if (!token) {
-    const error = new Error("Browser rendering is not configured.");
-    error.code = "BROWSER_RENDERER_NOT_CONFIGURED";
-    throw error;
-  }
-
-  const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
-  endpoint.searchParams.set("token", token);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-cache",
-      },
-      body: JSON.stringify({
-        url: value,
-        waitForTimeout: 1500,
-        bestAttempt: true,
-      }),
-    });
-    const html = (await response.text()).slice(0, MAX_HTML_BYTES);
-    if (!response.ok) throw new Error(`Browser rendering failed (HTTP ${response.status}).`);
-    if (cleanText(html).length < 80) throw new Error("The rendered page still did not expose enough readable content.");
-    return html;
-  } finally {
-    clearTimeout(timer);
-  }
+function meaningful(page) {
+  return page.text.length >= 250 || page.headings.length >= 2 || page.description.length >= 40 || page.buttons.length >= 3;
 }
 
-async function captureRenderedScreenshot(value) {
-  const token = process.env.BROWSERLESS_TOKEN;
-  if (!token) return null;
-  const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/screenshot");
-  endpoint.pathname = endpoint.pathname.replace(/\/content$/, "/screenshot");
-  endpoint.searchParams.set("token", token);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "content-type": "application/json", "cache-control": "no-cache" },
-      body: JSON.stringify({
-        url: value,
-        waitForTimeout: 1500,
-        bestAttempt: true,
-        options: { fullPage: true, type: "jpeg", quality: 70 },
-      }),
-    });
-    if (!response.ok) return null;
-    const buffer = Buffer.from(await response.arrayBuffer());
-    // Keep the API response bounded. Full-size screenshots can be persisted later
-    // when annotation storage is added.
-    if (buffer.length > 2_000_000) return null;
-    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchPublicPage(value) {
-  let current = (await assertPublicUrl(value)).toString();
-  for (let redirect = 0; redirect < 5; redirect++) {
+async function directFetch(target) {
+  let current = (await assertPublicUrl(target)).toString();
+  for (let i = 0; i < 5; i++) {
     await assertPublicUrl(current);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), DIRECT_TIMEOUT_MS);
     let response;
     try {
       response = await fetch(current, {
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)",
-          accept: "text/html,application/xhtml+xml",
-        },
+        redirect: "manual", signal: controller.signal,
+        headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept: "text/html,application/xhtml+xml" },
       });
-    } finally {
-      clearTimeout(timer);
-    }
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
+    } finally { clearTimeout(timer); }
+    if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get("location");
       if (!location) throw new Error("The website redirected without a destination.");
       current = new URL(location, current).toString();
       continue;
     }
-    if (!response.ok) throw new Error(`The website returned HTTP ${response.status}.`);
+    if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}.`);
     const type = response.headers.get("content-type") || "";
     if (!/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("The URL did not return an HTML page.");
     const html = (await response.text()).slice(0, MAX_HTML_BYTES);
-    const page = extractPage(html, current);
-
-    // Modern SPA shells often contain almost no readable body text because the
-    // browser renders the application client-side. Do not reject a live page
-    // solely because its server HTML is sparse. We can still preserve verified
-    // metadata/navigation evidence, but require at least some independently
-    // useful signal before calling it a retrievable page.
-    const hasStructuredEvidence = Boolean(
-      page.title ||
-      page.description ||
-      page.headings.length ||
-      page.buttons.length ||
-      page.links.length
-    );
-    if (page.text.length < 80 && !hasStructuredEvidence) {
-      const rendered = await fetchRenderedHtml(current);
-      const renderedPage = extractPage(rendered.html, rendered.url);
-      renderedPage.rendered = true;
-      if (renderedPage.text.length < 80 && !renderedPage.title && !renderedPage.headings.length) {
-        throw new Error("The rendered page still did not expose enough readable public content.");
-      }
-      return renderedPage;
-    }
-    page.rendered = false;
-    return page;
+    return extractPage(html, current, false);
   }
   throw new Error("Too many redirects.");
 }
 
-function buildDossier(pages) {
-  return pages.map((page, index) => [
-    `PAGE ${index + 1}: ${page.url}`,
-    page.title && `TITLE: ${page.title}`,
-    page.description && `DESCRIPTION: ${page.description}`,
-    page.headings.length && `HEADINGS: ${page.headings.join(" | ")}`,
-    page.buttons.length && `LINKS/CTAS: ${page.buttons.join(" | ")}`,
-    page.forms.length && `FORMS: ${page.forms.join(" | ")}`,
-    `CONTENT: ${page.text.slice(0, 3000)}`,
+async function renderPage(target, wantScreenshot = false) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browser rendering is not configured in this deployment.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
+  endpoint.searchParams.set("token", token);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST", signal: controller.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url, waitForTimeout: 1500, bestAttempt: true }),
+    });
+    const html = (await response.text()).slice(0, MAX_HTML_BYTES);
+    if (!response.ok) throw new Error(`Browser renderer returned HTTP ${response.status}.`);
+    const page = extractPage(html, url, true);
+    let screenshot = null;
+    if (wantScreenshot && meaningful(page)) {
+      const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
+      shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot");
+      shot.searchParams.set("token", token);
+      const shotResponse = await fetch(shot, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url, waitForTimeout: 1000, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 65 } }),
+      });
+      if (shotResponse.ok) {
+        const bytes = Buffer.from(await shotResponse.arrayBuffer());
+        if (bytes.length <= 3_500_000) screenshot = `data:image/jpeg;base64,${bytes.toString("base64")}`;
+      }
+    }
+    return { page, screenshot };
+  } finally { clearTimeout(timer); }
+}
+
+function dossier(pages) {
+  return pages.map((p, i) => [
+    `PAGE ${i + 1}: ${p.url}`,
+    p.title && `TITLE: ${p.title}`,
+    p.description && `DESCRIPTION: ${p.description}`,
+    p.headings.length && `HEADINGS: ${p.headings.join(" | ")}`,
+    p.buttons.length && `LINKS/CTAS: ${p.buttons.join(" | ")}`,
+    `CONTENT: ${p.text.slice(0, 3500)}`,
   ].filter(Boolean).join("\n")).join("\n\n");
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const rawUrl = String(req.body?.url || "").trim();
-  const requestedLimit = Math.min(Math.max(Number(req.body?.navLimit) || 2, 0), MAX_PAGES - 1);
   if (!rawUrl) return res.status(400).json({ error: "A URL is required." });
 
   try {
-    const homepage = await fetchPublicPage(rawUrl);
-    const pages = [homepage];
-    const candidates = homepage.links
-      .filter((link) => link.label && !/^(privacy|terms|cookies?|login|sign in)$/i.test(link.label))
-      .slice(0, requestedLimit);
-
-    for (const candidate of candidates) {
-      try {
-        const page = await fetchPublicPage(candidate.url);
-        if (!pages.some((p) => p.url === page.url)) pages.push(page);
-      } catch {
-        // A secondary page failing should not invalidate a successfully fetched homepage.
-      }
-    }
-
-    let rendered = false;
+    const normalized = (await assertPublicUrl(rawUrl)).toString();
+    let homepage;
     let screenshot = null;
-    let meaningfulPage = pages.some((page) =>
-      page.text.length >= 250 ||
-      page.headings.length >= 2 ||
-      page.description.length >= 40 ||
-      page.buttons.length >= 3
-    );
+    let rendering = "direct-html";
+    let directError = null;
 
-    // Browser-rendered fallback for modern SPAs. We intentionally render only
-    // the submitted page here: secondary navigation can remain on the fast HTML
-    // path, which keeps latency and rendering cost bounded.
-    if (!meaningfulPage) {
+    try { homepage = await directFetch(normalized); }
+    catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
+
+    // Critical: a blocked direct fetch (Cloudflare/WAF), sparse SPA shell, or
+    // non-meaningful HTML all use the browser fallback.
+    if (!homepage || !meaningful(homepage)) {
       try {
-        const renderedHtml = await fetchRenderedHtml(homepage.url);
-        const renderedPage = extractPage(renderedHtml, homepage.url);
-        pages[0] = renderedPage;
-        screenshot = await captureRenderedScreenshot(homepage.url);
-        rendered = true;
-        meaningfulPage = renderedPage.text.length >= 250 ||
-          renderedPage.headings.length >= 2 ||
-          renderedPage.description.length >= 40 ||
-          renderedPage.buttons.length >= 3;
+        const rendered = await renderPage(normalized, true);
+        homepage = rendered.page;
+        screenshot = rendered.screenshot;
+        rendering = "browser-rendered";
       } catch (error) {
         const reason = error instanceof Error ? error.message : "Browser rendering failed.";
         return res.status(422).json({
           code: "AUDIT_INSUFFICIENT_EVIDENCE",
           evidenceStatus: "INSUFFICIENT",
-          reason: reason === "Browser rendering is not configured."
-            ? "The website is reachable but is a JavaScript-rendered application. Browser rendering is not configured for this environment yet."
-            : reason,
-          pages: pages.map((page) => page.url),
+          reason: `UXNest could not retrieve enough rendered public content. Direct retrieval: ${directError || "sparse HTML"}. Browser fallback: ${reason}`,
+          pages: homepage ? [homepage.url] : [],
         });
       }
     }
 
-    if (!meaningfulPage) {
-      // Raw HTML may be a JavaScript shell even when the live page is valid.
-      // Retry the homepage through a real browser before declaring insufficient evidence.
-      try {
-        const rendered = await fetchRenderedHtml(homepage.url);
-        const renderedPage = extractPage(rendered.html, rendered.url);
-        renderedPage.rendered = true;
-        pages[0] = renderedPage;
-      } catch (rendererError) {
-        return res.status(422).json({
-        code: "AUDIT_INSUFFICIENT_EVIDENCE",
-        evidenceStatus: "INSUFFICIENT",
-        reason: "The website loaded, but even the rendered page did not expose enough usable content for a reliable audit.",
-        pages: pages.map((page) => page.url),
-      });
+    if (!homepage || !meaningful(homepage)) {
+      return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: "The website was reachable but did not expose enough rendered public content for a reliable audit.", pages: homepage ? [homepage.url] : [] });
     }
 
-    const dossier = buildDossier(pages);
-    res.setHeader("cache-control", "no-store");
+    const pages = [homepage];
+    // One internal page is a useful supplement, but it must never block the audit.
+    for (const link of homepage.links.filter((l) => l.label && !/^(privacy|terms|cookies?|login|sign in)$/i.test(l.label)).slice(0, 2)) {
+      try {
+        const page = await directFetch(link.url);
+        if (meaningful(page) && !pages.some((p) => p.url === page.url)) pages.push(page);
+      } catch {}
+    }
+
     return res.status(200).json({
       evidenceStatus: "SUFFICIENT",
-      evidenceSource: rendered ? "browser-rendered" : "direct-html",
-      pages: pages.map((page) => page.url),
-      dossier,
+      rendering,
+      pages: pages.map((p) => p.url),
+      dossier: dossier(pages),
       screenshot,
     });
   } catch (error) {
     return res.status(422).json({
       code: "AUDIT_INSUFFICIENT_EVIDENCE",
       evidenceStatus: "INSUFFICIENT",
-      reason: error instanceof Error ? error.message : "UXNest could not retrieve enough public content.",
+      reason: error instanceof Error ? error.message : "UXNest could not retrieve the website.",
       pages: [],
     });
   }
