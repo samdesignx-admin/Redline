@@ -1439,7 +1439,8 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
-  const TOTAL = visualEvidence.length ? 13 : 12;
+  const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (visualEvidence.length ? 1 : 0);
   let n = 0;
   const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
@@ -1647,7 +1648,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   );
 }
 
-function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [] }) {
+function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [] }) {
   if (!report) return null;
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
@@ -1712,6 +1713,29 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
       <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
       <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+
+      {/* Pages reviewed — visual record of the URLs actually tested */}
+      {hasScreenshots && (
+        <div className="deck-slide" style={SLIDE.page}>
+          <div style={SLIDE.kicker}>Audit Coverage</div>
+          <h2 style={SLIDE.title}>Pages Reviewed</h2>
+          <div style={SLIDE.rule} />
+          <div style={{ fontSize: "10pt", color: C.textDim, marginBottom: "5mm" }}>Visual snapshots of the live pages UXNest retrieved and used as evidence for this audit.</div>
+          <div style={{ display: "grid", gridTemplateColumns: (auditScreenshots.length || 1) > 1 ? "1fr 1fr" : "1fr", gap: "6mm", flex: 1, alignContent: "start" }}>
+            {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
+              <div key={item.url || index} style={{ border: "0.4mm solid " + C.border, borderRadius: "3mm", overflow: "hidden", background: "#FFFFFF" }}>
+                <div style={{ height: "82mm", background: C.surfaceAlt, display: "flex", alignItems: "flex-start", justifyContent: "center", overflow: "hidden" }}>
+                  <img src={item.screenshot} alt={"Audited page " + (index + 1)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }} />
+                </div>
+                <div style={{ padding: "3.5mm 4mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", color: C.textDim, wordBreak: "break-all" }}>
+                  {item.url || "Audited page"}
+                </div>
+              </div>
+            ))}
+          </div>
+          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        </div>
+      )}
 
       {/* 9 — Top 10 */}
       <div className="deck-slide" style={SLIDE.page}>
@@ -1822,11 +1846,11 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   );
 }
 
-function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [] }) {
+function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [] }) {
   if (!report) return null;
   return (
     <div id="uxnest-print-area" className="print-only">
-      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
+      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
     </div>
   );
 }
@@ -1834,7 +1858,7 @@ function PrintableReport({ report, source, auditedPages = [], auditScreenshot = 
 /* Fullscreen in-app deck viewer: slides scaled to the device width so users
    can present or screenshot directly, since sandboxed iframes block both
    window.print() and file downloads on some platforms. */
-function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onClose, onTryPrint, exporting }) {
+function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], onClose, onTryPrint, exporting }) {
   const [scale, setScale] = useState(0.3);
   const SLIDE_W = 1119; // 296mm at 96dpi
   useEffect(() => {
@@ -1859,7 +1883,7 @@ function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null,
       <div style={{ width: exporting ? SLIDE_W : SLIDE_W * scale, margin: "10px auto 40px" }}>
         <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
-            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
+            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
           </div>
         </div>
       </div>
@@ -2409,6 +2433,7 @@ export default function UxnestApp() {
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
   const [auditScreenshot, setAuditScreenshot] = useState(null);
+  const [auditScreenshots, setAuditScreenshots] = useState([]);
   const auditScreenshotRef = useRef(null);
   const [visualEvidence, setVisualEvidence] = useState([]);
   // State is for rendering; the ref guarantees the exact tested URLs survive
@@ -2772,8 +2797,13 @@ export default function UxnestApp() {
     // report and slide deck and are also persisted with the saved audit.
     auditedPagesRef.current = pages;
     setAuditedPages(pages);
-    auditScreenshotRef.current = evidence.screenshot || null;
-    setAuditScreenshot(evidence.screenshot || null);
+    const capturedScreenshots = Array.isArray(evidence.screenshots)
+      ? evidence.screenshots.filter((item) => item && /^https?:\/\//i.test(String(item.url || "")) && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
+      : [];
+    const primaryScreenshot = capturedScreenshots[0]?.screenshot || evidence.screenshot || null;
+    auditScreenshotRef.current = primaryScreenshot;
+    setAuditScreenshot(primaryScreenshot);
+    setAuditScreenshots(capturedScreenshots);
     setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
 
     // Stage 2: batches consume deterministic retrieved evidence as plain text.
@@ -2923,6 +2953,7 @@ export default function UxnestApp() {
     setAuditTitle("");
     setAuditedPages([]);
     setAuditScreenshot(null);
+    setAuditScreenshots([]);
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
     auditedPagesRef.current = [];
@@ -3265,7 +3296,7 @@ export default function UxnestApp() {
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (
-        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
+        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
       <SupportChat C={C} user={user} report={report} source={source} />
       <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
