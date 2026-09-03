@@ -1,5 +1,6 @@
 import { severityFor } from "../config/severity.js";
 import { SITE_URL } from "../config/index.js";
+import { normalizeReportModel } from "./reportModel.js";
 
 const KNOWN_SECTIONS = [
   "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
@@ -143,7 +144,7 @@ function parseReport(rawText) {
   const find = (key) =>
     sections[Object.keys(sections).find((k) => k.toLowerCase().includes(key))] || "";
 
-  return {
+  return normalizeReportModel({
     raw: clean,
     hasContent: matches.length > 0,
     summary: parseSummary(find("executive summary")),
@@ -158,7 +159,7 @@ function parseReport(rawText) {
     quickWins: parseDashList(find("quick wins")),
     strategic: parseDashList(find("strategic improvements")),
     scorecard: parseScorecard(find("final scorecard")),
-  };
+  });
 }
 
 function buildPlainTextSummary(report, source, saved) {
