@@ -225,8 +225,8 @@ Begin now for ${url}.`;
 // actually visible in the rendered screenshot. Coordinates are normalized so
 // they remain responsive in the report and PDF.
 function buildVisualEvidencePrompt(issues) {
-  const list = issues.map((issue, i) => \`\${i + 1}. [\${issue.section}] \${issue.title} — \${issue.why}\`).join("\\n");
-  return \`You are mapping UX findings to a screenshot of the audited website.
+  const list = issues.map((issue, i) => `${i + 1}. [${issue.section}] ${issue.title} — ${issue.why}`).join("\n");
+  return `You are mapping UX findings to a screenshot of the audited website.
 
 Only annotate findings that are clearly visible in this screenshot. Do not invent locations for findings about hidden pages, source code, accessibility internals, or facts you cannot see.
 
@@ -245,7 +245,7 @@ Return JSON only, using this exact schema:
 Coordinates are percentages of the full screenshot. x/y are top-left; w/h are box size. Keep values between 0 and 100. Return at most 6 objects, or [] if no finding can be located confidently.
 
 FINDINGS:
-\${list}\`;
+${list}`;
 }
 
 function parseVisualEvidence(raw, allowedTitles) {
@@ -264,7 +264,7 @@ function parseVisualEvidence(raw, allowedTitles) {
       const x = clamp(item.x, 0), y = clamp(item.y, 0);
       const w = Math.max(2, Math.min(100 - x, clamp(item.w, 20)));
       const h = Math.max(2, Math.min(100 - y, clamp(item.h, 12)));
-      return { id: \`\${String(item.issueTitle).slice(0, 40)}-\${index}\`, issueTitle: String(item.issueTitle), x, y, w, h, explanation: String(item.explanation || "").trim().slice(0, 220) };
+      return { id: `${String(item.issueTitle).slice(0, 40)}-${index}`, issueTitle: String(item.issueTitle), x, y, w, h, explanation: String(item.explanation || "").trim().slice(0, 220) };
     }).slice(0, 6);
   } catch {
     return [];
@@ -1652,7 +1652,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
-  const TOTAL = 12;
+  const TOTAL = visualEvidence.length ? 13 : 12;
   let n = 0;
   const next = () => ++n;
 
