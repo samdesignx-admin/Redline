@@ -148,6 +148,38 @@ async function renderPage(target, wantScreenshot = false) {
   } finally { clearTimeout(timer); }
 }
 
+async function captureScreenshot(target) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) return null;
+  const url = (await assertPublicUrl(target)).toString();
+  const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
+  shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot");
+  shot.searchParams.set("token", token);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 18_000);
+  try {
+    const response = await fetch(shot, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url,
+        waitForTimeout: 1000,
+        bestAttempt: true,
+        options: { fullPage: true, type: "jpeg", quality: 60 },
+      }),
+    });
+    if (!response.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 3_500_000) return null;
+    return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function dossier(pages) {
   return pages.map((p, i) => [
     `PAGE ${i + 1}: ${p.url}`,
@@ -206,12 +238,23 @@ export default async function handler(req, res) {
       } catch {}
     }
 
+    // Capture a visual record for every page included in the audit. This is
+    // best-effort only: screenshot failures must never invalidate usable text
+    // evidence. Run the small set in parallel to stay within the function budget.
+    const captured = await Promise.all(pages.slice(0, 3).map(async (page, index) => {
+      const image = index === 0 && screenshot ? screenshot : await captureScreenshot(page.url);
+      return image ? { url: page.url, screenshot: image } : null;
+    }));
+    const screenshots = captured.filter(Boolean);
+    const primaryScreenshot = screenshots[0]?.screenshot || screenshot || null;
+
     return res.status(200).json({
       evidenceStatus: "SUFFICIENT",
       rendering,
       pages: pages.map((p) => p.url),
       dossier: dossier(pages),
-      screenshot,
+      screenshot: primaryScreenshot,
+      screenshots,
     });
   } catch (error) {
     return res.status(422).json({
