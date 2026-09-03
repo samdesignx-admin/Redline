@@ -102,6 +102,74 @@ function extractPage(html, finalUrl) {
   };
 }
 
+async function fetchRenderedHtml(value) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) {
+    const error = new Error("Browser rendering is not configured.");
+    error.code = "BROWSER_RENDERER_NOT_CONFIGURED";
+    throw error;
+  }
+
+  const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
+  endpoint.searchParams.set("token", token);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-cache",
+      },
+      body: JSON.stringify({
+        url: value,
+        waitForTimeout: 1500,
+        bestAttempt: true,
+      }),
+    });
+    const html = (await response.text()).slice(0, MAX_HTML_BYTES);
+    if (!response.ok) throw new Error(`Browser rendering failed (HTTP ${response.status}).`);
+    if (cleanText(html).length < 80) throw new Error("The rendered page still did not expose enough readable content.");
+    return html;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function captureRenderedScreenshot(value) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) return null;
+  const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/screenshot");
+  endpoint.pathname = endpoint.pathname.replace(/\/content$/, "/screenshot");
+  endpoint.searchParams.set("token", token);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({
+        url: value,
+        waitForTimeout: 1500,
+        bestAttempt: true,
+        options: { fullPage: true, type: "jpeg", quality: 70 },
+      }),
+    });
+    if (!response.ok) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    // Keep the API response bounded. Full-size screenshots can be persisted later
+    // when annotation storage is added.
+    if (buffer.length > 2_000_000) return null;
+    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function fetchPublicPage(value) {
   let current = (await assertPublicUrl(value)).toString();
   for (let redirect = 0; redirect < 5; redirect++) {
@@ -187,26 +255,59 @@ export default async function handler(req, res) {
       }
     }
 
-    const dossier = buildDossier(pages);
-    const meaningfulPage = pages.some((page) =>
+    let rendered = false;
+    let screenshot = null;
+    let meaningfulPage = pages.some((page) =>
       page.text.length >= 250 ||
       page.headings.length >= 2 ||
       page.description.length >= 40 ||
       page.buttons.length >= 3
     );
+
+    // Browser-rendered fallback for modern SPAs. We intentionally render only
+    // the submitted page here: secondary navigation can remain on the fast HTML
+    // path, which keeps latency and rendering cost bounded.
+    if (!meaningfulPage) {
+      try {
+        const renderedHtml = await fetchRenderedHtml(homepage.url);
+        const renderedPage = extractPage(renderedHtml, homepage.url);
+        pages[0] = renderedPage;
+        screenshot = await captureRenderedScreenshot(homepage.url);
+        rendered = true;
+        meaningfulPage = renderedPage.text.length >= 250 ||
+          renderedPage.headings.length >= 2 ||
+          renderedPage.description.length >= 40 ||
+          renderedPage.buttons.length >= 3;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Browser rendering failed.";
+        return res.status(422).json({
+          code: "AUDIT_INSUFFICIENT_EVIDENCE",
+          evidenceStatus: "INSUFFICIENT",
+          reason: reason === "Browser rendering is not configured."
+            ? "The website is reachable but is a JavaScript-rendered application. Browser rendering is not configured for this environment yet."
+            : reason,
+          pages: pages.map((page) => page.url),
+        });
+      }
+    }
+
     if (!meaningfulPage) {
       return res.status(422).json({
         code: "AUDIT_INSUFFICIENT_EVIDENCE",
         evidenceStatus: "INSUFFICIENT",
-        reason: "The website is reachable, but its server HTML is an almost-empty client-rendered application shell. UXNest needs browser-rendered content or screenshots to audit the actual interface reliably.",
+        reason: "The website loaded, but even the rendered page did not expose enough usable content for a reliable audit.",
         pages: pages.map((page) => page.url),
       });
     }
+
+    const dossier = buildDossier(pages);
     res.setHeader("cache-control", "no-store");
     return res.status(200).json({
       evidenceStatus: "SUFFICIENT",
+      evidenceSource: rendered ? "browser-rendered" : "direct-html",
       pages: pages.map((page) => page.url),
       dossier,
+      screenshot,
     });
   } catch (error) {
     return res.status(422).json({
