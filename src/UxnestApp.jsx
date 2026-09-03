@@ -1439,7 +1439,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
-  const TOTAL = 12;
+  const TOTAL = visualEvidence.length ? 13 : 12;
   let n = 0;
   const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
@@ -1647,7 +1647,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   );
 }
 
-function DeckSlides({ report, source, auditedPages = [] }) {
+function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [] }) {
   if (!report) return null;
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
@@ -1771,6 +1771,37 @@ function DeckSlides({ report, source, auditedPages = [] }) {
       </div>
 
       {/* 12 — Verdict & disclaimer */}
+
+      {auditScreenshot && visualEvidence.length > 0 && (
+        <div className="deck-slide" style={SLIDE.page}>
+          <div style={SLIDE.kicker}>Evidence</div>
+          <h2 style={SLIDE.title}>Visual Evidence</h2>
+          <div style={SLIDE.rule} />
+          <div style={{ display: "flex", gap: "8mm", flex: 1, minHeight: 0 }}>
+            <div style={{ flex: 1.45, position: "relative", borderRadius: "3mm", overflow: "hidden", border: "0.4mm solid " + C.border, background: C.surfaceAlt }}>
+              <img src={auditScreenshot} alt="Annotated audit evidence" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center" }} />
+              {visualEvidence.map((item, index) => (
+                <div key={item.id} style={{ position: "absolute", left: item.x + "%", top: item.y + "%", width: item.w + "%", height: item.h + "%", border: "0.8mm solid " + C.critical, borderRadius: "50%" }}>
+                  <span style={{ position: "absolute", top: "-4mm", left: "-4mm", width: "8mm", height: "8mm", borderRadius: "50%", background: C.critical, color: "#fff", fontSize: "8pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3mm", overflow: "hidden" }}>
+              {visualEvidence.map((item, index) => (
+                <div key={item.id + "-deck"} style={{ display: "flex", gap: "3mm", padding: "3.5mm", background: "#FFFFFF", border: "0.35mm solid " + C.border, borderRadius: "2.5mm" }}>
+                  <span style={{ flexShrink: 0, width: "7mm", height: "7mm", borderRadius: "50%", background: C.critical, color: "#fff", fontSize: "7.5pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+                  <div>
+                    <div style={{ fontSize: "9.5pt", fontWeight: 800, color: C.dark, marginBottom: "1mm" }}>{item.issueTitle}</div>
+                    <div style={{ fontSize: "8.5pt", lineHeight: 1.35, color: C.textDim }}>{item.explanation}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        </div>
+      )}
+
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
         <div style={SLIDE.kicker}>Decision</div>
         <h2 style={SLIDE.title}>Final Verdict</h2>
@@ -1791,11 +1822,11 @@ function DeckSlides({ report, source, auditedPages = [] }) {
   );
 }
 
-function PrintableReport({ report, source, auditedPages = [] }) {
+function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [] }) {
   if (!report) return null;
   return (
     <div id="uxnest-print-area" className="print-only">
-      <DeckSlides report={report} source={source} auditedPages={auditedPages} />
+      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
     </div>
   );
 }
@@ -1803,7 +1834,7 @@ function PrintableReport({ report, source, auditedPages = [] }) {
 /* Fullscreen in-app deck viewer: slides scaled to the device width so users
    can present or screenshot directly, since sandboxed iframes block both
    window.print() and file downloads on some platforms. */
-function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, exporting }) {
+function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onClose, onTryPrint, exporting }) {
   const [scale, setScale] = useState(0.3);
   const SLIDE_W = 1119; // 296mm at 96dpi
   useEffect(() => {
@@ -1828,7 +1859,7 @@ function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, ex
       <div style={{ width: exporting ? SLIDE_W : SLIDE_W * scale, margin: "10px auto 40px" }}>
         <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
-            <DeckSlides report={report} source={source} auditedPages={auditedPages} />
+            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
           </div>
         </div>
       </div>
@@ -3230,10 +3261,10 @@ export default function UxnestApp() {
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (
-        <DeckViewer report={report} source={source} auditedPages={auditedPages} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
+        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
       <SupportChat C={C} user={user} report={report} source={source} />
-      <PrintableReport report={report} source={source} auditedPages={auditedPages} />
+      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
     </div>
   );
 }
