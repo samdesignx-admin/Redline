@@ -1653,7 +1653,8 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
-  const TOTAL = visualEvidence.length ? 13 : 12;
+  const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (visualEvidence.length ? 1 : 0);
   let n = 0;
   const next = () => ++n;
 
@@ -3299,7 +3300,7 @@ export default function UxnestApp() {
         <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
       <SupportChat C={C} user={user} report={report} source={source} />
-      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} visualEvidence={visualEvidence} />
+      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
     </div>
   );
 }
