@@ -80,6 +80,64 @@ function extractLinks(html, baseUrl) {
   return links;
 }
 
+async function fetchRenderedHtml(value) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browser rendering is not configured.");
+  const target = (await assertPublicUrl(value)).toString();
+  const endpoint = `https://production-sfo.browserless.io/content?token=${encodeURIComponent(token)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({
+        url: target,
+        gotoOptions: { waitUntil: "networkidle2", timeout: 15000 },
+        bestAttempt: true,
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Browser renderer returned HTTP ${response.status}.`);
+    return { html: (await response.text()).slice(0, MAX_HTML_BYTES), url: target, rendered: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function captureRenderedScreenshot(value) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) return null;
+  const target = (await assertPublicUrl(value)).toString();
+  const endpoint = `https://production-sfo.browserless.io/screenshot?token=${encodeURIComponent(token)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({
+        url: target,
+        bestAttempt: true,
+        scrollPage: true,
+        gotoOptions: { waitUntil: "networkidle2", timeout: 15000 },
+        options: { fullPage: true, type: "jpeg", quality: 70 },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    // Keep the response bounded. The screenshot is evidence for the current run;
+    // persistent storage is intentionally deferred until the privacy model changes.
+    if (bytes.length > 4_000_000) return null;
+    return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function extractPage(html, finalUrl) {
   const title = cleanText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]);
   const meta = (html.match(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:description|og:description)["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "";
@@ -214,8 +272,15 @@ async function fetchPublicPage(value) {
       page.links.length
     );
     if (page.text.length < 80 && !hasStructuredEvidence) {
-      throw new Error("The page returned too little readable public content.");
+      const rendered = await fetchRenderedHtml(current);
+      const renderedPage = extractPage(rendered.html, rendered.url);
+      renderedPage.rendered = true;
+      if (renderedPage.text.length < 80 && !renderedPage.title && !renderedPage.headings.length) {
+        throw new Error("The rendered page still did not expose enough readable public content.");
+      }
+      return renderedPage;
     }
+    page.rendered = false;
     return page;
   }
   throw new Error("Too many redirects.");
@@ -292,7 +357,15 @@ export default async function handler(req, res) {
     }
 
     if (!meaningfulPage) {
-      return res.status(422).json({
+      // Raw HTML may be a JavaScript shell even when the live page is valid.
+      // Retry the homepage through a real browser before declaring insufficient evidence.
+      try {
+        const rendered = await fetchRenderedHtml(homepage.url);
+        const renderedPage = extractPage(rendered.html, rendered.url);
+        renderedPage.rendered = true;
+        pages[0] = renderedPage;
+      } catch (rendererError) {
+        return res.status(422).json({
         code: "AUDIT_INSUFFICIENT_EVIDENCE",
         evidenceStatus: "INSUFFICIENT",
         reason: "The website loaded, but even the rendered page did not expose enough usable content for a reliable audit.",
