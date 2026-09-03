@@ -2290,6 +2290,7 @@ export default function UxnestApp() {
   }, []);
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
+  const [auditScreenshot, setAuditScreenshot] = useState(null);
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
   const auditedPagesRef = useRef([]);
@@ -2651,7 +2652,8 @@ export default function UxnestApp() {
     // report and slide deck and are also persisted with the saved audit.
     auditedPagesRef.current = pages;
     setAuditedPages(pages);
-    setRunProgress((p) => ({ ...p, status: "Analyzing retrieved pages…", done: 1 }));
+    setAuditScreenshot(evidence.screenshot || null);
+    setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
 
     // Stage 2: batches consume deterministic retrieved evidence as plain text.
     return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
@@ -2769,6 +2771,7 @@ export default function UxnestApp() {
     setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
     setAuditedPages([]);
+    setAuditScreenshot(null);
     auditedPagesRef.current = [];
   }, []);
 
@@ -2896,6 +2899,7 @@ export default function UxnestApp() {
     const savedPages = Array.isArray(entry.pages) ? entry.pages : [];
     auditedPagesRef.current = savedPages;
     setAuditedPages(savedPages);
+    setAuditScreenshot(null);
     setImages([]);
     setShowHistory(false);
   };
