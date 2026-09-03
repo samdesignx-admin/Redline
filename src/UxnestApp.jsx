@@ -1162,7 +1162,37 @@ function AssessmentChip({ assessment }) {
   );
 }
 
-function ReportScreen({ report, images, source, auditedPages = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+
+function VisualEvidencePanel({ screenshot, evidence = [] }) {
+  if (!screenshot || !evidence.length) return null;
+  return (
+    <div style={{ borderTop: "1px solid " + C.borderSoft, paddingTop: 14, marginBottom: 14 }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 5 }}>Visual Evidence</div>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 12 }}>Highlighted areas are mapped only where the finding is visible in the rendered page.</div>
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid " + C.border, background: C.surfaceAlt }}>
+        <img src={screenshot} alt="Rendered website evidence" style={{ display: "block", width: "100%", height: "auto" }} />
+        {evidence.map((item, index) => (
+          <div key={item.id} style={{ position: "absolute", left: item.x + "%", top: item.y + "%", width: item.w + "%", height: item.h + "%", border: "3px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 9999px rgba(0,0,0,0.02)", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", top: -13, left: -13, width: 26, height: 26, borderRadius: "50%", background: C.critical, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+        {evidence.map((item, index) => (
+          <div key={item.id + "-note"} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 11px", borderRadius: 10, background: C.surfaceAlt, border: "1px solid " + C.borderSoft }}>
+            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: C.critical, color: "#fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: C.text, marginBottom: 2 }}>{item.issueTitle}</div>
+              <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.45 }}>{item.explanation}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
@@ -1239,6 +1269,8 @@ function ReportScreen({ report, images, source, auditedPages = [], onReset, isLo
               ))}
             </div>
           )}
+
+          <VisualEvidencePanel screenshot={auditScreenshot} evidence={visualEvidence} />
 
           {summary.intro && (
             <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
@@ -3178,6 +3210,8 @@ export default function UxnestApp() {
                 images={images}
                 source={source}
                 auditedPages={auditedPages}
+                auditScreenshot={auditScreenshot}
+                visualEvidence={visualEvidence}
                 onReset={onReset}
                 isLoggedIn={!!user}
                 onRequireLogin={requireLogin}
