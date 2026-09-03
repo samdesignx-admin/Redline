@@ -2589,6 +2589,15 @@ export default function UxnestApp() {
   const executeUrlAudit = async () => {
     let cleanUrl = urlInput.trim();
     if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`;
+    try {
+      const parsedUrl = new URL(cleanUrl);
+      if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) {
+        throw new Error();
+      }
+      cleanUrl = parsedUrl.toString();
+    } catch {
+      throw new Error("Enter a valid website address, for example uxnest.ai or https://uxnest.ai.");
+    }
     const tools = [{ type: "web_search_20250305", name: "web_search" }];
 
     // Stage 1: one exploration pass produces a factual dossier of the site.
