@@ -75,10 +75,29 @@ function normalizeReportModel(report) {
     normalized[section]?.issues || []
   );
 
-  // Phase 1 deliberately preserves existing score behavior. Phase 2 will make
-  // overallScore deterministic from canonical dimension scores.
-  normalized.overallScore = normalized.summary?.score ?? scorecard.overall ?? null;
-  normalized.modelVersion = 1;
+  const dimensionScores = normalized.dimensions
+    .map((dimension) => Number(dimension.score))
+    .filter((score) => Number.isFinite(score));
+
+  // Phase 2: the displayed overall score is deterministic and derived from the
+  // five canonical dimension scores. We round to the nearest whole number to
+  // preserve the existing whole-number report presentation.
+  normalized.overallScore = dimensionScores.length
+    ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length)
+    : null;
+
+  // Keep legacy fields synchronized so existing UI, saved-audit, and export
+  // consumers cannot display a competing AI-generated overall score.
+  normalized.summary = {
+    ...(normalized.summary || {}),
+    score: normalized.overallScore,
+  };
+  normalized.scorecard = {
+    ...scorecard,
+    overall: normalized.overallScore,
+  };
+
+  normalized.modelVersion = 2;
 
   return normalized;
 }
