@@ -1906,7 +1906,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
-  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (visualEvidence.length ? 1 : 0);
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const next = () => ++n;
 
