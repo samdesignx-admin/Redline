@@ -1747,7 +1747,8 @@ function SevChip({ severity }) {
   );
 }
 
-function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
+function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
   const issues = data.issues.slice(0, 3);
   return (
     <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
