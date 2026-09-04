@@ -31,6 +31,71 @@ import {
 /* ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------- */
+/* Brand-adaptive report theme                                              */
+/* ----------------------------------------------------------------------- */
+const REPORT_THEME_FALLBACK = {
+  mode: "brand-adaptive", confidence: "fallback", isDark: false,
+  primary: "#176B5B", accent: "#C58A3A", background: "#FCFBF8", surface: "#FFFFFF",
+  text: "#18211F", textDim: "#52605C", muted: "#77827E", border: "#E7E1D8", soft: "#EEF6F3",
+  coverStart: "#12302B", coverEnd: "#24584D", radius: 14,
+};
+const clampTheme = (n, min, max) => Math.min(max, Math.max(min, n));
+const themeHex = (n) => clampTheme(Math.round(n), 0, 255).toString(16).padStart(2, "0");
+const rgbHex = (r, g, b) => "#" + themeHex(r) + themeHex(g) + themeHex(b);
+function rgbToThemeHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b); let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) { const d = max - min; s = l > .5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : max === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6; }
+  return [h * 360, s * 100, l * 100];
+}
+function themeHslHex(h, s, l) {
+  h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const q = h < 60 ? [c,x,0] : h < 120 ? [x,c,0] : h < 180 ? [0,c,x] : h < 240 ? [0,x,c] : h < 300 ? [x,0,c] : [c,0,x];
+  return rgbHex(255 * (q[0] + m), 255 * (q[1] + m), 255 * (q[2] + m));
+}
+function extractBrandTheme(dataUrl) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof window === "undefined") return resolve({ ...REPORT_THEME_FALLBACK });
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 96, scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale)), h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+        const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, w, h);
+        const px = ctx.getImageData(0, 0, w, h).data, bins = Array.from({ length: 36 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+        let lum = 0, count = 0;
+        for (let i = 0; i < px.length; i += 16) {
+          const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3]; if (a < 200) continue;
+          const l = (.2126 * r + .7152 * g + .0722 * b) / 255; lum += l; count++;
+          const [hue, sat, light] = rgbToThemeHsl(r, g, b);
+          if (sat >= 20 && light >= 12 && light <= 90) { const weight = (sat / 100) * (.5 + Math.abs(light - 50) / 100), bin = bins[Math.floor(hue / 10) % 36];
+            bin.weight += weight; bin.r += r * weight; bin.g += g * weight; bin.b += b * weight; }
+        }
+        const best = bins.reduce((a, b) => b.weight > a.weight ? b : a, bins[0]);
+        if (!count || !best.weight) return resolve({ ...REPORT_THEME_FALLBACK });
+        const [hue, sat] = rgbToThemeHsl(best.r / best.weight, best.g / best.weight, best.b / best.weight);
+        const isDark = lum / count < .42;
+        resolve({
+          mode: "brand-adaptive", confidence: "image", isDark,
+          primary: themeHslHex(hue, clampTheme(Math.max(sat, 48), 48, 86), isDark ? 62 : 38),
+          accent: themeHslHex(hue + 28, clampTheme(Math.max(sat * .85, 42), 42, 78), isDark ? 68 : 46),
+          background: isDark ? themeHslHex(hue, 18, 10) : themeHslHex(hue, 18, 97),
+          surface: isDark ? themeHslHex(hue, 14, 15) : "#FFFFFF",
+          text: isDark ? "#F5F7F6" : "#18211F", textDim: isDark ? "#C4CDC9" : "#52605C", muted: isDark ? "#93A09B" : "#77827E",
+          border: isDark ? themeHslHex(hue, 12, 24) : themeHslHex(hue, 16, 88), soft: isDark ? themeHslHex(hue, 28, 18) : themeHslHex(hue, 45, 94),
+          coverStart: isDark ? themeHslHex(hue, 38, 10) : themeHslHex(hue, 48, 18), coverEnd: isDark ? themeHslHex(hue + 16, 42, 18) : themeHslHex(hue + 12, 55, 28),
+          radius: sat > 65 ? 18 : 10,
+        });
+      } catch { resolve({ ...REPORT_THEME_FALLBACK }); }
+    };
+    img.onerror = () => resolve({ ...REPORT_THEME_FALLBACK }); img.src = dataUrl;
+  });
+}
+
+/* ----------------------------------------------------------------------- */
 /* Plan limits                                                              */
 /* ----------------------------------------------------------------------- */
 function screenLimitFor() {
@@ -1664,9 +1729,9 @@ function SlideIconBadge({ icon: Icon, size = 14 }) {
   );
 }
 
-function SlideFooter({ n, total, sourceLabel }) {
+function SlideFooter({ n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
   return (
-    <div style={SLIDE.footer}>
+    <div style={{ ...SLIDE.footer, color: theme.muted, borderTopColor: theme.border }}>
       <span>NEST AUDIT · {sourceLabel}</span>
       <span>{n} / {total}</span>
     </div>
@@ -1685,10 +1750,10 @@ function SevChip({ severity }) {
 function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
   const issues = data.issues.slice(0, 3);
   return (
-    <div className="deck-slide" style={SLIDE.page}>
-      <div style={SLIDE.kicker}>Findings</div>
-      <h2 style={SLIDE.title}>{title}</h2>
-      <div style={SLIDE.rule} />
+    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Findings</div>
+      <h2 style={{ ...SLIDE.title, color: T.text }}>{title}</h2>
+      <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
         {issues.map((iss, i) => (
@@ -1711,13 +1776,14 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
           </div>
         ))}
       </div>
-      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} />
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
   );
 }
 
-function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [] }) {
+function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
+  const T = theme || REPORT_THEME_FALLBACK;
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
@@ -1729,7 +1795,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   return (
     <div>
       {/* 1 — Title */}
-      <div className="deck-slide" style={{ ...SLIDE.page, background: `linear-gradient(135deg, ${C.dark} 0%, #173D36 62%, #24584D 100%)`, color: "#FFFFFF", border: "none", boxShadow: "none", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+      <div className="deck-slide" style={{ ...SLIDE.page, background: `linear-gradient(135deg, ${T.coverStart} 0%, ${T.coverEnd} 100%)`, color: "#FFFFFF", border: "none", boxShadow: "none", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
         <div style={{ position: "absolute", width: "110mm", height: "110mm", borderRadius: "50%", border: "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm" }} />
         <div style={{ position: "absolute", width: "70mm", height: "70mm", borderRadius: "50%", background: "rgba(255,255,255,0.035)", left: "-18mm", bottom: "-22mm" }} />
         <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
@@ -1749,10 +1815,10 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       </div>
 
       {/* 2 — Executive Summary */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Overview</div>
-        <h2 style={SLIDE.title}>Executive Summary</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Overview</div>
+        <h2 style={{ ...SLIDE.title, color: T.text }}>Executive Summary</h2>
+        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
         <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 5mm 0" }}>{summary.intro}</p>
         {source?.mode === "url" && (
           <div style={{ background: C.surfaceAlt, border: `0.35mm solid ${C.border}`, borderRadius: "2.5mm", padding: "3.5mm 4mm", marginBottom: "5mm", maxWidth: "240mm" }}>
@@ -1778,7 +1844,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             ))}
           </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 3–8 — Section slides */}
@@ -1791,10 +1857,10 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {/* Pages reviewed — visual record of the URLs actually tested */}
       {hasScreenshots && (
-        <div className="deck-slide" style={SLIDE.page}>
-          <div style={SLIDE.kicker}>Audit Coverage</div>
-          <h2 style={SLIDE.title}>Pages Reviewed</h2>
-          <div style={SLIDE.rule} />
+        <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Audit Coverage</div>
+          <h2 style={{ ...SLIDE.title, color: T.text }}>Pages Reviewed</h2>
+          <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
           <div style={{ fontSize: "10pt", color: C.textDim, marginBottom: "5mm" }}>Visual snapshots of the live pages UXNest retrieved and used as evidence for this audit.</div>
           <div style={{ display: "grid", gridTemplateColumns: (auditScreenshots.length || 1) > 1 ? "1fr 1fr" : "1fr", gap: "6mm", flex: 1, alignContent: "start" }}>
             {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
@@ -1808,15 +1874,15 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
               </div>
             ))}
           </div>
-          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
         </div>
       )}
 
       {/* 9 — Top 10 */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Priorities</div>
-        <h2 style={SLIDE.title}>Top 10 Improvements</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Priorities</div>
+        <h2 style={{ ...SLIDE.title, color: T.text }}>Top 10 Improvements</h2>
+        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3mm 8mm", flex: 1, alignContent: "start" }}>
           {top10.slice(0, 10).map((t) => (
             <div key={t.rank} style={{ display: "flex", gap: "3mm", alignItems: "baseline", borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: "2.5mm" }}>
@@ -1825,14 +1891,14 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             </div>
           ))}
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 10 — Roadmap */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Roadmap</div>
-        <h2 style={SLIDE.title}>Quick Wins vs. Strategic Bets</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Roadmap</div>
+        <h2 style={{ ...SLIDE.title, color: T.text }}>Quick Wins vs. Strategic Bets</h2>
+        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
           <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>QUICK WINS · UNDER A DAY</div>
@@ -1847,14 +1913,14 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             ))}
           </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 11 — Scorecard */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Scorecard</div>
-        <h2 style={SLIDE.title}>Final Scores</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Scorecard</div>
+        <h2 style={{ ...SLIDE.title, color: T.text }}>Final Scores</h2>
+        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "5mm", maxWidth: "230mm" }}>
           {[["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]].map(([label, v]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "5mm" }}>
@@ -1866,16 +1932,16 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             </div>
           ))}
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 12 — Verdict & disclaimer */}
 
       {auditScreenshot && visualEvidence.length > 0 && (
-        <div className="deck-slide" style={SLIDE.page}>
-          <div style={SLIDE.kicker}>Evidence</div>
-          <h2 style={SLIDE.title}>Visual Evidence</h2>
-          <div style={SLIDE.rule} />
+        <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Evidence</div>
+          <h2 style={{ ...SLIDE.title, color: T.text }}>Visual Evidence</h2>
+          <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
           <div style={{ display: "flex", gap: "8mm", flex: 1, minHeight: 0 }}>
             <div style={{ flex: 1.45, position: "relative", borderRadius: "3mm", overflow: "hidden", border: "0.4mm solid " + C.border, background: C.surfaceAlt }}>
               <img src={auditScreenshot} alt="Annotated audit evidence" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center" }} />
@@ -1902,14 +1968,14 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
               ))}
             </div>
           </div>
-          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
         </div>
       )}
 
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
-        <div style={SLIDE.kicker}>Decision</div>
-        <h2 style={SLIDE.title}>Final Verdict</h2>
-        <div style={SLIDE.rule} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Decision</div>
+        <h2 style={{ ...SLIDE.title, color: T.text }}>Final Verdict</h2>
+        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
         <p style={{ fontSize: "13pt", lineHeight: 1.6, color: C.text, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{scorecard.verdict || "—"}</p>
         {aiRecommendations && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm", maxWidth: "230mm" }}>
@@ -1920,17 +1986,17 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         <p style={{ position: "absolute", bottom: "16mm", left: "16mm", right: "16mm", fontSize: "7.5pt", color: C.muted, lineHeight: 1.4 }}>
           AI-generated analysis by UXNest. Not a certified accessibility audit, legal advice, or professional UX research. Validate critical findings with qualified professionals.
         </p>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
     </div>
   );
 }
 
-function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [] }) {
+function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
   return (
     <div id="uxnest-print-area" className="print-only">
-      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
+      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={theme} />
     </div>
   );
 }
@@ -1938,7 +2004,7 @@ function PrintableReport({ report, source, auditedPages = [], auditScreenshot = 
 /* Fullscreen in-app deck viewer: slides scaled to the device width so users
    can present or screenshot directly, since sandboxed iframes block both
    window.print() and file downloads on some platforms. */
-function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], onClose, onTryPrint, exporting }) {
+function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK, onClose, onTryPrint, exporting }) {
   const [scale, setScale] = useState(0.3);
   const SLIDE_W = 1119; // 296mm at 96dpi
   useEffect(() => {
@@ -1948,9 +2014,9 @@ function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null,
     return () => window.removeEventListener("resize", compute);
   }, []);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#3A3129", zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(58,49,41,0.95)", backdropFilter: "blur(4px)" }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#D8CBB6" }}>SLIDE DECK · PINCH OR ROTATE TO ZOOM</span>
+    <div style={{ position: "fixed", inset: 0, background: theme.coverStart, zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: theme.coverStart, backdropFilter: "blur(4px)" }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#E8F0ED" }}>BRAND-ADAPTIVE · {theme.confidence === "image" ? "STYLE EXTRACTED FROM AUDITED SCREEN" : "UXNEST FALLBACK"} · PINCH OR ROTATE TO ZOOM</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Print / Save PDF
@@ -1963,7 +2029,7 @@ function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null,
       <div style={{ width: exporting ? SLIDE_W : SLIDE_W * scale, margin: "10px auto 40px" }}>
         <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
-            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
+            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={theme} />
           </div>
         </div>
       </div>
@@ -2516,6 +2582,7 @@ export default function UxnestApp() {
   const [auditScreenshots, setAuditScreenshots] = useState([]);
   const auditScreenshotRef = useRef(null);
   const [visualEvidence, setVisualEvidence] = useState([]);
+  const [reportTheme, setReportTheme] = useState(REPORT_THEME_FALLBACK);
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
   const auditedPagesRef = useRef([]);
@@ -2946,6 +3013,9 @@ export default function UxnestApp() {
       const parsed = parseReport(text);
       const mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
       setVisualEvidence(mappedEvidence);
+      const themeImage = which === "url" ? auditScreenshotRef.current : (images[0]?.dataUrl || images[0]?.url || null);
+      const adaptiveTheme = await extractBrandTheme(themeImage);
+      setReportTheme(adaptiveTheme);
       setRawReport(text);
       setReport(parsed);
       setSource(which === "url" ? { mode: "url", url: urlInput.trim() } : { mode: "files", url: "" });
@@ -3040,6 +3110,7 @@ export default function UxnestApp() {
     setAuditScreenshots([]);
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
+    setReportTheme(REPORT_THEME_FALLBACK);
     auditedPagesRef.current = [];
   }, []);
 
@@ -3170,6 +3241,7 @@ export default function UxnestApp() {
     setAuditScreenshot(null);
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
+    setReportTheme(REPORT_THEME_FALLBACK);
     setImages([]);
     setShowHistory(false);
   };
@@ -3380,10 +3452,10 @@ export default function UxnestApp() {
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (
-        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
+        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={reportTheme} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
       <SupportChat C={C} user={user} report={report} source={source} />
-      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} />
+      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={reportTheme} />
     </div>
   );
 }
