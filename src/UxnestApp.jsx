@@ -2852,20 +2852,24 @@ export default function UxnestApp() {
       .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
       .slice(0, 8);
     if (!allIssues.length) return [];
-    const visionScreenshot = await compressScreenshotForVision(screenshot);\n    const comma = visionScreenshot.indexOf(",");
+
+    const visionScreenshot = await compressScreenshotForVision(screenshot);
+    const comma = visionScreenshot.indexOf(",");
     if (comma < 0) return [];
-    const header = screenshot.slice(0, comma);
-    const base64 = screenshot.slice(comma + 1);
+    const header = visionScreenshot.slice(0, comma);
+    const base64 = visionScreenshot.slice(comma + 1);
     const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+
     try {
       setRunProgress((p) => ({ ...p, status: "Mapping visible findings to the live screenshot…" }));
       const data = await callClaude([{ role: "user", content: [
         { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
         { type: "text", text: buildVisualEvidencePrompt(allIssues) },
       ] }], undefined, 0, "visual-evidence");
-      const raw = (data.content || []).filter((block) => block.type === "text").map((block) => block.text).join("");
+      const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
       return parseVisualEvidence(raw, allIssues);
-    } catch {
+    } catch (err) {
+      console.warn("Visual evidence mapping failed", err);
       return [];
     }
   };
