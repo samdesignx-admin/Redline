@@ -225,38 +225,40 @@ Begin now for ${url}.`;
 // actually visible in the rendered screenshot. Coordinates are normalized so
 // they remain responsive in the report and PDF.
 function buildVisualEvidencePrompt(issues) {
-  const list = issues.map((issue, i) => `${i + 1}. [${issue.section}] ${issue.title} — ${issue.why}`).join("\n");
+  const list = issues.map((issue, i) => `Finding ${i + 1}: [${issue.section}] ${issue.title} — ${issue.why}`).join("\n");
   return `You are mapping UX findings to a screenshot of the audited website.
 
-Only annotate findings that are clearly visible in this screenshot. Do not invent locations for findings about hidden pages, source code, accessibility internals, or facts you cannot see.
+Only annotate a finding when the screenshot itself visibly supports it. Do not invent locations for hidden pages, source code, accessibility internals, or facts you cannot see.
 
-Return JSON only, using this exact schema:
+Return JSON only. Do not use markdown or commentary. Use this exact schema:
 [
   {
-    "issueTitle": "exact issue title from the list",
+    "findingIndex": 1,
     "x": 0,
     "y": 0,
     "w": 0,
     "h": 0,
-    "explanation": "Explain exactly what the highlighted area shows and why it supports the finding, max 28 words"
+    "explanation": "What is visible inside this highlighted area and why it supports Finding 1, max 28 words"
   }
 ]
 
-Coordinates are percentages of the full screenshot. x/y are top-left; w/h are box size. Keep values between 0 and 100. Return at most 6 objects, or [] if no finding can be located confidently.
+Coordinates are percentages of the full screenshot. x/y are top-left; w/h are box size. Keep all values between 0 and 100. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
 
 FINDINGS:
 ${list}`;
 }
 
-function parseVisualEvidence(raw, allowedTitles) {
+function parseVisualEvidence(raw, issues) {
   const text = String(raw || "").trim();
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) return [];
   try {
     const data = JSON.parse(match[0]);
     if (!Array.isArray(data)) return [];
-    const allowed = new Set(allowedTitles);
-    return data.filter((item) => item && allowed.has(String(item.issueTitle || ""))).map((item, index) => {
+    return data.map((item, index) => {
+      const findingIndex = Math.round(Number(item?.findingIndex));
+      const issue = issues[findingIndex - 1];
+      if (!issue) return null;
       const clamp = (value, fallback) => {
         const n = Number(value);
         return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
@@ -264,11 +266,40 @@ function parseVisualEvidence(raw, allowedTitles) {
       const x = clamp(item.x, 0), y = clamp(item.y, 0);
       const w = Math.max(2, Math.min(100 - x, clamp(item.w, 20)));
       const h = Math.max(2, Math.min(100 - y, clamp(item.h, 12)));
-      return { id: `${String(item.issueTitle).slice(0, 40)}-${index}`, issueTitle: String(item.issueTitle), x, y, w, h, explanation: String(item.explanation || "").trim().slice(0, 220) };
-    }).slice(0, 6);
+      const explanation = String(item.explanation || "").trim().slice(0, 220);
+      if (!explanation) return null;
+      return { id: `F-${findingIndex}-${index}`, issueTitle: issue.title, x, y, w, h, explanation };
+    }).filter(Boolean).slice(0, 6);
   } catch {
     return [];
   }
+}
+
+async function compressScreenshotForVision(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) return dataUrl;
+  if (typeof document === "undefined" || typeof Image === "undefined") return dataUrl;
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const maxWidth = 1600;
+        const maxHeight = 1800;
+        const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
 }
 
 /* ----------------------------------------------------------------------- */
@@ -2821,7 +2852,7 @@ export default function UxnestApp() {
       .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
       .slice(0, 8);
     if (!allIssues.length) return [];
-    const comma = screenshot.indexOf(",");
+    const visionScreenshot = await compressScreenshotForVision(screenshot);\n    const comma = visionScreenshot.indexOf(",");
     if (comma < 0) return [];
     const header = screenshot.slice(0, comma);
     const base64 = screenshot.slice(comma + 1);
@@ -2833,7 +2864,7 @@ export default function UxnestApp() {
         { type: "text", text: buildVisualEvidencePrompt(allIssues) },
       ] }], undefined, 0, "visual-evidence");
       const raw = (data.content || []).filter((block) => block.type === "text").map((block) => block.text).join("");
-      return parseVisualEvidence(raw, allIssues.map((issue) => issue.title));
+      return parseVisualEvidence(raw, allIssues);
     } catch {
       return [];
     }
