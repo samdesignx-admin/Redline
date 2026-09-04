@@ -6,6 +6,7 @@ export const maxDuration = 60;
 const MAX_HTML_BYTES = 1_500_000;
 const DIRECT_TIMEOUT_MS = 10_000;
 const RENDER_TIMEOUT_MS = 25_000;
+const READER_TIMEOUT_MS = 20_000;
 
 function isPrivateIp(address) {
   if (net.isIP(address) === 4) {
@@ -112,6 +113,45 @@ async function directFetch(target) {
   throw new Error("Too many redirects.");
 }
 
+async function readerFetch(target) {
+  // Final fallback for JS-heavy or bot-protected public sites. The target has
+  // already passed SSRF validation, and the Reader service returns extracted
+  // public page content rather than search snippets.
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = `https://r.jina.ai/${url}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), READER_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      headers: {
+        accept: "text/plain",
+        "x-engine": "browser",
+        "x-no-cache": "true",
+      },
+    });
+    if (!response.ok) throw new Error(`Reader fallback returned HTTP ${response.status}.`);
+    const markdown = (await response.text()).slice(0, MAX_HTML_BYTES);
+    const text = cleanText(markdown).slice(0, 10000);
+    const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim() || "";
+    const page = {
+      url,
+      title: heading,
+      description: "",
+      headings: heading ? [heading] : [],
+      buttons: [],
+      text,
+      links: [],
+      rendered: true,
+      reader: true,
+    };
+    if (!meaningful(page)) throw new Error("Reader fallback returned too little readable public content.");
+    return page;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function renderPage(target, wantScreenshot = false) {
   const token = process.env.BROWSERLESS_TOKEN;
   if (!token) throw new Error("Browser rendering is not configured in this deployment.");
@@ -207,7 +247,8 @@ export default async function handler(req, res) {
     catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
 
     // Critical: a blocked direct fetch (Cloudflare/WAF), sparse SPA shell, or
-    // non-meaningful HTML all use the browser fallback.
+    // non-meaningful HTML uses browser rendering first, then a reader fallback.
+    let renderError = null;
     if (!homepage || !meaningful(homepage)) {
       try {
         const rendered = await renderPage(normalized, true);
@@ -215,18 +256,35 @@ export default async function handler(req, res) {
         screenshot = rendered.screenshot;
         rendering = "browser-rendered";
       } catch (error) {
-        const reason = error instanceof Error ? error.message : "Browser rendering failed.";
-        return res.status(422).json({
-          code: "AUDIT_INSUFFICIENT_EVIDENCE",
-          evidenceStatus: "INSUFFICIENT",
-          reason: `UXNest could not retrieve enough rendered public content. Direct retrieval: ${directError || "sparse HTML"}. Browser fallback: ${reason}`,
-          pages: homepage ? [homepage.url] : [],
-        });
+        renderError = error instanceof Error ? error.message : "Browser rendering failed.";
+      }
+    }
+
+    // Some highly dynamic or bot-protected sites still expose an almost-empty
+    // DOM to generic renderers. Reader is a last-resort content extractor so a
+    // live public URL can still be audited when its readable content is there.
+    let readerError = null;
+    if (!homepage || !meaningful(homepage)) {
+      try {
+        homepage = await readerFetch(normalized);
+        rendering = "reader-fallback";
+      } catch (error) {
+        readerError = error instanceof Error ? error.message : "Reader fallback failed.";
       }
     }
 
     if (!homepage || !meaningful(homepage)) {
-      return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: "The website was reachable but did not expose enough rendered public content for a reliable audit.", pages: homepage ? [homepage.url] : [] });
+      const attempts = [
+        directError && `Direct retrieval: ${directError}`,
+        renderError && `Browser fallback: ${renderError}`,
+        readerError && `Reader fallback: ${readerError}`,
+      ].filter(Boolean).join(" ");
+      return res.status(422).json({
+        code: "AUDIT_INSUFFICIENT_EVIDENCE",
+        evidenceStatus: "INSUFFICIENT",
+        reason: attempts || "The website was reachable but did not expose enough rendered public content for a reliable audit.",
+        pages: homepage ? [homepage.url] : [],
+      });
     }
 
     const pages = [homepage];
