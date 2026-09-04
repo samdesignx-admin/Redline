@@ -1849,12 +1849,12 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       </div>
 
       {/* 3–8 — Section slides */}
-      <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
 
       {/* Pages reviewed — visual record of the URLs actually tested */}
       {hasScreenshots && (
