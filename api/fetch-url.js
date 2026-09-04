@@ -85,6 +85,22 @@ function meaningful(page) {
   return page.text.length >= 250 || page.headings.length >= 2 || page.description.length >= 40 || page.buttons.length >= 3;
 }
 
+
+function accessBlocked(page) {
+  const sample = [
+    page?.title,
+    page?.description,
+    ...(Array.isArray(page?.headings) ? page.headings : []),
+    page?.text,
+  ].filter(Boolean).join(" ").toLowerCase().slice(0, 4000);
+
+  return /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net)/i.test(sample);
+}
+
+function isAccessBlockError(message) {
+  return /http (401|403|429|451)\b|access denied|forbidden|permission|request blocked|bot|security check|edgesuite/i.test(String(message || ""));
+}
+
 async function directFetch(target) {
   let current = (await assertPublicUrl(target)).toString();
   for (let i = 0; i < 5; i++) {
@@ -249,7 +265,7 @@ export default async function handler(req, res) {
     // Critical: a blocked direct fetch (Cloudflare/WAF), sparse SPA shell, or
     // non-meaningful HTML uses browser rendering first, then a reader fallback.
     let renderError = null;
-    if (!homepage || !meaningful(homepage)) {
+    if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       try {
         const rendered = await renderPage(normalized, true);
         homepage = rendered.page;
@@ -264,7 +280,7 @@ export default async function handler(req, res) {
     // DOM to generic renderers. Reader is a last-resort content extractor so a
     // live public URL can still be audited when its readable content is there.
     let readerError = null;
-    if (!homepage || !meaningful(homepage)) {
+    if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       try {
         homepage = await readerFetch(normalized);
         rendering = "reader-fallback";
@@ -273,17 +289,21 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!homepage || !meaningful(homepage)) {
+    if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       const attempts = [
         directError && `Direct retrieval: ${directError}`,
         renderError && `Browser fallback: ${renderError}`,
         readerError && `Reader fallback: ${readerError}`,
       ].filter(Boolean).join(" ");
+      const blocked = [directError, renderError, readerError].some(isAccessBlockError) || accessBlocked(homepage);
       return res.status(422).json({
-        code: "AUDIT_INSUFFICIENT_EVIDENCE",
-        evidenceStatus: "INSUFFICIENT",
-        reason: attempts || "The website was reachable but did not expose enough rendered public content for a reliable audit.",
-        pages: homepage ? [homepage.url] : [],
+        code: blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE",
+        evidenceStatus: blocked ? "BLOCKED" : "INSUFFICIENT",
+        reason: blocked
+          ? "The website blocked UXNest's audit environment. This does not establish that the website is inaccessible to normal visitors."
+          : (attempts || "The website was reachable but did not expose enough rendered public content for a reliable audit."),
+        pages: homepage && !accessBlocked(homepage) ? [homepage.url] : [],
+        diagnostics: attempts || undefined,
       });
     }
 
