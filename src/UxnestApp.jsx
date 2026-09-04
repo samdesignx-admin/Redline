@@ -394,7 +394,7 @@ function parseVisualEvidence(raw, issues) {
       }
       const explanation = String(item.explanation || "").trim().slice(0, 220);
       if (!explanation) return null;
-      return { id: `F-${findingIndex}-${index}`, issueTitle: issue.title, cx, cy, radius, explanation };
+      return { id: `F-${findingIndex}-${index}`, findingIndex, issueTitle: issue.title, cx, cy, radius, explanation };
     }).filter(Boolean).slice(0, 6);
   } catch {
     return [];
@@ -1620,7 +1620,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
-  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (visualEvidence.length ? 1 : 0);
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
@@ -1829,6 +1829,76 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
   );
 }
 
+function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, issue, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
+  const severity = issue?.severity || "Medium";
+  const sev = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
+  const cx = Number.isFinite(Number(item.cx)) ? Number(item.cx) : 50;
+  const cy = Number.isFinite(Number(item.cy)) ? Number(item.cy) : 50;
+  const tight = Math.max(3, Math.min(6, Number(item.radius) || 4.5));
+
+  return (
+    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>
+        Evidence · Finding {index + 1}
+      </div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${27 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>
+        {item.issueTitle}
+      </h2>
+      <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.45fr 0.9fr", gap: "8mm", flex: 1, minHeight: 0 }}>
+        <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow }}>
+          <img
+            src={screenshot}
+            alt={`Focused evidence for finding ${index + 1}`}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: `${cx}% ${cy}%`, display: "block" }}
+          />
+          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(26, tight * 7)}mm`, height: `${Math.max(26, tight * 7)}mm`, transform: "translate(-50%, -50%)", border: `1mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.6mm rgba(255,255,255,.96), 0 2mm 7mm rgba(0,0,0,.24)", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: "-2mm", top: "-2mm", width: "9mm", height: "9mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.7mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "9pt", fontWeight: 800 }}>
+              {index + 1}
+            </span>
+          </div>
+          <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
+            ZOOMED EVIDENCE · TARGET CENTERED
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "4mm", minHeight: 0 }}>
+          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm" }}>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
+              <SevChip severity={severity} />
+            </div>
+            <div style={{ fontSize: "14pt", fontWeight: T.titleWeight || 800, lineHeight: 1.25, color: T.text }}>{item.issueTitle}</div>
+          </div>
+
+          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE CIRCLE POINTS TO</div>
+            <div style={{ fontSize: "10pt", lineHeight: 1.5, color: T.text }}>{item.explanation}</div>
+          </div>
+
+          {issue?.why && (
+            <div style={{ padding: "0 1mm" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.muted, marginBottom: "2mm" }}>WHY IT MATTERS</div>
+              <div style={{ fontSize: "9.5pt", lineHeight: 1.5, color: T.textDim }}>{issue.why}</div>
+            </div>
+          )}
+
+          {issue?.recommendation && (
+            <div style={{ marginTop: "auto", padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>RECOMMENDED IMPROVEMENT</div>
+              <div style={{ fontSize: "9.5pt", lineHeight: 1.5, color: T.text }}>{issue.recommendation}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
+    </div>
+  );
+}
+
 function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
   const T = theme || REPORT_THEME_FALLBACK;
@@ -1983,42 +2053,35 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
-      {/* 12 — Verdict & disclaimer */}
-
-      {auditScreenshot && visualEvidence.length > 0 && (
-        <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Evidence</div>
-          <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Visual Evidence</h2>
-          <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
-          <div style={{ display: "flex", gap: "8mm", flex: 1, minHeight: 0 }}>
-            <div style={{ flex: 1.45, position: "relative", borderRadius: "3mm", overflow: "hidden", border: "0.4mm solid " + C.border, background: C.surfaceAlt }}>
-              <img src={auditScreenshot} alt="Annotated audit evidence" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center" }} />
-              {visualEvidence.map((item, index) => {
-                const r = item.radius ?? Math.max(3, Math.min(7, Math.min(item.w || 12, item.h || 8) / 2));
-                const cx = item.cx ?? ((item.x || 0) + (item.w || 0) / 2);
-                const cy = item.cy ?? ((item.y || 0) + (item.h || 0) / 2);
-                return (
-                  <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "0.8mm solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 0.3mm rgba(255,255,255,0.9)" }}>
-                    <span style={{ position: "absolute", top: 0, left: 0, transform: "translate(-28%, -28%)", width: "7mm", height: "7mm", borderRadius: "50%", background: C.critical, color: "#fff", border: "0.6mm solid #fff", fontSize: "7pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3mm", overflow: "hidden" }}>
-              {visualEvidence.map((item, index) => (
-                <div key={item.id + "-deck"} style={{ display: "flex", gap: "3mm", padding: "3.8mm", background: "#FFFFFF", border: "0.3mm solid #E5DED4", borderRadius: "3mm", boxShadow: "0 1.5mm 4mm rgba(30,43,40,0.05)" }}>
-                  <span style={{ flexShrink: 0, width: "7mm", height: "7mm", borderRadius: "50%", background: C.critical, color: "#fff", fontSize: "7.5pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-                  <div>
-                    <div style={{ fontSize: "9.5pt", fontWeight: 800, color: C.dark, marginBottom: "1mm" }}>{item.issueTitle}</div>
-                    <div style={{ fontSize: "8.5pt", lineHeight: 1.35, color: C.textDim }}>{item.explanation}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
-        </div>
-      )}
+      {/* Focused visual evidence — one finding per slide so the UI is readable at presentation size */}
+      {auditScreenshot && visualEvidence.length > 0 && (() => {
+        const allIssues = [
+          ...(usability?.issues || []),
+          ...(visual?.issues || []),
+          ...(accessibility?.issues || []),
+          ...(trust?.issues || []),
+          ...(conversion?.issues || []),
+          ...(cognitive?.issues || []),
+        ];
+        return visualEvidence.map((item, index) => {
+          const issue = item.findingIndex
+            ? allIssues[item.findingIndex - 1]
+            : allIssues.find((candidate) => candidate.title === item.issueTitle);
+          return (
+            <EvidenceFocusSlide
+              key={item.id || index}
+              screenshot={auditScreenshot}
+              item={item}
+              index={index}
+              n={next()}
+              total={TOTAL}
+              sourceLabel={sourceLabel}
+              issue={issue}
+              theme={T}
+            />
+          );
+        });
+      })()}
 
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
         <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Decision</div>
