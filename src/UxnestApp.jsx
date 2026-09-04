@@ -37,7 +37,7 @@ const REPORT_THEME_FALLBACK = {
   mode: "brand-adaptive", confidence: "fallback", isDark: false,
   primary: "#176B5B", accent: "#C58A3A", background: "#FCFBF8", surface: "#FFFFFF",
   text: "#18211F", textDim: "#52605C", muted: "#77827E", border: "#E7E1D8", soft: "#EEF6F3",
-  coverStart: "#12302B", coverEnd: "#24584D", radius: 14,
+  coverStart: "#12302B", coverEnd: "#24584D", radius: 14, personality: "corporate", titleScale: 1, titleWeight: 800, letterSpacing: "-0.8pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.055)", ornament: "grid", density: "structured", descriptor: "UXNEST SYSTEM",
 };
 const clampTheme = (n, min, max) => Math.min(max, Math.max(min, n));
 const themeHex = (n) => clampTheme(Math.round(n), 0, 255).toString(16).padStart(2, "0");
@@ -55,39 +55,86 @@ function themeHslHex(h, s, l) {
   const q = h < 60 ? [c,x,0] : h < 120 ? [x,c,0] : h < 180 ? [0,c,x] : h < 240 ? [0,x,c] : h < 300 ? [x,0,c] : [c,0,x];
   return rgbHex(255 * (q[0] + m), 255 * (q[1] + m), 255 * (q[2] + m));
 }
+function classifyVisualPersonality({ avgLum, avgSat, paletteDiversity, edgeDensity, dominantHue }) {
+  if (avgSat >= 56 && paletteDiversity >= 7 && avgLum >= .42) return "playful";
+  if (avgSat >= 52 && edgeDensity >= .11) return "bold";
+  if (avgSat <= 28 && avgLum <= .56 && paletteDiversity <= 6) return "luxury";
+  if (edgeDensity <= .085 && avgLum >= .55 && paletteDiversity <= 7) return "minimal";
+  if (edgeDensity <= .115 && avgLum >= .5 && avgSat >= 24) return "rounded";
+  return "corporate";
+}
+
+function personalityTokens(personality) {
+  const map = {
+    minimal: { radius: 5, titleScale: .96, titleWeight: 700, letterSpacing: "-1.1pt", cardShadow: "none", ornament: "line", density: "airy", descriptor: "MINIMAL SYSTEM" },
+    bold: { radius: 6, titleScale: 1.14, titleWeight: 850, letterSpacing: "-1.7pt", cardShadow: "0 2.5mm 7mm rgba(0,0,0,.10)", ornament: "block", density: "assertive", descriptor: "BOLD SYSTEM" },
+    playful: { radius: 22, titleScale: 1.05, titleWeight: 800, letterSpacing: "-1.2pt", cardShadow: "0 2mm 7mm rgba(0,0,0,.08)", ornament: "bubble", density: "expressive", descriptor: "PLAYFUL SYSTEM" },
+    luxury: { radius: 3, titleScale: 1.0, titleWeight: 650, letterSpacing: ".15pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.07)", ornament: "frame", density: "editorial", descriptor: "LUXURY SYSTEM" },
+    rounded: { radius: 28, titleScale: 1.0, titleWeight: 750, letterSpacing: "-1.1pt", cardShadow: "0 2.5mm 8mm rgba(0,0,0,.07)", ornament: "blob", density: "soft", descriptor: "SOFT-ROUNDED SYSTEM" },
+    corporate: { radius: 9, titleScale: 1.0, titleWeight: 800, letterSpacing: "-.8pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.055)", ornament: "grid", density: "structured", descriptor: "CORPORATE SYSTEM" },
+  };
+  return map[personality] || map.corporate;
+}
+
 function extractBrandTheme(dataUrl) {
   return new Promise((resolve) => {
     if (!dataUrl || typeof window === "undefined") return resolve({ ...REPORT_THEME_FALLBACK });
     const img = new Image();
     img.onload = () => {
       try {
-        const max = 96, scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        const max = 120, scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
         const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale)), h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
         const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
         const ctx = canvas.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, w, h);
-        const px = ctx.getImageData(0, 0, w, h).data, bins = Array.from({ length: 36 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
-        let lum = 0, count = 0;
+        const image = ctx.getImageData(0, 0, w, h), px = image.data;
+        const hueBins = Array.from({ length: 36 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+        const paletteBins = new Set();
+        let lum = 0, satTotal = 0, count = 0, chromatic = 0, edgeSum = 0, edgeCount = 0;
+        const gray = new Float32Array(w * h);
+
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3];
+          gray[y * w + x] = a < 200 ? 255 : (.2126 * r + .7152 * g + .0722 * b);
+        }
+
         for (let i = 0; i < px.length; i += 16) {
           const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3]; if (a < 200) continue;
           const l = (.2126 * r + .7152 * g + .0722 * b) / 255; lum += l; count++;
-          const [hue, sat, light] = rgbToThemeHsl(r, g, b);
-          if (sat >= 20 && light >= 12 && light <= 90) { const weight = (sat / 100) * (.5 + Math.abs(light - 50) / 100), bin = bins[Math.floor(hue / 10) % 36];
-            bin.weight += weight; bin.r += r * weight; bin.g += g * weight; bin.b += b * weight; }
+          const [hue, sat, light] = rgbToThemeHsl(r, g, b); satTotal += sat;
+          paletteBins.add(Math.floor(r / 64) + "-" + Math.floor(g / 64) + "-" + Math.floor(b / 64));
+          if (sat >= 20 && light >= 12 && light <= 90) {
+            chromatic++;
+            const weight = (sat / 100) * (.5 + Math.abs(light - 50) / 100), bin = hueBins[Math.floor(hue / 10) % 36];
+            bin.weight += weight; bin.r += r * weight; bin.g += g * weight; bin.b += b * weight;
+          }
         }
-        const best = bins.reduce((a, b) => b.weight > a.weight ? b : a, bins[0]);
-        if (!count || !best.weight) return resolve({ ...REPORT_THEME_FALLBACK });
-        const [hue, sat] = rgbToThemeHsl(best.r / best.weight, best.g / best.weight, best.b / best.weight);
-        const isDark = lum / count < .42;
+        for (let y = 1; y < h - 1; y += 2) for (let x = 1; x < w - 1; x += 2) {
+          const c = gray[y * w + x], gx = Math.abs(gray[y * w + x + 1] - gray[y * w + x - 1]), gy = Math.abs(gray[(y + 1) * w + x] - gray[(y - 1) * w + x]);
+          if (c < 250 || gx + gy > 0) { edgeSum += Math.min(1, (gx + gy) / 120); edgeCount++; }
+        }
+
+        const best = hueBins.reduce((a, b) => b.weight > a.weight ? b : a, hueBins[0]);
+        if (!count) return resolve({ ...REPORT_THEME_FALLBACK });
+        const avgLum = lum / count, avgSat = satTotal / count, paletteDiversity = paletteBins.size;
+        const edgeDensity = edgeCount ? edgeSum / edgeCount : 0;
+        const fallbackHue = 164;
+        const [hue, sat] = best.weight ? rgbToThemeHsl(best.r / best.weight, best.g / best.weight, best.b / best.weight) : [fallbackHue, 42, 50];
+        const personality = classifyVisualPersonality({ avgLum, avgSat, paletteDiversity, edgeDensity, dominantHue: hue });
+        const tokens = personalityTokens(personality);
+        const isDark = avgLum < .42;
+
         resolve({
-          mode: "brand-adaptive", confidence: "image", isDark,
+          mode: "brand-adaptive", confidence: best.weight ? "image" : "fallback", isDark, personality,
+          ...tokens,
+          metrics: { avgLum: Number(avgLum.toFixed(3)), avgSat: Math.round(avgSat), paletteDiversity, edgeDensity: Number(edgeDensity.toFixed(3)), chromaticShare: Number((chromatic / count).toFixed(3)) },
           primary: themeHslHex(hue, clampTheme(Math.max(sat, 48), 48, 86), isDark ? 62 : 38),
-          accent: themeHslHex(hue + 28, clampTheme(Math.max(sat * .85, 42), 42, 78), isDark ? 68 : 46),
-          background: isDark ? themeHslHex(hue, 18, 10) : themeHslHex(hue, 18, 97),
+          accent: themeHslHex(hue + (personality === "playful" ? 42 : 28), clampTheme(Math.max(sat * .85, 42), 42, 78), isDark ? 68 : 46),
+          background: isDark ? themeHslHex(hue, 18, personality === "luxury" ? 8 : 10) : themeHslHex(hue, personality === "minimal" ? 10 : 18, personality === "luxury" ? 95 : 97),
           surface: isDark ? themeHslHex(hue, 14, 15) : "#FFFFFF",
           text: isDark ? "#F5F7F6" : "#18211F", textDim: isDark ? "#C4CDC9" : "#52605C", muted: isDark ? "#93A09B" : "#77827E",
-          border: isDark ? themeHslHex(hue, 12, 24) : themeHslHex(hue, 16, 88), soft: isDark ? themeHslHex(hue, 28, 18) : themeHslHex(hue, 45, 94),
-          coverStart: isDark ? themeHslHex(hue, 38, 10) : themeHslHex(hue, 48, 18), coverEnd: isDark ? themeHslHex(hue + 16, 42, 18) : themeHslHex(hue + 12, 55, 28),
-          radius: sat > 65 ? 18 : 10,
+          border: isDark ? themeHslHex(hue, 12, 24) : themeHslHex(hue, 16, 88), soft: isDark ? themeHslHex(hue, 28, 18) : themeHslHex(hue, personality === "minimal" ? 28 : 45, 94),
+          coverStart: isDark ? themeHslHex(hue, 38, personality === "luxury" ? 7 : 10) : themeHslHex(hue, personality === "luxury" ? 24 : 48, personality === "minimal" ? 16 : 18),
+          coverEnd: isDark ? themeHslHex(hue + 16, 42, 18) : themeHslHex(hue + 12, personality === "playful" ? 65 : 55, personality === "minimal" ? 26 : 28),
         });
       } catch { resolve({ ...REPORT_THEME_FALLBACK }); }
     };
