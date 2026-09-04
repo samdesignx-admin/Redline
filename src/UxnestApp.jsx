@@ -234,15 +234,14 @@ Return JSON only. Do not use markdown or commentary. Use this exact schema:
 [
   {
     "findingIndex": 1,
-    "x": 0,
-    "y": 0,
-    "w": 0,
-    "h": 0,
-    "explanation": "What is visible inside this highlighted area and why it supports Finding 1, max 28 words"
+    "cx": 0,
+    "cy": 0,
+    "radius": 0,
+    "explanation": "What is visible at this exact point and why it supports Finding 1, max 28 words"
   }
 ]
 
-Coordinates are percentages of the full screenshot. x/y are top-left; w/h are box size. Keep all values between 0 and 100. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
+Coordinates are percentages of the full screenshot. cx/cy are the focal point. radius is the radius as a percentage of screenshot width. Use a tight marker: normally radius 3–6, never more than 8. The goal is to point precisely at the relevant UI element, not circle an entire section. Keep all values between 0 and 100. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
 
 FINDINGS:
 ${list}`;
@@ -263,12 +262,27 @@ function parseVisualEvidence(raw, issues) {
         const n = Number(value);
         return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
       };
-      const x = clamp(item.x, 0), y = clamp(item.y, 0);
-      const w = Math.max(2, Math.min(100 - x, clamp(item.w, 20)));
-      const h = Math.max(2, Math.min(100 - y, clamp(item.h, 12)));
+      const hasFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
+      let cx;
+      let cy;
+      let radius;
+      if (hasFocalPoint) {
+        cx = clamp(item.cx, 50);
+        cy = clamp(item.cy, 50);
+        radius = Math.max(3, Math.min(8, clamp(item.radius, 5)));
+      } else {
+        // Backward compatibility with earlier x/y/w/h responses. Convert the
+        // broad box into a deliberately tight focal marker.
+        const x = clamp(item.x, 0), y = clamp(item.y, 0);
+        const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
+        const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
+        cx = Math.max(3, Math.min(97, x + w / 2));
+        cy = Math.max(3, Math.min(97, y + h / 2));
+        radius = Math.max(3, Math.min(7, Math.min(w, h) / 2));
+      }
       const explanation = String(item.explanation || "").trim().slice(0, 220);
       if (!explanation) return null;
-      return { id: `F-${findingIndex}-${index}`, issueTitle: issue.title, x, y, w, h, explanation };
+      return { id: `F-${findingIndex}-${index}`, issueTitle: issue.title, cx, cy, radius, explanation };
     }).filter(Boolean).slice(0, 6);
   } catch {
     return [];
@@ -1202,11 +1216,16 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
       <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 12 }}>Highlighted areas are mapped only where the finding is visible in the rendered page.</div>
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid " + C.border, background: C.surfaceAlt }}>
         <img src={screenshot} alt="Rendered website evidence" style={{ display: "block", width: "100%", height: "auto" }} />
-        {evidence.map((item, index) => (
-          <div key={item.id} style={{ position: "absolute", left: item.x + "%", top: item.y + "%", width: item.w + "%", height: item.h + "%", border: "3px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 9999px rgba(0,0,0,0.02)", pointerEvents: "none" }}>
-            <span style={{ position: "absolute", top: -13, left: -13, width: 26, height: 26, borderRadius: "50%", background: C.critical, color: "#fff", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-          </div>
-        ))}
+        {evidence.map((item, index) => {
+          const r = item.radius ?? Math.max(3, Math.min(7, Math.min(item.w || 12, item.h || 8) / 2));
+          const cx = item.cx ?? ((item.x || 0) + (item.w || 0) / 2);
+          const cy = item.cy ?? ((item.y || 0) + (item.h || 0) / 2);
+          return (
+            <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "3px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 1px rgba(255,255,255,0.8), 0 2px 10px rgba(128,36,25,0.22)", pointerEvents: "none" }}>
+              <span style={{ position: "absolute", top: 0, left: 0, transform: "translate(-30%, -30%)", width: 24, height: 24, borderRadius: "50%", background: C.critical, color: "#fff", border: "2px solid #fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>{index + 1}</span>
+            </div>
+          );
+        })}
       </div>
       <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
         {evidence.map((item, index) => (
@@ -1836,11 +1855,16 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           <div style={{ display: "flex", gap: "8mm", flex: 1, minHeight: 0 }}>
             <div style={{ flex: 1.45, position: "relative", borderRadius: "3mm", overflow: "hidden", border: "0.4mm solid " + C.border, background: C.surfaceAlt }}>
               <img src={auditScreenshot} alt="Annotated audit evidence" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center" }} />
-              {visualEvidence.map((item, index) => (
-                <div key={item.id} style={{ position: "absolute", left: item.x + "%", top: item.y + "%", width: item.w + "%", height: item.h + "%", border: "0.8mm solid " + C.critical, borderRadius: "50%" }}>
-                  <span style={{ position: "absolute", top: "-4mm", left: "-4mm", width: "8mm", height: "8mm", borderRadius: "50%", background: C.critical, color: "#fff", fontSize: "8pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
-                </div>
-              ))}
+              {visualEvidence.map((item, index) => {
+                const r = item.radius ?? Math.max(3, Math.min(7, Math.min(item.w || 12, item.h || 8) / 2));
+                const cx = item.cx ?? ((item.x || 0) + (item.w || 0) / 2);
+                const cy = item.cy ?? ((item.y || 0) + (item.h || 0) / 2);
+                return (
+                  <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "0.8mm solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 0.3mm rgba(255,255,255,0.9)" }}>
+                    <span style={{ position: "absolute", top: 0, left: 0, transform: "translate(-28%, -28%)", width: "7mm", height: "7mm", borderRadius: "50%", background: C.critical, color: "#fff", border: "0.6mm solid #fff", fontSize: "7pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+                  </div>
+                );
+              })}
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3mm", overflow: "hidden" }}>
               {visualEvidence.map((item, index) => (
