@@ -22,7 +22,7 @@ import {
   Zap, FileText, Stamp, Navigation as NavIcon, Palette,
   Accessibility as A11yIcon, TrendingUp, Brain, Rocket,
   Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
-  ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
+  ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft, EyeOff,
   FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
 } from "lucide-react";
 
@@ -564,6 +564,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
   const [mobile, setMobile] = useState("");
   const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState("form");       // form | verify
@@ -754,7 +755,24 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       {mode === "signup" && (
         <input type="tel" placeholder="Mobile number (optional)" value={mobile} onChange={(e) => setMobile(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
       )}
-      <input type="password" placeholder="Password (min 6 characters)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
+      <div style={{ position: "relative", marginTop: 10 }}>
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Password (min 6 characters)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={{ ...inputStyle, paddingRight: 46 }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((visible) => !visible)}
+          aria-label={showPassword ? "Hide password" : "Show password"}
+          title={showPassword ? "Hide password" : "Show password"}
+          style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "transparent", color: C.muted, cursor: "pointer", borderRadius: 7 }}
+        >
+          {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      </div>
 
       {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
 
@@ -1628,14 +1646,14 @@ ${auditedPages.length ? `<section class="slide">
 const SLIDE = {
   page: {
     width: "296mm", height: "166mm", boxSizing: "border-box", padding: "14mm 16mm",
-    background: C.goldSoft, color: C.text, pageBreakAfter: "always", position: "relative",
+    background: "#FCFBF8", color: C.text, pageBreakAfter: "always", position: "relative",
     fontFamily: "'Plus Jakarta Sans', sans-serif", overflow: "hidden", display: "flex", flexDirection: "column",
-    border: `1.2mm solid ${C.gold}`,
+    border: "0.3mm solid #E7E1D8", boxShadow: "inset 0 3mm 0 #F3EEE5",
   },
-  kicker: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "10pt", letterSpacing: 2, color: C.gold, marginBottom: "3mm", textTransform: "uppercase" },
-  title: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "26pt", margin: "0 0 3mm 0", color: C.dark, letterSpacing: "-0.5pt" },
-  rule: { width: "26mm", height: "1.2mm", background: C.gold, borderRadius: 99, marginBottom: "6mm" },
-  footer: { position: "absolute", bottom: "8mm", left: "16mm", right: "16mm", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", color: C.muted },
+  kicker: { display: "inline-flex", alignSelf: "flex-start", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, fontSize: "8pt", letterSpacing: 1.4, color: C.gold, background: C.goldSoft, border: `0.3mm solid ${C.gold}33`, borderRadius: 99, padding: "1.3mm 3mm", marginBottom: "3.5mm", textTransform: "uppercase" },
+  title: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "28pt", margin: "0 0 3.5mm 0", color: C.dark, letterSpacing: "-0.8pt", lineHeight: 1.05 },
+  rule: { width: "30mm", height: "1mm", background: `linear-gradient(90deg, ${C.gold}, ${C.now})`, borderRadius: 99, marginBottom: "6mm" },
+  footer: { position: "absolute", bottom: "7mm", left: "16mm", right: "16mm", paddingTop: "3mm", borderTop: "0.25mm solid #E8E2D9", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 0.35, color: C.muted },
 };
 
 function SlideIconBadge({ icon: Icon, size = 14 }) {
@@ -1674,7 +1692,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
         {issues.map((iss, i) => (
-          <div key={i} style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm" }}>
+          <div key={i} style={{ flex: 1, background: "#FFFFFF", border: "0.3mm solid #E5DED4", borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: "3.5mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
               <div style={{ fontWeight: 800, fontSize: "12pt", lineHeight: 1.25, color: C.dark }}>{iss.title}</div>
               <SevChip severity={iss.severity} />
@@ -1711,17 +1729,23 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   return (
     <div>
       {/* 1 — Title */}
-      <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-        <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }}>
-          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2 }}>Senior UX Review</div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 56, lineHeight: 1.05, color: C.dark, whiteSpace: "nowrap" }}>Nest Audit Report</div>
-          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 18, lineHeight: 1.3, color: C.textDim }}>{sourceLabel}</div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, lineHeight: 1, marginTop: 12 }}>
-            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 96, lineHeight: 0.9, color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
-            <span style={{ fontSize: 22, lineHeight: 1.1, color: C.muted, whiteSpace: "nowrap" }}>/100 · {summary.assessment ?? "Unrated"}</span>
+      <div className="deck-slide" style={{ ...SLIDE.page, background: `linear-gradient(135deg, ${C.dark} 0%, #173D36 62%, #24584D 100%)`, color: "#FFFFFF", border: "none", boxShadow: "none", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+        <div style={{ position: "absolute", width: "110mm", height: "110mm", borderRadius: "50%", border: "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm" }} />
+        <div style={{ position: "absolute", width: "70mm", height: "70mm", borderRadius: "50%", background: "rgba(255,255,255,0.035)", left: "-18mm", bottom: "-22mm" }} />
+        <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
+          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 58, lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: "-1.5pt" }}>UXNest Audit Report</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, lineHeight: 1.3, color: "#BFD8D2", maxWidth: "190mm", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</div>
+          <div style={{ marginTop: 10, padding: "8mm 13mm", minWidth: "92mm", borderRadius: "5mm", background: "rgba(255,255,255,0.08)", border: "0.35mm solid rgba(255,255,255,0.16)", backdropFilter: "blur(6px)" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1.3, color: "#9CCFC5", marginBottom: "2mm" }}>OVERALL UX SCORE</div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 10, lineHeight: 1 }}>
+              <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 92, lineHeight: 0.9, color: "#FFFFFF" }}>{summary.score ?? "—"}</span>
+              <span style={{ fontSize: 18, color: "#BFD8D2", whiteSpace: "nowrap" }}>/100</span>
+            </div>
+            <div style={{ marginTop: "3mm", fontSize: 12, fontWeight: 700, color: scoreColor(summary.score ?? 0), textTransform: "uppercase", letterSpacing: 0.8 }}>{summary.assessment ?? "Unrated"}</div>
           </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <div style={{ ...SLIDE.footer, color: "#9CCFC5", borderTopColor: "rgba(255,255,255,0.12)" }}><span>UXNEST · {sourceLabel}</span><span>{next()} / {TOTAL}</span></div>
       </div>
 
       {/* 2 — Executive Summary */}
@@ -1774,7 +1798,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           <div style={{ fontSize: "10pt", color: C.textDim, marginBottom: "5mm" }}>Visual snapshots of the live pages UXNest retrieved and used as evidence for this audit.</div>
           <div style={{ display: "grid", gridTemplateColumns: (auditScreenshots.length || 1) > 1 ? "1fr 1fr" : "1fr", gap: "6mm", flex: 1, alignContent: "start" }}>
             {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
-              <div key={item.url || index} style={{ border: "0.4mm solid " + C.border, borderRadius: "3mm", overflow: "hidden", background: "#FFFFFF" }}>
+              <div key={item.url || index} style={{ border: "0.3mm solid #E5DED4", borderRadius: "4mm", overflow: "hidden", background: "#FFFFFF", boxShadow: "0 2mm 6mm rgba(30,43,40,0.06)" }}>
                 <div style={{ height: "82mm", background: C.surfaceAlt, display: "flex", alignItems: "flex-start", justifyContent: "center", overflow: "hidden" }}>
                   <img src={item.screenshot} alt={"Audited page " + (index + 1)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }} />
                 </div>
@@ -1868,7 +1892,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3mm", overflow: "hidden" }}>
               {visualEvidence.map((item, index) => (
-                <div key={item.id + "-deck"} style={{ display: "flex", gap: "3mm", padding: "3.5mm", background: "#FFFFFF", border: "0.35mm solid " + C.border, borderRadius: "2.5mm" }}>
+                <div key={item.id + "-deck"} style={{ display: "flex", gap: "3mm", padding: "3.8mm", background: "#FFFFFF", border: "0.3mm solid #E5DED4", borderRadius: "3mm", boxShadow: "0 1.5mm 4mm rgba(30,43,40,0.05)" }}>
                   <span style={{ flexShrink: 0, width: "7mm", height: "7mm", borderRadius: "50%", background: C.critical, color: "#fff", fontSize: "7.5pt", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
                   <div>
                     <div style={{ fontSize: "9.5pt", fontWeight: 800, color: C.dark, marginBottom: "1mm" }}>{item.issueTitle}</div>
