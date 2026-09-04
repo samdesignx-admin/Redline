@@ -204,6 +204,65 @@ async function renderPage(target, wantScreenshot = false) {
   } finally { clearTimeout(timer); }
 }
 
+
+async function captureMicrolinkScreenshot(target) {
+  // Independent browser network fallback. This is intentionally server-side so
+  // the visual capture can be converted to a bounded data URL for the existing
+  // Claude vision + PDF pipeline. Microlink accepts unauthenticated test
+  // traffic, while production deployments can provide MICROLINK_API_KEY.
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://api.microlink.io/");
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("screenshot", "true");
+  endpoint.searchParams.set("screenshot.fullPage", "true");
+  endpoint.searchParams.set("screenshot.type", "jpeg");
+  endpoint.searchParams.set("meta", "false");
+  endpoint.searchParams.set("filter", "screenshot");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 22_000);
+  try {
+    const headers = { accept: "application/json" };
+    if (process.env.MICROLINK_API_KEY) headers["x-api-key"] = process.env.MICROLINK_API_KEY;
+    const response = await fetch(endpoint, { headers, signal: controller.signal });
+    if (!response.ok) throw new Error(`Visual browser fallback returned HTTP ${response.status}.`);
+    const payload = await response.json();
+    const assetUrl = payload?.data?.screenshot?.url;
+    if (!assetUrl || !/^https:\/\//i.test(assetUrl)) throw new Error("Visual browser fallback returned no screenshot asset.");
+    const imageResponse = await fetch(assetUrl, { signal: controller.signal });
+    if (!imageResponse.ok) throw new Error(`Screenshot asset returned HTTP ${imageResponse.status}.`);
+    const bytes = Buffer.from(await imageResponse.arrayBuffer());
+    if (!bytes.length || bytes.length > 3_500_000) throw new Error("Visual screenshot was empty or too large.");
+    const type = /image\/(png|webp|jpeg)/i.test(imageResponse.headers.get("content-type") || "")
+      ? imageResponse.headers.get("content-type").split(";")[0]
+      : "image/jpeg";
+    return `data:${type};base64,${bytes.toString("base64")}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function captureVisualFallback(target) {
+  // Prefer the configured Browserless account. If that environment is blocked
+  // or not configured, use an independent real-browser capture network.
+  const diagnostics = [];
+  try {
+    const screenshot = await captureScreenshot(target);
+    if (screenshot) return { screenshot, provider: "browserless", diagnostics };
+    diagnostics.push("Configured browser screenshot returned no image.");
+  } catch (error) {
+    diagnostics.push(error instanceof Error ? error.message : "Configured browser screenshot failed.");
+  }
+  try {
+    const screenshot = await captureMicrolinkScreenshot(target);
+    if (screenshot) return { screenshot, provider: "visual-browser-fallback", diagnostics };
+    diagnostics.push("Visual browser fallback returned no image.");
+  } catch (error) {
+    diagnostics.push(error instanceof Error ? error.message : "Visual browser fallback failed.");
+  }
+  return { screenshot: null, provider: null, diagnostics };
+}
+
 async function captureScreenshot(target) {
   const token = process.env.BROWSERLESS_TOKEN;
   if (!token) return null;
@@ -296,6 +355,28 @@ export default async function handler(req, res) {
         readerError && `Reader fallback: ${readerError}`,
       ].filter(Boolean).join(" ");
       const blocked = [directError, renderError, readerError].some(isAccessBlockError) || accessBlocked(homepage);
+
+      // Environment access failure is not a UX failure. Before giving up,
+      // attempt an independent browser screenshot. A successful visual capture
+      // is enough to run a screenshot-based UX audit without pretending we
+      // recovered structured website content.
+      if (blocked) {
+        const visual = await captureVisualFallback(normalized);
+        if (visual.screenshot) {
+          return res.status(200).json({
+            code: "AUDIT_VISUAL_EVIDENCE",
+            evidenceStatus: "VISUAL_ONLY",
+            rendering: visual.provider,
+            reason: "Text retrieval was blocked, but UXNest captured the rendered public page through an independent browser environment.",
+            pages: [normalized],
+            dossier: "",
+            screenshot: visual.screenshot,
+            screenshots: [{ url: normalized, screenshot: visual.screenshot }],
+            diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" "),
+          });
+        }
+      }
+
       return res.status(422).json({
         code: blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE",
         evidenceStatus: blocked ? "BLOCKED" : "INSUFFICIENT",
