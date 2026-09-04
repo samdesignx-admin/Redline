@@ -46,6 +46,20 @@ function parseNumberedList(text) {
     .filter(Boolean);
 }
 
+function parseFlexibleList(text) {
+  if (!text) return [];
+  const lines = stripDashLines(text).split("\n").map((l) => l.trim());
+  const numbered = lines
+    .filter((l) => /^\d+[\.\)]\s*/.test(l))
+    .map((l) => l.replace(/^\d+[\.\)]\s*/, "").trim())
+    .filter(Boolean);
+  if (numbered.length) return numbered;
+  return lines
+    .filter((l) => /^[-*•]\s*/.test(l))
+    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+    .filter(Boolean);
+}
+
 function parseDashList(text) {
   if (!text) return [];
   return stripDashLines(text)
@@ -75,8 +89,8 @@ function parseSummary(block) {
     intro: content.slice(0, introEnd).replace(/Overall UX Score:.*$/im, "").replace(/Overall Assessment:.*$/im, "").trim(),
     score: scoreM ? Number(scoreM[1]) : null,
     assessment: assessM ? assessM[1] : null,
-    strengths: parseNumberedList(strengthsText),
-    concerns: parseNumberedList(concernsText),
+    strengths: parseFlexibleList(strengthsText),
+    concerns: parseFlexibleList(concernsText),
   };
 }
 
@@ -156,8 +170,8 @@ function parseReport(rawText) {
     cognitive: parseIssues(find("cognitive load")),
     aiRecommendations: stripDashLines(find("ai recommendations")),
     top10: parseTop10(find("top 10")),
-    quickWins: parseDashList(find("quick wins")),
-    strategic: parseDashList(find("strategic improvements")),
+    quickWins: parseFlexibleList(find("quick wins")),
+    strategic: parseFlexibleList(find("strategic improvements")),
     scorecard: parseScorecard(find("final scorecard")),
   });
 }
@@ -187,6 +201,6 @@ function buildPlainTextSummary(report, source, saved) {
 
 
 export {
-  stripDashLines, parseIssues, parseNumberedList, parseDashList, parseSummary,
+  stripDashLines, parseIssues, parseNumberedList, parseDashList, parseFlexibleList, parseSummary,
   parseTop10, parseScorecard, normalizeReportText, parseReport, buildPlainTextSummary,
 };
