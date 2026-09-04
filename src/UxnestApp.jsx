@@ -262,6 +262,26 @@ ${batchSections}
 Begin now.`;
 }
 
+function buildVisualUrlBatchPrompt(url, batchSections) {
+  return `You are a Senior UX Design Director with 20 years of experience reviewing digital products.
+
+You are auditing a rendered screenshot captured from the live public page at ${url}. UXNest's text retrieval environment was blocked, so the attached screenshot is the only reliable evidence for this audit.
+
+Analyze ONLY what is visibly present in the screenshot. Do not claim the website is down, inaccessible to users, or broken merely because UXNest's text crawler was blocked. Do not invent hidden pages, DOM structure, source-code issues, keyboard behavior, screen-reader behavior, or contrast measurements you cannot directly verify from the image.
+
+The resulting score is a screenshot-evidence UX assessment of the captured page, not a claim about the entire website beyond what is visible.
+
+Evaluate visible layout, hierarchy, typography, clarity, navigation cues, calls to action, information density, perceived trust, visual consistency, and apparent friction. For Accessibility, discuss only visibly assessable concerns and clearly avoid claims about hidden implementation.
+
+${SHARED_RULES}
+
+Sections to write:
+
+${batchSections}
+
+Begin now.`;
+}
+
 function buildPreviewPrompt(url) {
   return `You are a Senior UX Design Director. Use web search to open ${url} once and skim it. Be fast — a single fetch is enough.
 
@@ -3032,7 +3052,8 @@ export default function UxnestApp() {
     });
     const evidence = await response.json().catch(() => ({}));
 
-    if (!response.ok || evidence.evidenceStatus !== "SUFFICIENT") {
+    const visualOnly = response.ok && evidence.evidenceStatus === "VISUAL_ONLY";
+    if (!response.ok || (evidence.evidenceStatus !== "SUFFICIENT" && !visualOnly)) {
       const blocked = evidence.code === "AUDIT_ENVIRONMENT_BLOCKED" || evidence.evidenceStatus === "BLOCKED";
       const err = new Error(blocked
         ? "UXNest's audit environment was blocked by this website."
@@ -3048,17 +3069,10 @@ export default function UxnestApp() {
       : [];
     const dossier = String(evidence.dossier || "").trim();
 
-    if (!dossier || dossier.length < 100 || pages.length === 0) {
-      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
-      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
-      err.evidenceReason = "No meaningful public page content was returned.";
-      throw err;
-    }
-
-    // Keep the exact URLs that were actually retrieved. These are shown in the
-    // report and slide deck and are also persisted with the saved audit.
-    auditedPagesRef.current = pages;
-    setAuditedPages(pages);
+    // Keep the exact URLs that were actually retrieved or visually captured.
+    // These are shown in the report and slide deck and are also persisted.
+    auditedPagesRef.current = pages.length ? pages : [cleanUrl];
+    setAuditedPages(auditedPagesRef.current);
     const capturedScreenshots = Array.isArray(evidence.screenshots)
       ? evidence.screenshots.filter((item) => item && /^https?:\/\//i.test(String(item.url || "")) && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
       : [];
@@ -3066,7 +3080,33 @@ export default function UxnestApp() {
     auditScreenshotRef.current = primaryScreenshot;
     setAuditScreenshot(primaryScreenshot);
     setAuditScreenshots(capturedScreenshots);
-    setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
+
+    if (visualOnly) {
+      if (!primaryScreenshot) {
+        const err = new Error("UXNest captured no usable visual evidence for this page.");
+        err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+        err.evidenceReason = "The visual browser fallback did not return an image.";
+        throw err;
+      }
+      setRunProgress((p) => ({ ...p, status: "Analyzing the rendered page visually…", done: 1 }));
+      const visionScreenshot = await compressScreenshotForVision(primaryScreenshot);
+      const comma = visionScreenshot.indexOf(",");
+      if (comma < 0) throw new Error("The visual capture could not be prepared for analysis.");
+      const header = visionScreenshot.slice(0, comma);
+      const base64 = visionScreenshot.slice(comma + 1);
+      const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+      const visualContent = [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }];
+      return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1);
+    }
+
+    if (!dossier || dossier.length < 100 || pages.length === 0) {
+      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = "No meaningful public page content was returned.";
+      throw err;
+    }
+
+    setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser-rendered" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
 
     // Stage 2: batches consume deterministic retrieved evidence as plain text.
     return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
