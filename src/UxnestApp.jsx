@@ -1768,9 +1768,9 @@ const SLIDE = {
   footer: { position: "absolute", bottom: "7mm", left: "16mm", right: "16mm", paddingTop: "3mm", borderTop: "0.25mm solid #E8E2D9", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 0.35, color: C.muted },
 };
 
-function SlideIconBadge({ icon: Icon, size = 14 }) {
+function SlideIconBadge({ icon: Icon, size = 14, theme = REPORT_THEME_FALLBACK }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "9mm", height: "9mm", borderRadius: "50%", background: C.gold, flexShrink: 0 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "9mm", height: "9mm", borderRadius: `${Math.max(8, Math.min(theme.radius || 14, 24))}px`, background: theme.primary || C.gold, flexShrink: 0 }}>
       <Icon size={size} color="#FFFFFF" />
     </span>
   );
@@ -1799,26 +1799,26 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
   const issues = data.issues.slice(0, 3);
   return (
     <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Findings</div>
-      <h2 style={{ ...SLIDE.title, color: T.text }}>{title}</h2>
-      <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Findings</div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>{title}</h2>
+      <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
         {issues.map((iss, i) => (
-          <div key={i} style={{ flex: 1, background: "#FFFFFF", border: "0.3mm solid #E5DED4", borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: "3.5mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: "0 2mm 6mm rgba(30,43,40,0.05)" }}>
+          <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
-              <div style={{ fontWeight: 800, fontSize: "12pt", lineHeight: 1.25, color: C.dark }}>{iss.title}</div>
+              <div style={{ fontWeight: 800, fontSize: `${12 * (T.titleScale || 1)}pt`, lineHeight: 1.25, color: T.text }}>{iss.title}</div>
               <SevChip severity={iss.severity} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
+              <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
+              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: T.textDim }}>{iss.why}</div>
             </div>
-            <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${C.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
-              <SlideIconBadge icon={Check} size={12} />
+            <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${T.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
+              <SlideIconBadge icon={Check} size={12} theme={T} />
               <div>
-                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.gold, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
-                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
+                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.primary, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
+                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: T.text }}>{iss.recommendation}</div>
               </div>
             </div>
           </div>
@@ -1844,13 +1844,13 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
     <div>
       {/* 1 — Title */}
       <div className="deck-slide" style={{ ...SLIDE.page, background: `linear-gradient(135deg, ${T.coverStart} 0%, ${T.coverEnd} 100%)`, color: "#FFFFFF", border: "none", boxShadow: "none", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-        <div style={{ position: "absolute", width: "110mm", height: "110mm", borderRadius: "50%", border: "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm" }} />
-        <div style={{ position: "absolute", width: "70mm", height: "70mm", borderRadius: "50%", background: "rgba(255,255,255,0.035)", left: "-18mm", bottom: "-22mm" }} />
+        <div style={{ position: "absolute", width: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "96mm", height: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "62mm", borderRadius: T.ornament === "block" ? "8mm" : T.ornament === "frame" ? "0" : "50%", border: T.ornament === "line" ? "0.5mm solid rgba(255,255,255,0.13)" : "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm", transform: T.ornament === "block" ? "rotate(14deg)" : "none" }} />
+        <div style={{ position: "absolute", width: T.ornament === "grid" ? "74mm" : "70mm", height: T.ornament === "grid" ? "74mm" : "70mm", borderRadius: T.ornament === "block" ? "7mm" : T.ornament === "frame" ? "0" : "50%", background: T.ornament === "line" ? "transparent" : "rgba(255,255,255,0.035)", border: T.ornament === "grid" ? "0.5mm solid rgba(255,255,255,0.07)" : "none", left: "-18mm", bottom: "-22mm" }} />
         <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
-          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review</div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 58, lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: "-1.5pt" }}>UXNest Audit Report</div>
+          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review · {T.descriptor || "ADAPTIVE SYSTEM"}</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: T.titleWeight || 800, fontSize: 58 * (T.titleScale || 1), lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: T.letterSpacing || "-1.5pt" }}>UXNest Audit Report</div>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, lineHeight: 1.3, color: "#BFD8D2", maxWidth: "190mm", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</div>
-          <div style={{ marginTop: 10, padding: "8mm 13mm", minWidth: "92mm", borderRadius: "5mm", background: "rgba(255,255,255,0.08)", border: "0.35mm solid rgba(255,255,255,0.16)", backdropFilter: "blur(6px)" }}>
+          <div style={{ marginTop: 10, padding: "8mm 13mm", minWidth: "92mm", borderRadius: `${T.radius || 14}px`, background: "rgba(255,255,255,0.08)", border: "0.35mm solid rgba(255,255,255,0.16)", backdropFilter: "blur(6px)" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1.3, color: "#9CCFC5", marginBottom: "2mm" }}>OVERALL UX SCORE</div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 10, lineHeight: 1 }}>
               <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 92, lineHeight: 0.9, color: "#FFFFFF" }}>{summary.score ?? "—"}</span>
@@ -1864,9 +1864,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {/* 2 — Executive Summary */}
       <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Overview</div>
-        <h2 style={{ ...SLIDE.title, color: T.text }}>Executive Summary</h2>
-        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Overview</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Executive Summary</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 5mm 0" }}>{summary.intro}</p>
         {source?.mode === "url" && (
           <div style={{ background: C.surfaceAlt, border: `0.35mm solid ${C.border}`, borderRadius: "2.5mm", padding: "3.5mm 4mm", marginBottom: "5mm", maxWidth: "240mm" }}>
@@ -1906,9 +1906,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       {/* Pages reviewed — visual record of the URLs actually tested */}
       {hasScreenshots && (
         <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Audit Coverage</div>
-          <h2 style={{ ...SLIDE.title, color: T.text }}>Pages Reviewed</h2>
-          <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Audit Coverage</div>
+          <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Pages Reviewed</h2>
+          <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
           <div style={{ fontSize: "10pt", color: C.textDim, marginBottom: "5mm" }}>Visual snapshots of the live pages UXNest retrieved and used as evidence for this audit.</div>
           <div style={{ display: "grid", gridTemplateColumns: (auditScreenshots.length || 1) > 1 ? "1fr 1fr" : "1fr", gap: "6mm", flex: 1, alignContent: "start" }}>
             {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
@@ -1928,9 +1928,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {/* 9 — Top 10 */}
       <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Priorities</div>
-        <h2 style={{ ...SLIDE.title, color: T.text }}>Top 10 Improvements</h2>
-        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Priorities</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Top 10 Improvements</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3mm 8mm", flex: 1, alignContent: "start" }}>
           {top10.slice(0, 10).map((t) => (
             <div key={t.rank} style={{ display: "flex", gap: "3mm", alignItems: "baseline", borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: "2.5mm" }}>
@@ -1944,9 +1944,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {/* 10 — Roadmap */}
       <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Roadmap</div>
-        <h2 style={{ ...SLIDE.title, color: T.text }}>Quick Wins vs. Strategic Bets</h2>
-        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Roadmap</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Quick Wins vs. Strategic Bets</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
           <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>QUICK WINS · UNDER A DAY</div>
@@ -1966,9 +1966,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {/* 11 — Scorecard */}
       <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Scorecard</div>
-        <h2 style={{ ...SLIDE.title, color: T.text }}>Final Scores</h2>
-        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Scorecard</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Final Scores</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "5mm", maxWidth: "230mm" }}>
           {[["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]].map(([label, v]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "5mm" }}>
@@ -1987,9 +1987,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
 
       {auditScreenshot && visualEvidence.length > 0 && (
         <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Evidence</div>
-          <h2 style={{ ...SLIDE.title, color: T.text }}>Visual Evidence</h2>
-          <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Evidence</div>
+          <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Visual Evidence</h2>
+          <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
           <div style={{ display: "flex", gap: "8mm", flex: 1, minHeight: 0 }}>
             <div style={{ flex: 1.45, position: "relative", borderRadius: "3mm", overflow: "hidden", border: "0.4mm solid " + C.border, background: C.surfaceAlt }}>
               <img src={auditScreenshot} alt="Annotated audit evidence" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center" }} />
@@ -2021,9 +2021,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       )}
 
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
-        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Decision</div>
-        <h2 style={{ ...SLIDE.title, color: T.text }}>Final Verdict</h2>
-        <div style={{ ...SLIDE.rule, background: `linear-gradient(90deg, ${T.primary}, ${T.accent})` }} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Decision</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Final Verdict</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <p style={{ fontSize: "13pt", lineHeight: 1.6, color: C.text, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{scorecard.verdict || "—"}</p>
         {aiRecommendations && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm", maxWidth: "230mm" }}>
@@ -2064,7 +2064,7 @@ function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null,
   return (
     <div style={{ position: "fixed", inset: 0, background: theme.coverStart, zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
       <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: theme.coverStart, backdropFilter: "blur(4px)" }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#E8F0ED" }}>BRAND-ADAPTIVE · {theme.confidence === "image" ? "STYLE EXTRACTED FROM AUDITED SCREEN" : "UXNEST FALLBACK"} · PINCH OR ROTATE TO ZOOM</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#E8F0ED" }}>BRAND-ADAPTIVE · {theme.personality || "corporate"} · {theme.confidence === "image" ? "STYLE EXTRACTED FROM AUDITED SCREEN" : "UXNEST FALLBACK"} · PINCH OR ROTATE TO ZOOM</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Print / Save PDF
