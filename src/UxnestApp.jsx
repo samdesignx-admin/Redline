@@ -3033,9 +3033,13 @@ export default function UxnestApp() {
     const evidence = await response.json().catch(() => ({}));
 
     if (!response.ok || evidence.evidenceStatus !== "SUFFICIENT") {
-      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
-      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      const blocked = evidence.code === "AUDIT_ENVIRONMENT_BLOCKED" || evidence.evidenceStatus === "BLOCKED";
+      const err = new Error(blocked
+        ? "UXNest's audit environment was blocked by this website."
+        : "UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE";
       err.evidenceReason = evidence.reason || evidence.error || "The website could not be retrieved.";
+      err.evidenceDiagnostics = evidence.diagnostics || "";
       throw err;
     }
 
@@ -3163,6 +3167,8 @@ export default function UxnestApp() {
         setError(null); // user chose to stop; no error banner needed
       } else if (msg === "DEADLINE") {
         setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
+      } else if (e && e.code === "AUDIT_ENVIRONMENT_BLOCKED") {
+        setError("⚠️ Audit incomplete — this website blocked UXNest's audit environment. This does not mean the website is inaccessible to normal visitors, so we did not generate UX scores. Try again later, use a specific public page, or upload screenshots for a visual audit.");
       } else if (e && e.code === "AUDIT_INSUFFICIENT_EVIDENCE") {
         const detail = e.evidenceReason ? ` Reason: ${e.evidenceReason}` : "";
         setError(`We couldn't complete this audit because UXNest couldn't verify enough public website content. We won't generate a score based on guesses.${detail} Try a specific public page, retry later, or upload screenshots instead.`);
