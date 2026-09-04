@@ -279,7 +279,9 @@ async function capturePageSpeedScreenshot(target) {
 
 async function captureVisualFallback(target) {
   // Prefer the configured Browserless account. If that environment is blocked
-  // or not configured, use an independent real-browser capture network.
+  // or not configured, try Google rendering before another commercial browser
+  // network; protected sites frequently allow Google while rejecting shared
+  // headless-browser IP ranges.
   const diagnostics = [];
   try {
     const screenshot = await captureScreenshot(target);
@@ -289,18 +291,18 @@ async function captureVisualFallback(target) {
     diagnostics.push(error instanceof Error ? error.message : "Configured browser screenshot failed.");
   }
   try {
-    const screenshot = await captureMicrolinkScreenshot(target);
-    if (screenshot) return { screenshot, provider: "visual-browser-fallback", diagnostics };
-    diagnostics.push("Visual browser fallback returned no image.");
-  } catch (error) {
-    diagnostics.push(error instanceof Error ? error.message : "Visual browser fallback failed.");
-  }
-  try {
     const screenshot = await capturePageSpeedScreenshot(target);
     if (screenshot) return { screenshot, provider: "google-render-fallback", diagnostics };
     diagnostics.push("Google render fallback returned no image.");
   } catch (error) {
     diagnostics.push(error instanceof Error ? error.message : "Google render fallback failed.");
+  }
+  try {
+    const screenshot = await captureMicrolinkScreenshot(target);
+    if (screenshot) return { screenshot, provider: "visual-browser-fallback", diagnostics };
+    diagnostics.push("Visual browser fallback returned no image.");
+  } catch (error) {
+    diagnostics.push(error instanceof Error ? error.message : "Visual browser fallback failed.");
   }
   return { screenshot: null, provider: null, diagnostics };
 }
