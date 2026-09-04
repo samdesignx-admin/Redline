@@ -242,6 +242,41 @@ async function captureMicrolinkScreenshot(target) {
   }
 }
 
+
+async function capturePageSpeedScreenshot(target) {
+  // Google renders pages from a different network and exposes a final-page
+  // screenshot in Lighthouse artifacts. This gives URL audits one more
+  // independent visual route when commercial browser networks hit an Akamai
+  // or bot-management interstitial.
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed");
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("strategy", "desktop");
+  endpoint.searchParams.set("category", "PERFORMANCE");
+  endpoint.searchParams.set("locale", "en");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55_000);
+  try {
+    const response = await fetch(endpoint, {
+      headers: { accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Google render fallback returned HTTP ${response.status}.`);
+    const payload = await response.json();
+    const data = payload?.lighthouseResult?.audits?.["final-screenshot"]?.details?.data;
+    if (typeof data !== "string" || !data.startsWith("data:image/")) {
+      throw new Error("Google render fallback returned no final-page screenshot.");
+    }
+    const base64 = data.slice(data.indexOf(",") + 1);
+    const bytes = Buffer.from(base64, "base64");
+    if (!bytes.length || bytes.length > 4_500_000) throw new Error("Google final-page screenshot was empty or too large.");
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function captureVisualFallback(target) {
   // Prefer the configured Browserless account. If that environment is blocked
   // or not configured, use an independent real-browser capture network.
@@ -259,6 +294,13 @@ async function captureVisualFallback(target) {
     diagnostics.push("Visual browser fallback returned no image.");
   } catch (error) {
     diagnostics.push(error instanceof Error ? error.message : "Visual browser fallback failed.");
+  }
+  try {
+    const screenshot = await capturePageSpeedScreenshot(target);
+    if (screenshot) return { screenshot, provider: "google-render-fallback", diagnostics };
+    diagnostics.push("Google render fallback returned no image.");
+  } catch (error) {
+    diagnostics.push(error instanceof Error ? error.message : "Google render fallback failed.");
   }
   return { screenshot: null, provider: null, diagnostics };
 }
