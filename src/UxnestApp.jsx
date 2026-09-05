@@ -366,14 +366,15 @@ Return JSON only. Do not use markdown or commentary. Use this exact schema:
 [
   {
     "findingIndex": 1,
-    "cx": 0,
-    "cy": 0,
-    "radius": 0,
+    "targetX": 0,
+    "targetY": 0,
+    "targetRadius": 0,
+    "target": "the exact visible UI element being marked",
     "explanation": "What is visible at this exact point and why it supports Finding 1, max 28 words"
   }
 ]
 
-Coordinates are percentages of the full screenshot. cx/cy are the focal point. radius is the radius as a percentage of screenshot width. Use a tight marker: normally radius 3–6, never more than 8. The goal is to point precisely at the relevant UI element, not circle an entire section. Keep all values between 0 and 100. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
+Coordinates are percentages of the full screenshot. targetX/targetY identify the center of one exact UI element; targetRadius is a small ring radius as a percentage of screenshot width. Mark the button, label, price, nav item, input, card title, or other exact visible element described by the finding — never the surrounding image, entire card, section, page, or whitespace. Use targetRadius 1.5–3.5 (maximum 4.5). Keep all values between 0 and 100. If the finding has no unambiguous visible target, omit it. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
 
 FINDINGS:
 ${list}`;
@@ -394,27 +395,28 @@ function parseVisualEvidence(raw, issues) {
         const n = Number(value);
         return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
       };
-      const hasFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
+      const hasPinpoint = Number.isFinite(Number(item?.targetX)) && Number.isFinite(Number(item?.targetY));
+      const hasLegacyFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
       let cx;
       let cy;
       let radius;
-      if (hasFocalPoint) {
-        cx = clamp(item.cx, 50);
-        cy = clamp(item.cy, 50);
-        radius = Math.max(3, Math.min(8, clamp(item.radius, 5)));
+      if (hasPinpoint || hasLegacyFocalPoint) {
+        cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
+        cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
+        radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
       } else {
-        // Backward compatibility with earlier x/y/w/h responses. Convert the
-        // broad box into a deliberately tight focal marker.
+        // Old box responses do not identify a precise target. Their center is
+        // retained for continuity, but rendered only as a small pinpoint.
         const x = clamp(item.x, 0), y = clamp(item.y, 0);
         const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
         const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
         cx = Math.max(3, Math.min(97, x + w / 2));
         cy = Math.max(3, Math.min(97, y + h / 2));
-        radius = Math.max(3, Math.min(7, Math.min(w, h) / 2));
+        radius = Math.max(1.5, Math.min(3.5, Math.min(w, h) / 4));
       }
       const explanation = String(item.explanation || "").trim().slice(0, 220);
       if (!explanation) return null;
-      return { id: `F-${findingIndex}-${index}`, findingIndex, issueTitle: issue.title, cx, cy, radius, explanation };
+      return { id: `F-${findingIndex}-${index}`, findingIndex, issueTitle: issue.title, cx, cy, radius, target: String(item.target || "").trim().slice(0, 100), explanation };
     }).filter(Boolean).slice(0, 6);
   } catch {
     return [];
@@ -1367,11 +1369,11 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid " + C.border, background: C.surfaceAlt }}>
         <img src={screenshot} alt="Rendered website evidence" style={{ display: "block", width: "100%", height: "auto" }} />
         {evidence.map((item, index) => {
-          const r = item.radius ?? Math.max(3, Math.min(7, Math.min(item.w || 12, item.h || 8) / 2));
+          const r = item.radius ?? Math.max(1.5, Math.min(3.5, Math.min(item.w || 12, item.h || 8) / 4));
           const cx = item.cx ?? ((item.x || 0) + (item.w || 0) / 2);
           const cy = item.cy ?? ((item.y || 0) + (item.h || 0) / 2);
           return (
-            <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "3px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 1px rgba(255,255,255,0.8), 0 2px 10px rgba(128,36,25,0.22)", pointerEvents: "none" }}>
+            <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", minWidth: 14, maxWidth: 34, aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "2px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 1px rgba(255,255,255,0.9), 0 2px 8px rgba(128,36,25,0.2)", pointerEvents: "none" }}>
               <span style={{ position: "absolute", top: 0, left: 0, transform: "translate(-30%, -30%)", width: 24, height: 24, borderRadius: "50%", background: C.critical, color: "#fff", border: "2px solid #fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>{index + 1}</span>
             </div>
           );
@@ -1855,7 +1857,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
   const sev = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
   const cx = Number.isFinite(Number(item.cx)) ? Number(item.cx) : 50;
   const cy = Number.isFinite(Number(item.cy)) ? Number(item.cy) : 50;
-  const tight = Math.max(3, Math.min(6, Number(item.radius) || 4.5));
+  const tight = Math.max(1.5, Math.min(4.5, Number(item.radius) || 2.5));
 
   return (
     <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
@@ -1874,13 +1876,13 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
             alt={`Focused evidence for finding ${index + 1}`}
             style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: `${cx}% ${cy}%`, display: "block" }}
           />
-          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(26, tight * 7)}mm`, height: `${Math.max(26, tight * 7)}mm`, transform: "translate(-50%, -50%)", border: `1mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.6mm rgba(255,255,255,.96), 0 2mm 7mm rgba(0,0,0,.24)", pointerEvents: "none" }}>
-            <span style={{ position: "absolute", left: "-2mm", top: "-2mm", width: "9mm", height: "9mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.7mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "9pt", fontWeight: 800 }}>
+          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(8, tight * 3)}mm`, height: `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
               {index + 1}
             </span>
           </div>
           <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
-            ZOOMED EVIDENCE · TARGET CENTERED
+            ZOOMED EVIDENCE · PRECISE TARGET
           </div>
         </div>
 
@@ -1894,7 +1896,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
           </div>
 
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE CIRCLE POINTS TO</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINTS</div>
             <div style={{ fontSize: "10pt", lineHeight: 1.5, color: T.text }}>{item.explanation}</div>
           </div>
 
