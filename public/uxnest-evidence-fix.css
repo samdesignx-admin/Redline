@@ -1,3 +1,52 @@
-/* Marker sizing lives with the React evidence components. Keeping this
-   stylesheet empty avoids selector overrides that can make a pinpoint ring
-   grow into a large oval in PDF or responsive layouts. */
+/* Evidence annotations: deliberately tiny, target-centered pins. */
+
+/* In-app screenshot evidence. Keep the annotation independent of the AI's
+   raw bounding-box dimensions so responsive screenshots cannot produce a
+   giant ellipse. */
+img[alt="Rendered website evidence"] ~ div {
+  width: 22px !important;
+  min-width: 22px !important;
+  max-width: 22px !important;
+  height: 22px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-width: 2px !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.95), 0 1px 4px rgba(0,0,0,.18) !important;
+}
+
+img[alt="Rendered website evidence"] ~ div > span {
+  width: 20px !important;
+  height: 20px !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background: #fff !important;
+  color: #802419 !important;
+  border: 2px solid #802419 !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
+
+/* Focused presentation/PDF evidence uses the same visual language. */
+img[alt^="Focused evidence for finding"] + div {
+  width: 22px !important;
+  max-width: 22px !important;
+  height: 22px !important;
+  aspect-ratio: 1 / 1 !important;
+  border-width: 2px !important;
+  border-radius: 50% !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.95), 0 1px 4px rgba(0,0,0,.18) !important;
+}
+
+img[alt^="Focused evidence for finding"] + div > span {
+  width: 20px !important;
+  height: 20px !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background: #fff !important;
+  color: #802419 !important;
+  border: 2px solid #802419 !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+}
