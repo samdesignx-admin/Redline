@@ -1,0 +1,35 @@
+/* UXNest evidence markers: keep annotations precise and presentation-safe. */
+
+/* In-app Visual Evidence panel */
+img[alt="Rendered website evidence"] + div[style*="aspect-ratio"] {
+  width: 5% !important;
+  max-width: 5% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+  border-width: 2px !important;
+}
+
+img[alt="Rendered website evidence"] + div[style*="aspect-ratio"] > span {
+  width: 18px !important;
+  height: 18px !important;
+  font-size: 9px !important;
+  border-width: 1px !important;
+}
+
+/* PDF / deck evidence slide: the previous implementation enforced a 26mm
+   minimum, which is too large for a focal annotation. Keep the ring small. */
+img[alt^="Focused evidence for finding "] + div {
+  width: 14mm !important;
+  height: 14mm !important;
+  border-width: 0.7mm !important;
+}
+
+img[alt^="Focused evidence for finding "] + div > span {
+  width: 6mm !important;
+  height: 6mm !important;
+  left: -1mm !important;
+  top: -1mm !important;
+  font-size: 7pt !important;
+  border-width: 0.5mm !important;
+}
