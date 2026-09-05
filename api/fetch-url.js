@@ -209,14 +209,13 @@ async function capturePageSpeed(target) {
   } finally { clearTimeout(timer); }
 }
 
-async function captureScreenshotOne(target) {
-  const token = process.env.SCREENSHOTONE_API_KEY; if (!token) throw new Error("ScreenshotOne is not configured.");
-  const url = (await assertPublicUrl(target)).toString(); const endpoint = new URL("https://api.screenshotone.com/take"); endpoint.searchParams.set("access_key", token); endpoint.searchParams.set("url", url); endpoint.searchParams.set("full_page", "true"); endpoint.searchParams.set("format", "jpg"); endpoint.searchParams.set("image_quality", "70");
+async function captureScreenshot(target) {
+  const token = process.env.BROWSERLESS_TOKEN; if (!token) throw new Error("Browserless is not configured.");
+  const url = (await assertPublicUrl(target)).toString(); const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content"); shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
-    const response = await fetch(endpoint, { signal: controller.signal }); if (!response.ok) throw new Error(`ScreenshotOne returned HTTP ${response.status}.`);
-    const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 3_500_000) throw new Error("ScreenshotOne screenshot was empty or too large.");
-    return `data:image/jpeg;base64,${bytes.toString("base64")}`;
+    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1500, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 60 } }) });
+    if (!response.ok) throw new Error(`Browserless screenshot returned HTTP ${response.status}.`); const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 3_500_000) throw new Error("Browserless screenshot was empty or too large."); return `data:image/jpeg;base64,${bytes.toString("base64")}`;
   } finally { clearTimeout(timer); }
 }
 
@@ -234,16 +233,6 @@ async function captureVisualFallback(target) {
   return { screenshot: null, provider: null, diagnostics };
 }
 
-async function captureScreenshot(target) {
-  const token = process.env.BROWSERLESS_TOKEN; if (!token) throw new Error("Browserless is not configured.");
-  const url = (await assertPublicUrl(target)).toString(); const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content"); shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
-  try {
-    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1500, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 60 } }) });
-    if (!response.ok) throw new Error(`Browserless screenshot returned HTTP ${response.status}.`); const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 3_500_000) throw new Error("Browserless screenshot was empty or too large."); return `data:image/jpeg;base64,${bytes.toString("base64")}`;
-  } finally { clearTimeout(timer); }
-}
-
 function dossier(pages) {
   return pages.map((p, i) => [`PAGE ${i + 1}: ${p.url}`, p.title && `TITLE: ${p.title}`, p.description && `DESCRIPTION: ${p.description}`, p.headings.length && `HEADINGS: ${p.headings.join(" | ")}`, p.buttons.length && `LINKS/CTAS: ${p.buttons.join(" | ")}`, `CONTENT: ${p.text.slice(0, 3500)}`].filter(Boolean).join("\n")).join("\n\n");
 }
@@ -255,35 +244,28 @@ export default async function handler(req, res) {
     const normalized = (await assertPublicUrl(rawUrl)).toString(); let homepage = null; let screenshot = null; let rendering = "direct-html"; let directError = null; let renderError = null; let readerError = null; let unblockError = null;
     try { homepage = await directFetch(normalized); if (accessBlocked(homepage)) { directError = "Direct retrieval returned an access-control page."; homepage = null; } }
     catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
-
     if (!homepage || !meaningful(homepage)) {
       try { const rendered = await renderPage(normalized, true); homepage = rendered.page; screenshot = rendered.screenshot; rendering = "browser-rendered"; }
       catch (error) { renderError = error instanceof Error ? error.message : "Browser rendering failed."; }
     }
-
     if (!homepage || !meaningful(homepage)) {
       try { const unblocked = await unblockFetch(normalized, true); homepage = unblocked.page; screenshot = unblocked.screenshot; rendering = "browserless-unblock"; }
       catch (error) { unblockError = error instanceof Error ? error.message : "Browserless unblock failed."; }
     }
-
     if (!homepage || !meaningful(homepage)) {
       try { homepage = await readerFetch(normalized); rendering = "reader-fallback"; }
       catch (error) { readerError = error instanceof Error ? error.message : "Reader fallback failed."; }
     }
-
     if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, unblockError && `Browserless unblock: ${unblockError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
       const blocked = [directError, renderError, unblockError, readerError].some(isAccessBlockError) || accessBlocked(homepage);
       if (blocked) {
         const visual = await captureVisualFallback(normalized);
-        if (visual.screenshot) {
-          return res.status(200).json({ code: "AUDIT_VISUAL_EVIDENCE", evidenceStatus: "VISUAL_ONLY", rendering: visual.provider, reason: "Text retrieval was blocked, but UXNest captured a rendered public page through an independent browser environment.", pages: [normalized], dossier: "", screenshot: visual.screenshot, screenshots: [{ url: normalized, screenshot: visual.screenshot }], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
-        }
+        if (visual.screenshot) return res.status(200).json({ code: "AUDIT_VISUAL_EVIDENCE", evidenceStatus: "VISUAL_ONLY", rendering: visual.provider, reason: "Text retrieval was blocked, but UXNest captured a rendered public page through an independent browser environment.", pages: [normalized], dossier: "", screenshot: visual.screenshot, screenshots: [{ url: normalized, screenshot: visual.screenshot }], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
         return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website blocked UXNest's audit environment. No UX score was generated because the available evidence was not trustworthy.", pages: [], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
       }
       return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: attempts || "The website was reachable but did not expose enough rendered public content for a reliable audit.", pages: [] });
     }
-
     const pages = [homepage];
     for (const link of homepage.links.filter((l) => l.label && !/^(privacy|terms|cookies?|login|sign in)$/i.test(l.label)).slice(0, 2)) {
       try { const page = await directFetch(link.url); if (meaningful(page) && !accessBlocked(page) && !pages.some((p) => p.url === page.url)) pages.push(page); } catch {}
