@@ -8,7 +8,8 @@ const DIRECT_TIMEOUT_MS = 10_000;
 const RENDER_TIMEOUT_MS = 25_000;
 const READER_TIMEOUT_MS = 20_000;
 const SCREENSHOT_TIMEOUT_MS = 25_000;
-const BLOCKED_PATTERNS = /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net|akamai reference)/i;
+const UNBLOCK_TIMEOUT_MS = 55_000;
+const BLOCKED_PATTERNS = /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net|akamai reference|error reference number)/i;
 
 function isPrivateIp(address) {
   if (net.isIP(address) === 4) {
@@ -129,7 +130,7 @@ async function renderPage(target, wantScreenshot = false) {
   const endpoint = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content"); endpoint.searchParams.set("token", token);
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS);
   try {
-    const response = await fetch(endpoint, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1800, bestAttempt: true }) });
+    const response = await fetch(endpoint, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 2500, bestAttempt: true, gotoOptions: { waitUntil: "networkidle2", timeout: 20000 } }) });
     const html = (await response.text()).slice(0, MAX_HTML_BYTES);
     if (!response.ok) throw new Error(`Browser renderer returned HTTP ${response.status}.`);
     const page = extractPage(html, url, true);
@@ -137,8 +138,43 @@ async function renderPage(target, wantScreenshot = false) {
     let screenshot = null;
     if (wantScreenshot && meaningful(page)) {
       const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content"); shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
-      const sr = await fetch(shot, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1200, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 65 } }) });
+      const sr = await fetch(shot, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1500, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 65 } }) });
       if (sr.ok) { const bytes = Buffer.from(await sr.arrayBuffer()); if (bytes.length > 0 && bytes.length <= 3_500_000) screenshot = `data:image/jpeg;base64,${bytes.toString("base64")}`; }
+    }
+    return { page, screenshot };
+  } finally { clearTimeout(timer); }
+}
+
+async function unblockFetch(target, wantScreenshot = true) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browserless is not configured.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://production-sfo.browserless.io/unblock");
+  endpoint.searchParams.set("token", token);
+  endpoint.searchParams.set("proxy", process.env.BROWSERLESS_PROXY || "residential");
+  endpoint.searchParams.set("proxyCountry", process.env.BROWSERLESS_PROXY_COUNTRY || "us");
+  endpoint.searchParams.set("proxySticky", "true");
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), UNBLOCK_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST", signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({ url, content: true, cookies: false, screenshot: wantScreenshot, browserWSEndpoint: false, ttl: 60000, waitForTimeout: 3000, bestAttempt: true }),
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(`Browserless unblock returned HTTP ${response.status}.`);
+    let payload;
+    try { payload = JSON.parse(raw); } catch { throw new Error("Browserless unblock returned invalid JSON."); }
+    const html = String(payload?.content || "").slice(0, MAX_HTML_BYTES);
+    if (!html) throw new Error("Browserless unblock returned no page content.");
+    const page = extractPage(html, url, true);
+    if (!meaningful(page)) throw new Error("Browserless unblock returned too little page content.");
+    if (accessBlocked(page)) throw new Error("Browserless unblock still returned an access-control page.");
+    let screenshot = null;
+    if (typeof payload?.screenshot === "string" && payload.screenshot) {
+      const b64 = payload.screenshot.replace(/^data:image\/[^;]+;base64,/i, "");
+      const bytes = Buffer.from(b64, "base64");
+      if (bytes.length > 0 && bytes.length <= 4_500_000) screenshot = `data:image/png;base64,${b64}`;
     }
     return { page, screenshot };
   } finally { clearTimeout(timer); }
@@ -192,7 +228,6 @@ async function captureVisualFallback(target) {
   const diagnostics = [];
   const providers = [
     ["browserless", () => captureScreenshot(target)],
-    ["screenshotone", () => captureScreenshotOne(target)],
     ["google-render-fallback", () => capturePageSpeed(target)],
     ["microlink", () => captureMicrolink(target)],
   ];
@@ -208,7 +243,7 @@ async function captureScreenshot(target) {
   const url = (await assertPublicUrl(target)).toString(); const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content"); shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
-    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1200, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 60 } }) });
+    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json" }, body: JSON.stringify({ url, waitForTimeout: 1500, bestAttempt: true, options: { fullPage: true, type: "jpeg", quality: 60 } }) });
     if (!response.ok) throw new Error(`Browserless screenshot returned HTTP ${response.status}.`); const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 3_500_000) throw new Error("Browserless screenshot was empty or too large."); return `data:image/jpeg;base64,${bytes.toString("base64")}`;
   } finally { clearTimeout(timer); }
 }
@@ -221,28 +256,34 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const rawUrl = String(req.body?.url || "").trim(); if (!rawUrl) return res.status(400).json({ error: "A URL is required." });
   try {
-    const normalized = (await assertPublicUrl(rawUrl)).toString(); let homepage = null; let screenshot = null; let rendering = "direct-html"; let directError = null;
-    try { homepage = await directFetch(normalized); } catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
+    const normalized = (await assertPublicUrl(rawUrl)).toString(); let homepage = null; let screenshot = null; let rendering = "direct-html"; let directError = null; let renderError = null; let readerError = null; let unblockError = null;
+    try { homepage = await directFetch(normalized); if (accessBlocked(homepage)) { directError = "Direct retrieval returned an access-control page."; homepage = null; } }
+    catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
 
-    let renderError = null;
-    if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
+    if (!homepage || !meaningful(homepage)) {
       try { const rendered = await renderPage(normalized, true); homepage = rendered.page; screenshot = rendered.screenshot; rendering = "browser-rendered"; }
       catch (error) { renderError = error instanceof Error ? error.message : "Browser rendering failed."; }
     }
 
-    let readerError = null;
-    if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
+    if (!homepage || !meaningful(homepage)) {
+      try { const unblocked = await unblockFetch(normalized, true); homepage = unblocked.page; screenshot = unblocked.screenshot; rendering = "browserless-unblock"; }
+      catch (error) { unblockError = error instanceof Error ? error.message : "Browserless unblock failed."; }
+    }
+
+    if (!homepage || !meaningful(homepage)) {
       try { homepage = await readerFetch(normalized); rendering = "reader-fallback"; }
       catch (error) { readerError = error instanceof Error ? error.message : "Reader fallback failed."; }
     }
 
     if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
-      const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
-      const blocked = [directError, renderError, readerError].some(isAccessBlockError) || accessBlocked(homepage);
+      const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, unblockError && `Browserless unblock: ${unblockError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
+      const blocked = [directError, renderError, unblockError, readerError].some(isAccessBlockError) || accessBlocked(homepage);
       if (blocked) {
         const visual = await captureVisualFallback(normalized);
-        if (visual.screenshot) return res.status(200).json({ code: "AUDIT_VISUAL_EVIDENCE", evidenceStatus: "VISUAL_ONLY", rendering: visual.provider, reason: "Text retrieval was blocked, but UXNest captured the rendered public page through an independent browser environment.", pages: [normalized], dossier: "", screenshot: visual.screenshot, screenshots: [{ url: normalized, screenshot: visual.screenshot }], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
-        return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website blocked UXNest's audit environment. This does not establish that the website is inaccessible to normal visitors.", pages: [], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
+        if (visual.screenshot) {
+          return res.status(200).json({ code: "AUDIT_VISUAL_EVIDENCE", evidenceStatus: "VISUAL_ONLY", rendering: visual.provider, reason: "Text retrieval was blocked, but UXNest captured a rendered public page through an independent browser environment.", pages: [normalized], dossier: "", screenshot: visual.screenshot, screenshots: [{ url: normalized, screenshot: visual.screenshot }], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
+        }
+        return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website blocked UXNest's audit environment. No UX score was generated because the available evidence was not trustworthy.", pages: [], diagnostics: [attempts, ...visual.diagnostics].filter(Boolean).join(" ") });
       }
       return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: attempts || "The website was reachable but did not expose enough rendered public content for a reliable audit.", pages: [] });
     }
