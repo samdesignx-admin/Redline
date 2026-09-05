@@ -1,29 +1,42 @@
 /* Evidence annotations: deliberately tiny, target-centered pins. */
 
-/* Both the in-app and deck renderers place their annotation ring with the
-   same translate(-50%, -50%) transform. Target that marker directly rather
-   than relying on sibling position, so the notes/description blocks remain
-   untouched. */
-div[style*="translate(-50%, -50%)"] {
-  width: 22px !important;
-  min-width: 22px !important;
-  max-width: 22px !important;
-  height: 22px !important;
+/* In-app and deck evidence markers. Keep the marker itself small even when
+   the React renderer supplies a larger legacy/focus-ring size. */
+div[style*="translate(-50%, -50%)"],
+img[alt^="Focused evidence for finding"] + div {
+  width: 7mm !important;
+  min-width: 7mm !important;
+  max-width: 7mm !important;
+  height: 7mm !important;
+  min-height: 7mm !important;
+  max-height: 7mm !important;
   aspect-ratio: 1 / 1 !important;
-  border-width: 2px !important;
+  border-width: 0.55mm !important;
   border-radius: 50% !important;
-  box-shadow: 0 0 0 1px rgba(255,255,255,.95), 0 1px 4px rgba(0,0,0,.18) !important;
+  box-shadow: 0 0 0 0.35mm rgba(255,255,255,.96), 0 0.8mm 2.2mm rgba(0,0,0,.18) !important;
 }
 
-div[style*="translate(-50%, -50%)"] > span {
-  width: 20px !important;
-  height: 20px !important;
+/* The number is the pin. Keep it centered rather than offset from a large
+   focus ring; this is what the exported deck should show as well. */
+div[style*="translate(-50%, -50%)"] > span,
+img[alt^="Focused evidence for finding"] + div > span {
   left: 50% !important;
   top: 50% !important;
+  width: 6mm !important;
+  min-width: 6mm !important;
+  max-width: 6mm !important;
+  height: 6mm !important;
+  min-height: 6mm !important;
+  max-height: 6mm !important;
   transform: translate(-50%, -50%) !important;
-  background: #fff !important;
-  color: #802419 !important;
-  border: 2px solid #802419 !important;
-  font-size: 10px !important;
+  background: #802419 !important;
+  color: #fff !important;
+  border: 0.45mm solid #fff !important;
+  border-radius: 50% !important;
+  font-size: 6.5pt !important;
   line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 0.6mm 1.8mm rgba(0,0,0,.18) !important;
 }
