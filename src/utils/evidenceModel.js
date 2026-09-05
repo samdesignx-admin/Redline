@@ -1,9 +1,9 @@
 /**
  * Canonical visual-evidence model.
  *
- * Evidence is deliberately normalized at one boundary so renderers do not
- * need to interpret AI coordinates, legacy rectangles, or missing metadata.
- * The renderer contract is a small target-centered pin on a known screenshot.
+ * Evidence is normalized at one boundary so every renderer consumes the same
+ * target-centered contract. Finding identity is deliberately kept separate
+ * from evidence identity so legacy parser ids cannot break traceability.
  */
 
 const EVIDENCE_STATUSES = Object.freeze([
@@ -35,24 +35,38 @@ function normalizeRadius(value, fallback = 2.5) {
   return Number.isFinite(n) ? Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, n)) : fallback;
 }
 
+function normalizeFindingId(value, findingIndex) {
+  const explicit = String(value || "").trim();
+  if (explicit) return explicit;
+  return Number.isFinite(findingIndex) && findingIndex > 0
+    ? `F-${String(findingIndex).padStart(3, "0")}`
+    : "";
+}
+
 function normalizeEvidenceTarget(item, index = 0, options = {}) {
   if (!item || typeof item !== "object") return null;
 
-  const findingId = String(item.findingId || item.id || "").trim();
-  const findingIndex = Number.isFinite(Number(item.findingIndex))
-    ? Math.round(Number(item.findingIndex))
+  const rawFindingIndex = Number(item.findingIndex);
+  const findingIndex = Number.isFinite(rawFindingIndex) && rawFindingIndex > 0
+    ? Math.round(rawFindingIndex)
     : null;
+  const findingId = normalizeFindingId(item.findingId, findingIndex);
+  const evidenceId = String(item.evidenceId || item.id || "").trim() || `E-${String(index + 1).padStart(2, "0")}`;
   const screenshotId = String(item.screenshotId || options.screenshotId || "").trim();
   const pageUrl = String(item.pageUrl || item.url || options.pageUrl || "").trim();
 
-  const hasTarget = Number.isFinite(Number(item.x)) || Number.isFinite(Number(item.targetX)) || Number.isFinite(Number(item.cx));
-  const x = clampPercent(item.x ?? item.targetX ?? item.cx, 50);
-  const y = clampPercent(item.y ?? item.targetY ?? item.cy, 50);
+  const rawX = item.x ?? item.targetX ?? item.cx;
+  const rawY = item.y ?? item.targetY ?? item.cy;
+  const hasTarget = Number.isFinite(Number(rawX)) && Number.isFinite(Number(rawY));
+  const x = clampPercent(rawX, 50);
+  const y = clampPercent(rawY, 50);
   const radius = normalizeRadius(item.radius ?? item.targetRadius);
   const target = String(item.target || "").trim().slice(0, 160);
   const explanation = String(item.explanation || "").trim().slice(0, 280);
 
-  if (!hasTarget || !explanation) return null;
+  // A canonical evidence record must be traceable to a finding and a visible
+  // target. Without both coordinates, the renderer cannot truthfully place it.
+  if (!findingId || !hasTarget || !target || !explanation) return null;
 
   const status = normalizeStatus(item.status, options.status || DEFAULT_STATUS);
   const confidence = String(item.confidence || "").trim().toLowerCase() || (
@@ -60,8 +74,8 @@ function normalizeEvidenceTarget(item, index = 0, options = {}) {
   );
 
   return {
-    id: findingId || `E-${findingIndex || index + 1}`,
-    findingId: findingId || (findingIndex ? `F-${String(findingIndex).padStart(3, "0")}` : ""),
+    id: evidenceId,
+    findingId,
     findingIndex,
     screenshotId,
     pageUrl,
@@ -106,6 +120,7 @@ export {
   clampPercent,
   normalizeStatus,
   normalizeRadius,
+  normalizeFindingId,
   normalizeEvidenceTarget,
   normalizeEvidenceCollection,
   evidenceCanSupportScoring,
