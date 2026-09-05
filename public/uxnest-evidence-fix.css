@@ -1,42 +1,72 @@
-/* Evidence annotations: deliberately tiny, target-centered pins. */
+/* Canonical evidence presentation fallback.
+   The data contract lives in src/utils/evidenceModel.js; this stylesheet keeps
+   legacy inline renderers visually aligned until they are fully componentized.
+   A finding marker is a point, not a bounding box. */
 
-/* In-app and deck evidence markers. Keep the marker itself small even when
-   the React renderer supplies a larger legacy/focus-ring size. */
+/* In-app evidence marker and exported deck focus marker. */
 div[style*="translate(-50%, -50%)"],
 img[alt^="Focused evidence for finding"] + div {
-  width: 7mm !important;
-  min-width: 7mm !important;
-  max-width: 7mm !important;
-  height: 7mm !important;
-  min-height: 7mm !important;
-  max-height: 7mm !important;
+  width: 6.5mm !important;
+  min-width: 6.5mm !important;
+  max-width: 6.5mm !important;
+  height: 6.5mm !important;
+  min-height: 6.5mm !important;
+  max-height: 6.5mm !important;
   aspect-ratio: 1 / 1 !important;
-  border-width: 0.55mm !important;
+  border-width: 0.5mm !important;
   border-radius: 50% !important;
-  box-shadow: 0 0 0 0.35mm rgba(255,255,255,.96), 0 0.8mm 2.2mm rgba(0,0,0,.18) !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 0 0 0.3mm rgba(255,255,255,.96), 0 0.7mm 2mm rgba(0,0,0,.18) !important;
+  pointer-events: none !important;
 }
 
-/* The number is the pin. Keep it centered rather than offset from a large
-   focus ring; this is what the exported deck should show as well. */
+/* Number badge: centered on the exact target rather than offset outside a
+   large focus ring. This prevents the "number here, oval somewhere below"
+   failure seen in the Tesla evidence export. */
 div[style*="translate(-50%, -50%)"] > span,
 img[alt^="Focused evidence for finding"] + div > span {
   left: 50% !important;
   top: 50% !important;
-  width: 6mm !important;
-  min-width: 6mm !important;
-  max-width: 6mm !important;
-  height: 6mm !important;
-  min-height: 6mm !important;
-  max-height: 6mm !important;
+  width: 5.5mm !important;
+  min-width: 5.5mm !important;
+  max-width: 5.5mm !important;
+  height: 5.5mm !important;
+  min-height: 5.5mm !important;
+  max-height: 5.5mm !important;
   transform: translate(-50%, -50%) !important;
   background: #802419 !important;
   color: #fff !important;
-  border: 0.45mm solid #fff !important;
+  border: 0.4mm solid #fff !important;
   border-radius: 50% !important;
-  font-size: 6.5pt !important;
+  font-size: 6pt !important;
   line-height: 1 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  box-shadow: 0 0.6mm 1.8mm rgba(0,0,0,.18) !important;
+  box-shadow: 0 0.5mm 1.5mm rgba(0,0,0,.18) !important;
+}
+
+/* Responsive safety: never let an evidence marker scale with a screenshot's
+   dimensions or inherit a percentage-sized legacy ring. */
+@media (max-width: 700px) {
+  div[style*="translate(-50%, -50%)"],
+  img[alt^="Focused evidence for finding"] + div {
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+  }
+
+  div[style*="translate(-50%, -50%)"] > span,
+  img[alt^="Focused evidence for finding"] + div > span {
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    font-size: 10px !important;
+  }
 }
