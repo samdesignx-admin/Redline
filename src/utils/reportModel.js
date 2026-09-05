@@ -8,6 +8,8 @@
  * summary/usability/visual/etc.
  */
 
+import { normalizeEvidenceCollection } from "./evidenceModel.js";
+
 const DIMENSION_KEYS = ["usability", "accessibility", "visual", "trust", "conversion"];
 
 const DIMENSION_META = {
@@ -79,15 +81,10 @@ function normalizeReportModel(report) {
     .map((dimension) => Number(dimension.score))
     .filter((score) => Number.isFinite(score));
 
-  // Phase 2: the displayed overall score is deterministic and derived from the
-  // five canonical dimension scores. We round to the nearest whole number to
-  // preserve the existing whole-number report presentation.
   normalized.overallScore = dimensionScores.length
     ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length)
     : null;
 
-  // Keep legacy fields synchronized so existing UI, saved-audit, and export
-  // consumers cannot display a competing AI-generated overall score.
   normalized.summary = {
     ...(normalized.summary || {}),
     score: normalized.overallScore,
@@ -97,7 +94,11 @@ function normalizeReportModel(report) {
     overall: normalized.overallScore,
   };
 
-  normalized.modelVersion = 2;
+  // Canonical evidence is optional for legacy reports. When evidence is later
+  // attached by the audit pipeline, every renderer can consume the same shape.
+  normalized.evidence = normalizeEvidenceCollection(normalized.evidence || []);
+
+  normalized.modelVersion = 3;
 
   return normalized;
 }
