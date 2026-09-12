@@ -140,6 +140,19 @@ async function captureScreenshot(target) {
   } finally { clearTimeout(timer); }
 }
 
+async function captureScreenshotOne(target) {
+  const token = process.env.SCREENSHOTONE_API_KEY; if (!token) throw new Error("ScreenshotOne is not configured.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://api.screenshotone.com/take");
+  endpoint.searchParams.set("access_key", token); endpoint.searchParams.set("url", url); endpoint.searchParams.set("full_page", "true"); endpoint.searchParams.set("format", "jpg"); endpoint.searchParams.set("image_quality", "70");
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, { signal: controller.signal }); if (!response.ok) throw new Error(`ScreenshotOne returned HTTP ${response.status}.`);
+    const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 4_500_000) throw new Error("ScreenshotOne screenshot was empty or too large.");
+    return dataImage(bytes);
+  } finally { clearTimeout(timer); }
+}
+
 async function capturePageSpeed(target) {
   const url = (await assertPublicUrl(target)).toString();
   const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed"); endpoint.searchParams.set("url", url); endpoint.searchParams.set("strategy", "desktop"); endpoint.searchParams.set("category", "PERFORMANCE"); endpoint.searchParams.set("locale", "en");
@@ -174,7 +187,12 @@ async function captureMicrolink(target) {
 
 async function captureVisualFallback(target) {
   const diagnostics = [];
-  const providers = [["browserless", () => captureScreenshot(target)], ["google-render-fallback", () => capturePageSpeed(target)], ["microlink", () => captureMicrolink(target)]];
+  const providers = [
+    ["browserless", () => captureScreenshot(target)],
+    ["screenshotone", () => captureScreenshotOne(target)],
+    ["microlink", () => captureMicrolink(target)],
+    ["google-render-fallback", () => capturePageSpeed(target)],
+  ];
   for (const [name, fn] of providers) {
     try { const screenshot = await fn(); if (screenshot) return { screenshot, provider: name, diagnostics }; }
     catch (error) { diagnostics.push(`${name}: ${error instanceof Error ? error.message : "capture failed"}`); }
@@ -242,9 +260,14 @@ export default async function handler(req, res) {
       if (error?.screenshot) screenshot = error.screenshot;
     }
 
+    // Never let a failed Browserless attempt remove our independent screenshot options.
     if (!screenshot) {
-      try { screenshot = await captureScreenshot(normalized); rendering = "browserless-screenshot"; }
-      catch (error) { visualDiagnostics.push(`Browserless screenshot: ${error instanceof Error ? error.message : "capture failed"}`); }
+      const visual = await captureVisualFallback(normalized);
+      if (visual.screenshot) {
+        screenshot = visual.screenshot;
+        rendering = visual.provider;
+      }
+      visualDiagnostics.push(...visual.diagnostics);
     }
 
     if (!homepage || !meaningful(homepage)) {
@@ -294,7 +317,7 @@ export default async function handler(req, res) {
       try { const page = await directFetch(link.url); if (meaningful(page) && !accessBlocked(page) && !pages.some((p) => p.url === page.url)) pages.push(page); } catch {}
     }
     const captured = await Promise.all(pages.slice(0, 3).map(async (page, index) => {
-      const image = index === 0 && screenshot ? screenshot : await captureScreenshot(page.url).catch(() => null);
+      const image = index === 0 && screenshot ? screenshot : await captureVisualFallback(page.url).then((v) => v.screenshot).catch(() => null);
       return image ? { url: page.url, screenshot: image } : null;
     }));
     const screenshots = captured.filter(Boolean); const primaryScreenshot = screenshots[0]?.screenshot || screenshot || null;
