@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:evidence": "node scripts/verify-evidence-model.mjs"
+    "test:evidence": "node scripts/verify-evidence-model.mjs",
+    "test:evidence-gate": "node scripts/verify-evidence-gate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
