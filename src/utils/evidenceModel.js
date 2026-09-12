@@ -19,6 +19,13 @@ const DEFAULT_STATUS = "observed";
 const MIN_RADIUS = 1.5;
 const MAX_RADIUS = 4.5;
 const MAX_ITEMS = 6;
+const MIN_TARGET_WORDS = 3;
+const SUSPICIOUS_CLUSTER_DISTANCE = 1.25;
+const VAGUE_TARGETS = new Set([
+  "navigation", "nav", "header", "footer", "homepage", "home page", "page",
+  "screen", "section", "content", "layout", "design", "image", "card",
+  "whitespace", "blank space", "hero", "banner", "form", "button", "link",
+]);
 
 function clampPercent(value, fallback = 0) {
   const n = Number(value);
@@ -41,6 +48,27 @@ function normalizeFindingId(value, findingIndex) {
   return Number.isFinite(findingIndex) && findingIndex > 0
     ? `F-${String(findingIndex).padStart(3, "0")}`
     : "";
+}
+
+function targetWords(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean);
+}
+
+function isSpecificVisibleTarget(value) {
+  const target = String(value || "").trim().toLowerCase();
+  if (!target || target.length < 8) return false;
+  if (VAGUE_TARGETS.has(target)) return false;
+  if (targetWords(target).length < MIN_TARGET_WORDS) return false;
+  return true;
+}
+
+function sameEvidenceSpace(a, b) {
+  return String(a?.screenshotId || "") === String(b?.screenshotId || "") &&
+    String(a?.pageUrl || "") === String(b?.pageUrl || "");
+}
+
+function targetDistance(a, b) {
+  return Math.hypot(Number(a?.x || 0) - Number(b?.x || 0), Number(a?.y || 0) - Number(b?.y || 0));
 }
 
 function normalizeEvidenceTarget(item, index = 0, options = {}) {
@@ -66,7 +94,7 @@ function normalizeEvidenceTarget(item, index = 0, options = {}) {
 
   // A canonical evidence record must be traceable to a finding and a visible
   // target. Without both coordinates, the renderer cannot truthfully place it.
-  if (!findingId || !hasTarget || !target || !explanation) return null;
+  if (!findingId || !hasTarget || !isSpecificVisibleTarget(target) || !explanation) return null;
 
   const status = normalizeStatus(item.status, options.status || DEFAULT_STATUS);
   const confidence = String(item.confidence || "").trim().toLowerCase() || (
@@ -89,6 +117,34 @@ function normalizeEvidenceTarget(item, index = 0, options = {}) {
   };
 }
 
+/**
+ * Reject evidence that is structurally suspicious even though it contains
+ * syntactically valid coordinates. In particular, several unrelated findings
+ * collapsing onto the same point is a common failure mode of vision output.
+ */
+function validateEvidenceCollection(items) {
+  const accepted = [];
+  const rejected = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!item) {
+      rejected.push({ item, reason: "invalid" });
+      continue;
+    }
+    const collision = accepted.find((existing) =>
+      existing.findingId !== item.findingId &&
+      sameEvidenceSpace(existing, item) &&
+      targetDistance(existing, item) < SUSPICIOUS_CLUSTER_DISTANCE &&
+      existing.target.toLowerCase() !== item.target.toLowerCase()
+    );
+    if (collision) {
+      rejected.push({ item, reason: "suspicious-coordinate-cluster", conflictsWith: collision.findingId });
+      continue;
+    }
+    accepted.push(item);
+  }
+  return { accepted, rejected };
+}
+
 function normalizeEvidenceCollection(items, options = {}) {
   const input = Array.isArray(items) ? items : [];
   const seen = new Set();
@@ -103,7 +159,7 @@ function normalizeEvidenceCollection(items, options = {}) {
     normalized.push(item);
   }
 
-  return normalized;
+  return validateEvidenceCollection(normalized).accepted;
 }
 
 function evidenceCanSupportScoring(evidence) {
@@ -117,11 +173,16 @@ export {
   MIN_RADIUS,
   MAX_RADIUS,
   MAX_ITEMS,
+  MIN_TARGET_WORDS,
+  SUSPICIOUS_CLUSTER_DISTANCE,
+  VAGUE_TARGETS,
   clampPercent,
   normalizeStatus,
   normalizeRadius,
   normalizeFindingId,
+  isSpecificVisibleTarget,
   normalizeEvidenceTarget,
+  validateEvidenceCollection,
   normalizeEvidenceCollection,
   evidenceCanSupportScoring,
 };
