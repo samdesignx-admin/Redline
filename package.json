@@ -10,7 +10,8 @@
     "test:evidence": "node scripts/verify-evidence-model.mjs",
     "test:evidence-gate": "node scripts/verify-evidence-gate.mjs",
     "test:traceability": "node scripts/verify-traceability.mjs",
-    "test:report-model": "node scripts/verify-report-model.mjs"
+    "test:report-model": "node scripts/verify-report-model.mjs",
+    "test:evidence-render": "node scripts/verify-evidence-render.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
