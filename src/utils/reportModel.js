@@ -1,5 +1,5 @@
 /** Canonical UXNest report model. */
-import { normalizeEvidenceCollection } from "./evidenceModel.js";
+import { normalizeEvidenceCollection, evidenceCanSupportScoring } from "./evidenceModel.js";
 import { buildTraceability } from "./traceability.js";
 
 const DIMENSION_KEYS = ["usability", "accessibility", "visual", "trust", "conversion"];
@@ -14,6 +14,24 @@ function normalizeIssueSection(sectionData, section, nextFindingNumber) {
   const data = sectionData || {};
   const issues = Array.isArray(data.issues) ? data.issues : [];
   return { ...data, issues: issues.map((issue, index) => normalizeIssue(issue, `F-${String(nextFindingNumber + index).padStart(3, "0")}`, section)) };
+}
+
+function buildEvidenceIndex(evidence, findings) {
+  const findingIds = new Set(findings.map((finding) => String(finding?.id || "").trim()).filter(Boolean));
+  const byFinding = {};
+  const valid = [];
+  for (const item of Array.isArray(evidence) ? evidence : []) {
+    const findingId = String(item?.findingId || "").trim();
+    if (!findingId || !findingIds.has(findingId)) continue;
+    valid.push(item);
+    if (!byFinding[findingId]) byFinding[findingId] = [];
+    byFinding[findingId].push(item);
+  }
+  return {
+    valid,
+    byFinding,
+    scoring: valid.filter(evidenceCanSupportScoring),
+  };
 }
 
 function normalizeReportModel(report) {
@@ -33,10 +51,15 @@ function normalizeReportModel(report) {
   normalized.overallScore = dimensionScores.length ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length) : null;
   normalized.summary = { ...(normalized.summary || {}), score: normalized.overallScore };
   normalized.scorecard = { ...scorecard, overall: normalized.overallScore };
-  normalized.evidence = normalizeEvidenceCollection(normalized.evidence || []);
+
+  const evidence = normalizeEvidenceCollection(normalized.evidence || []);
+  const evidenceIndex = buildEvidenceIndex(evidence, normalized.findings);
+  normalized.evidence = evidenceIndex.valid;
+  normalized.evidenceByFinding = evidenceIndex.byFinding;
+  normalized.scoringEvidence = evidenceIndex.scoring;
   normalized.traceability = buildTraceability(normalized.findings);
-  normalized.modelVersion = 4;
+  normalized.modelVersion = 5;
   return normalized;
 }
 
-export { DIMENSION_KEYS, DIMENSION_META, FINDING_SECTION_ORDER, normalizeReportModel };
+export { DIMENSION_KEYS, DIMENSION_META, FINDING_SECTION_ORDER, buildEvidenceIndex, normalizeReportModel };
