@@ -46,6 +46,24 @@ img[alt^="Focused evidence for finding"] + div > span {
   box-shadow: 0 0.5mm 1.5mm rgba(0,0,0,.18) !important;
 }
 
+/* Evidence focus slides have a fixed 16:9 page. The right-hand evidence
+   narrative can be taller than the remaining content box when a finding has
+   a two-line title plus finding, pinpoint explanation, impact, and fix.
+   Scale only that narrative column so every block remains inside the slide;
+   never clip or push content below the footer. */
+.deck-slide:has(img[alt^="Focused evidence for finding"]) > div:nth-child(4) > div:nth-child(2) {
+  transform: scale(.82) !important;
+  transform-origin: top left !important;
+  width: 121.95% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+.deck-slide:has(img[alt^="Focused evidence for finding"]) > div:nth-child(4) {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* Responsive safety: never let an evidence marker scale with a screenshot's
    dimensions or inherit a percentage-sized legacy ring. */
 @media (max-width: 700px) {
@@ -64,9 +82,9 @@ img[alt^="Focused evidence for finding"] + div > span {
     width: 20px !important;
     min-width: 20px !important;
     max-width: 20px !important;
-    height: 20px !important;
     min-height: 20px !important;
     max-height: 20px !important;
+    height: 20px !important;
     font-size: 10px !important;
   }
 }
