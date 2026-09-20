@@ -1,80 +1,157 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
 import SupportChat from "./SupportChat.jsx";
+import { stripDashLines, parseIssues, parseNumberedList, parseDashList, parseSummary, parseTop10, parseScorecard, normalizeReportText, parseReport, buildPlainTextSummary } from "./utils/reportParser.js";
+import {
+  Squiggle,
+  SeverityBadge,
+  IssueCard,
+  ScoreBar,
+  SectionIntro,
+  EmptyIssueState,
+  Section,
+  ListBlock,
+  Modal,
+} from "./components/ui/AuditAtoms.jsx";
+import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, QUOTA_MESSAGE } from "./config/index.js";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
   Upload, Image as ImageIcon, X, Sparkles, Loader2, RefreshCw, Copy, Check,
   AlertTriangle, AlertCircle, Info, ShieldCheck, Eye, Gauge, Trophy,
   Zap, FileText, Stamp, Navigation as NavIcon, Palette,
-  Accessibility as A11yIcon, TrendingUp, Brain, Rocket, CircleDot,
+  Accessibility as A11yIcon, TrendingUp, Brain, Rocket,
   Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
-  ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft,
+  ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft, EyeOff,
   FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
 } from "lucide-react";
 
 /* ----------------------------------------------------------------------- */
 /* Warm "paper & red ink" theme tokens                                     */
 /* ----------------------------------------------------------------------- */
-const C = {
-  bg: "#F3F6F5",
-  surface: "#FFFFFF",
-  surfaceAlt: "#E8EFED",
-  raised: "#FFFFFF",
-  border: "#D5E0DC",
-  borderSoft: "#E4ECE9",
-  text: "#12302B",
-  textDim: "#3E5A54",
-  muted: "#6E8681",
-  gold: "#0C7D62",
-  now: "#62D84E",
-  dark: "#0B3B36",
-  darkAlt: "#12463F",
-  goldSoft: "#DFF3EC",
-  critical: "#C74634",
-  criticalSoft: "#FAE4E0",
-  high: "#B5791E",
-  highSoft: "#F6ECD8",
-  medium: "#2E6E8E",
-  mediumSoft: "#DFEDF3",
-  low: "#1E8A5A",
-  lowSoft: "#DDF2E7",
+
+/* ----------------------------------------------------------------------- */
+/* Brand-adaptive report theme                                              */
+/* ----------------------------------------------------------------------- */
+const REPORT_THEME_FALLBACK = {
+  mode: "brand-adaptive", confidence: "fallback", isDark: false,
+  primary: "#176B5B", accent: "#C58A3A", background: "#FCFBF8", surface: "#FFFFFF",
+  text: "#18211F", textDim: "#52605C", muted: "#77827E", border: "#E7E1D8", soft: "#EEF6F3",
+  coverStart: "#12302B", coverEnd: "#24584D", radius: 14, personality: "corporate", titleScale: 1, titleWeight: 800, letterSpacing: "-0.8pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.055)", ornament: "grid", density: "structured", descriptor: "UXNEST SYSTEM",
 };
+const clampTheme = (n, min, max) => Math.min(max, Math.max(min, n));
+const themeHex = (n) => clampTheme(Math.round(n), 0, 255).toString(16).padStart(2, "0");
+const rgbHex = (r, g, b) => "#" + themeHex(r) + themeHex(g) + themeHex(b);
+function rgbToThemeHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b); let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) { const d = max - min; s = l > .5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? ((g - b) / d + (g < b ? 6 : 0)) / 6 : max === g ? ((b - r) / d + 2) / 6 : ((r - g) / d + 4) / 6; }
+  return [h * 360, s * 100, l * 100];
+}
+function themeHslHex(h, s, l) {
+  h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const q = h < 60 ? [c,x,0] : h < 120 ? [x,c,0] : h < 180 ? [0,c,x] : h < 240 ? [0,x,c] : h < 300 ? [x,0,c] : [c,0,x];
+  return rgbHex(255 * (q[0] + m), 255 * (q[1] + m), 255 * (q[2] + m));
+}
+function classifyVisualPersonality({ avgLum, avgSat, paletteDiversity, edgeDensity, dominantHue }) {
+  if (avgSat >= 56 && paletteDiversity >= 7 && avgLum >= .42) return "playful";
+  if (avgSat >= 52 && edgeDensity >= .11) return "bold";
+  if (avgSat <= 28 && avgLum <= .56 && paletteDiversity <= 6) return "luxury";
+  if (edgeDensity <= .085 && avgLum >= .55 && paletteDiversity <= 7) return "minimal";
+  if (edgeDensity <= .115 && avgLum >= .5 && avgSat >= 24) return "rounded";
+  return "corporate";
+}
 
-const FONT_IMPORT =
-  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');";
+function personalityTokens(personality) {
+  const map = {
+    minimal: { radius: 5, titleScale: .96, titleWeight: 700, letterSpacing: "-1.1pt", cardShadow: "none", ornament: "line", density: "airy", descriptor: "MINIMAL SYSTEM" },
+    bold: { radius: 6, titleScale: 1.14, titleWeight: 850, letterSpacing: "-1.7pt", cardShadow: "0 2.5mm 7mm rgba(0,0,0,.10)", ornament: "block", density: "assertive", descriptor: "BOLD SYSTEM" },
+    playful: { radius: 22, titleScale: 1.05, titleWeight: 800, letterSpacing: "-1.2pt", cardShadow: "0 2mm 7mm rgba(0,0,0,.08)", ornament: "bubble", density: "expressive", descriptor: "PLAYFUL SYSTEM" },
+    luxury: { radius: 3, titleScale: 1.0, titleWeight: 650, letterSpacing: ".15pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.07)", ornament: "frame", density: "editorial", descriptor: "LUXURY SYSTEM" },
+    rounded: { radius: 28, titleScale: 1.0, titleWeight: 750, letterSpacing: "-1.1pt", cardShadow: "0 2.5mm 8mm rgba(0,0,0,.07)", ornament: "blob", density: "soft", descriptor: "SOFT-ROUNDED SYSTEM" },
+    corporate: { radius: 9, titleScale: 1.0, titleWeight: 800, letterSpacing: "-.8pt", cardShadow: "0 1.5mm 5mm rgba(0,0,0,.055)", ornament: "grid", density: "structured", descriptor: "CORPORATE SYSTEM" },
+  };
+  return map[personality] || map.corporate;
+}
 
-const SEVERITY_STYLES = {
-  Critical: { color: C.critical, bg: C.criticalSoft, icon: AlertCircle, label: "Critical" },
-  High: { color: C.high, bg: C.highSoft, icon: AlertTriangle, label: "High" },
-  Medium: { color: C.medium, bg: C.mediumSoft, icon: Info, label: "Medium" },
-  Low: { color: C.low, bg: C.lowSoft, icon: CircleDot, label: "Low" },
-};
+function extractBrandTheme(dataUrl) {
+  return new Promise((resolve) => {
+    if (!dataUrl || typeof window === "undefined") return resolve({ ...REPORT_THEME_FALLBACK });
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const max = 120, scale = Math.min(1, max / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+        const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale)), h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+        const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true }); ctx.drawImage(img, 0, 0, w, h);
+        const image = ctx.getImageData(0, 0, w, h), px = image.data;
+        const hueBins = Array.from({ length: 36 }, () => ({ weight: 0, r: 0, g: 0, b: 0 }));
+        const paletteBins = new Set();
+        let lum = 0, satTotal = 0, count = 0, chromatic = 0, edgeSum = 0, edgeCount = 0;
+        const gray = new Float32Array(w * h);
 
-function severityFor(raw) {
-  const s = (raw || "").toLowerCase();
-  if (s.includes("critical")) return "Critical";
-  if (s.includes("high")) return "High";
-  if (s.includes("medium")) return "Medium";
-  if (s.includes("low")) return "Low";
-  return "Medium";
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3];
+          gray[y * w + x] = a < 200 ? 255 : (.2126 * r + .7152 * g + .0722 * b);
+        }
+
+        for (let i = 0; i < px.length; i += 16) {
+          const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3]; if (a < 200) continue;
+          const l = (.2126 * r + .7152 * g + .0722 * b) / 255; lum += l; count++;
+          const [hue, sat, light] = rgbToThemeHsl(r, g, b); satTotal += sat;
+          paletteBins.add(Math.floor(r / 64) + "-" + Math.floor(g / 64) + "-" + Math.floor(b / 64));
+          if (sat >= 20 && light >= 12 && light <= 90) {
+            chromatic++;
+            const weight = (sat / 100) * (.5 + Math.abs(light - 50) / 100), bin = hueBins[Math.floor(hue / 10) % 36];
+            bin.weight += weight; bin.r += r * weight; bin.g += g * weight; bin.b += b * weight;
+          }
+        }
+        for (let y = 1; y < h - 1; y += 2) for (let x = 1; x < w - 1; x += 2) {
+          const c = gray[y * w + x], gx = Math.abs(gray[y * w + x + 1] - gray[y * w + x - 1]), gy = Math.abs(gray[(y + 1) * w + x] - gray[(y - 1) * w + x]);
+          if (c < 250 || gx + gy > 0) { edgeSum += Math.min(1, (gx + gy) / 120); edgeCount++; }
+        }
+
+        const best = hueBins.reduce((a, b) => b.weight > a.weight ? b : a, hueBins[0]);
+        if (!count) return resolve({ ...REPORT_THEME_FALLBACK });
+        const avgLum = lum / count, avgSat = satTotal / count, paletteDiversity = paletteBins.size;
+        const edgeDensity = edgeCount ? edgeSum / edgeCount : 0;
+        const fallbackHue = 164;
+        const [hue, sat] = best.weight ? rgbToThemeHsl(best.r / best.weight, best.g / best.weight, best.b / best.weight) : [fallbackHue, 42, 50];
+        const personality = classifyVisualPersonality({ avgLum, avgSat, paletteDiversity, edgeDensity, dominantHue: hue });
+        const tokens = personalityTokens(personality);
+        const isDark = avgLum < .42;
+
+        resolve({
+          mode: "brand-adaptive", confidence: best.weight ? "image" : "fallback", isDark, personality,
+          ...tokens,
+          metrics: { avgLum: Number(avgLum.toFixed(3)), avgSat: Math.round(avgSat), paletteDiversity, edgeDensity: Number(edgeDensity.toFixed(3)), chromaticShare: Number((chromatic / count).toFixed(3)) },
+          primary: themeHslHex(hue, clampTheme(Math.max(sat, 48), 48, 86), isDark ? 62 : 38),
+          accent: themeHslHex(hue + (personality === "playful" ? 42 : 28), clampTheme(Math.max(sat * .85, 42), 42, 78), isDark ? 68 : 46),
+          background: isDark ? themeHslHex(hue, 18, personality === "luxury" ? 8 : 10) : themeHslHex(hue, personality === "minimal" ? 10 : 18, personality === "luxury" ? 95 : 97),
+          surface: isDark ? themeHslHex(hue, 14, 15) : "#FFFFFF",
+          text: isDark ? "#F5F7F6" : "#18211F", textDim: isDark ? "#C4CDC9" : "#52605C", muted: isDark ? "#93A09B" : "#77827E",
+          border: isDark ? themeHslHex(hue, 12, 24) : themeHslHex(hue, 16, 88), soft: isDark ? themeHslHex(hue, 28, 18) : themeHslHex(hue, personality === "minimal" ? 28 : 45, 94),
+          coverStart: isDark ? themeHslHex(hue, 38, personality === "luxury" ? 7 : 10) : themeHslHex(hue, personality === "luxury" ? 24 : 48, personality === "minimal" ? 16 : 18),
+          coverEnd: isDark ? themeHslHex(hue + 16, 42, 18) : themeHslHex(hue + 12, personality === "playful" ? 65 : 55, personality === "minimal" ? 26 : 28),
+        });
+      } catch { resolve({ ...REPORT_THEME_FALLBACK }); }
+    };
+    img.onerror = () => resolve({ ...REPORT_THEME_FALLBACK }); img.src = dataUrl;
+  });
 }
 
 /* ----------------------------------------------------------------------- */
 /* Plan limits                                                              */
 /* ----------------------------------------------------------------------- */
-const SITE_URL = "https://uxnest.ai";
-
-const SCREEN_LIMIT = 5;
-const NAV_LIMIT = 5;
-const AUDIT_QUOTA = 5; // full reports included per account
-const QUOTA_MESSAGE = "You've used all your included audits. Your reports stay available in My Audits.";
-
 function screenLimitFor() {
   return SCREEN_LIMIT;
 }
 function navLimitFor() {
-  return NAV_LIMIT;
+  // Fast Audit intentionally samples the homepage plus at most two key pages.
+  // This keeps exploration bounded and predictable for beta users.
+  return Math.min(NAV_LIMIT, 2);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -185,6 +262,26 @@ ${batchSections}
 Begin now.`;
 }
 
+function buildVisualUrlBatchPrompt(url, batchSections) {
+  return `You are a Senior UX Design Director with 20 years of experience reviewing digital products.
+
+You are auditing a rendered screenshot captured from the live public page at ${url}. UXNest's text retrieval environment was blocked, so the attached screenshot is the only reliable evidence for this audit.
+
+Analyze ONLY what is visibly present in the screenshot. Do not claim the website is down, inaccessible to users, or broken merely because UXNest's text crawler was blocked. Do not invent hidden pages, DOM structure, source-code issues, keyboard behavior, screen-reader behavior, or contrast measurements you cannot directly verify from the image.
+
+The resulting score is a screenshot-evidence UX assessment of the captured page, not a claim about the entire website beyond what is visible.
+
+Evaluate visible layout, hierarchy, typography, clarity, navigation cues, calls to action, information density, perceived trust, visual consistency, and apparent friction. For Accessibility, discuss only visibly assessable concerns and clearly avoid claims about hidden implementation.
+
+${SHARED_RULES}
+
+Sections to write:
+
+${batchSections}
+
+Begin now.`;
+}
+
 function buildPreviewPrompt(url) {
   return `You are a Senior UX Design Director. Use web search to open ${url} once and skim it. Be fast — a single fetch is enough.
 
@@ -218,12 +315,20 @@ function parsePreview(raw) {
   };
 }
 
-const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its main navigation destinations. Be efficient — a handful of fetches is enough. If a page won't load, note that and move on rather than retrying.
+const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its most important main-navigation destinations. SPEED IS THE PRIORITY: open the homepage and at most two additional pages total. Do not retry failed pages. Do not follow secondary links. Stop exploring once you have enough information to describe the core experience.
 
 First, output a line listing every page URL you successfully opened, in this exact format:
 PAGES AUDITED: <url1> | <url2> | <url3>
 
-Then write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.`;
+Then output exactly one evidence status line:
+EVIDENCE STATUS: <SUFFICIENT or INSUFFICIENT>
+EVIDENCE REASON: <brief factual reason>
+
+Mark EVIDENCE STATUS as INSUFFICIENT if you could not successfully open at least one page with meaningful public content. Do not treat search snippets, guesses, DNS results, robots.txt, or an inability to access the site as evidence of the site's UX.
+
+If evidence is sufficient, write a factual SITE OBSERVATION DOSSIER (plain text, max ~450 words) recording only what you directly observed: overall purpose, navigation structure and labels, page hierarchy, key content per page, calls-to-action and their wording/placement, forms and their fields, trust/security signals (or absence), footer contents, and anything notable about content density or clarity. Be telegraphic — dense factual notes, not prose. Do not analyze, score, or recommend. Do not fabricate visual details you cannot verify from fetched content.
+
+If evidence is insufficient, do not invent a dossier and do not analyze the website. Briefly state only what access failed and why, if known.`;
 
 function buildUrlBatchPrompt(url, dossier, batchSections) {
   return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
@@ -244,190 +349,111 @@ Begin now for ${url}.`;
 }
 
 /* ----------------------------------------------------------------------- */
+/* Visual evidence mapping                                                  */
+/* ----------------------------------------------------------------------- */
+
+// Visual evidence is intentionally a separate pass: the main audit remains
+// grounded in retrieved content, while this pass only maps findings that are
+// actually visible in the rendered screenshot. Coordinates are normalized so
+// they remain responsive in the report and PDF.
+function buildVisualEvidencePrompt(issues) {
+  const list = issues.map((issue, i) => `Finding ${i + 1}: [${issue.section}] ${issue.title} — ${issue.why}`).join("\n");
+  return `You are mapping UX findings to a screenshot of the audited website.
+
+Only annotate a finding when the screenshot itself visibly supports it. Do not invent locations for hidden pages, source code, accessibility internals, or facts you cannot see.
+
+Return JSON only. Do not use markdown or commentary. Use this exact schema:
+[
+  {
+    "findingIndex": 1,
+    "targetX": 0,
+    "targetY": 0,
+    "targetRadius": 0,
+    "target": "the exact visible UI element being marked",
+    "explanation": "What is visible at this exact point and why it supports Finding 1, max 28 words"
+  }
+]
+
+Coordinates are percentages of the full screenshot. targetX/targetY identify the center of one exact UI element; targetRadius is a small ring radius as a percentage of screenshot width. Mark the button, label, price, nav item, input, card title, or other exact visible element described by the finding — never the surrounding image, entire card, section, page, or whitespace. Use targetRadius 1.5–3.5 (maximum 4.5). Keep all values between 0 and 100. If the finding has no unambiguous visible target, omit it. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
+
+FINDINGS:
+${list}`;
+}
+
+function parseVisualEvidence(raw, issues) {
+  const text = String(raw || "").trim();
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const data = JSON.parse(match[0]);
+    if (!Array.isArray(data)) return [];
+    return data.map((item, index) => {
+      const findingIndex = Math.round(Number(item?.findingIndex));
+      const issue = issues[findingIndex - 1];
+      if (!issue) return null;
+      const clamp = (value, fallback) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
+      };
+      const hasPinpoint = Number.isFinite(Number(item?.targetX)) && Number.isFinite(Number(item?.targetY));
+      const hasLegacyFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
+      let cx;
+      let cy;
+      let radius;
+      if (hasPinpoint || hasLegacyFocalPoint) {
+        cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
+        cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
+        radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
+      } else {
+        // Old box responses do not identify a precise target. Their center is
+        // retained for continuity, but rendered only as a small pinpoint.
+        const x = clamp(item.x, 0), y = clamp(item.y, 0);
+        const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
+        const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
+        cx = Math.max(3, Math.min(97, x + w / 2));
+        cy = Math.max(3, Math.min(97, y + h / 2));
+        radius = Math.max(1.5, Math.min(3.5, Math.min(w, h) / 4));
+      }
+      const explanation = String(item.explanation || "").trim().slice(0, 220);
+      if (!explanation) return null;
+      return { id: `F-${findingIndex}-${index}`, findingIndex, issueTitle: issue.title, cx, cy, radius, target: String(item.target || "").trim().slice(0, 100), explanation };
+    }).filter(Boolean).slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+async function compressScreenshotForVision(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) return dataUrl;
+  if (typeof document === "undefined" || typeof Image === "undefined") return dataUrl;
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const maxWidth = 1600;
+        const maxHeight = 1800;
+        const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
+
+/* ----------------------------------------------------------------------- */
 /* Parsing                                                                  */
 /* ----------------------------------------------------------------------- */
-function stripDashLines(s) {
-  return (s || "")
-    .split("\n")
-    .filter((l) => !/^-{4,}\s*$/.test(l.trim()))
-    .join("\n")
-    .trim();
-}
 
-function parseIssues(block) {
-  const content = stripDashLines(block);
-  const re =
-    /Issue:\s*([\s\S]+?)\nSeverity:\s*([\s\S]+?)\nWhy it matters:\s*([\s\S]+?)\nRecommendation:\s*([\s\S]+?)(?=\n+Issue:|\s*$)/g;
-  const issues = [];
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    issues.push({
-      title: m[1].trim().replace(/^\*+|\*+$/g, ""),
-      severity: severityFor(m[2]),
-      why: m[3].trim(),
-      recommendation: m[4].trim(),
-    });
-  }
-  const introEnd = content.search(/Issue:/);
-  const intro = introEnd > 0 ? content.slice(0, introEnd).trim() : "";
-  return { intro, issues };
-}
-
-function parseNumberedList(text) {
-  if (!text) return [];
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => /^\d+[\.\)]\s*/.test(l))
-    .map((l) => l.replace(/^\d+[\.\)]\s*/, "").trim())
-    .filter(Boolean);
-}
-
-function parseDashList(text) {
-  if (!text) return [];
-  return stripDashLines(text)
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => /^[-*•]\s*/.test(l))
-    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
-    .filter(Boolean);
-}
-
-function parseSummary(block) {
-  const content = stripDashLines(block);
-  const scoreM = content.match(/Overall UX Score:\s*(\d+)/i);
-  const assessM = content.match(
-    /Overall Assessment:\s*[\*_]*\s*(Excellent|Good|Average|Poor)/i
-  );
-  const strengthsStart = content.search(/Top Strengths:/i);
-  const concernsStart = content.search(/Top Concerns:/i);
-  let strengthsText = "";
-  let concernsText = "";
-  if (strengthsStart >= 0) {
-    strengthsText = content.slice(strengthsStart, concernsStart >= 0 ? concernsStart : content.length);
-  }
-  if (concernsStart >= 0) concernsText = content.slice(concernsStart);
-  const introEnd = strengthsStart >= 0 ? strengthsStart : content.length;
-  return {
-    intro: content.slice(0, introEnd).replace(/Overall UX Score:.*$/im, "").replace(/Overall Assessment:.*$/im, "").trim(),
-    score: scoreM ? Number(scoreM[1]) : null,
-    assessment: assessM ? assessM[1] : null,
-    strengths: parseNumberedList(strengthsText),
-    concerns: parseNumberedList(concernsText),
-  };
-}
-
-function parseTop10(block) {
-  const content = stripDashLines(block);
-  const re =
-    /(\d+)[\.\)]\s*(?:\*+)?Recommendation:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected User Benefit:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected Business Benefit:?(?:\*+)?\s*([\s\S]+?)(?=\n+\d+[\.\)]|\s*$)/g;
-  const items = [];
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    items.push({
-      rank: Number(m[1]),
-      recommendation: m[2].trim(),
-      userBenefit: m[3].trim(),
-      businessBenefit: m[4].trim(),
-    });
-  }
-  return items;
-}
-
-function parseScorecard(block) {
-  const content = stripDashLines(block);
-  const num = (label) => {
-    const m = content.match(new RegExp(label + ":?\\s*\\*{0,2}\\s*(\\d+)", "i"));
-    return m ? Number(m[1]) : null;
-  };
-  const verdictM = content.match(/Final Verdict:\s*([\s\S]+)$/i);
-  return {
-    usability: num("Usability"),
-    accessibility: num("Accessibility"),
-    visual: num("Visual Design"),
-    trust: num("Trust"),
-    conversion: num("Conversion"),
-    overall: num("Overall UX Score"),
-    verdict: verdictM ? verdictM[1].trim() : "",
-  };
-}
-
-const KNOWN_SECTIONS = [
-  "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
-  "Trust & Credibility Review", "Trust and Credibility Review", "Conversion Optimization Review",
-  "Cognitive Load Assessment", "AI Recommendations", "Top 10 UX Improvements", "Quick Wins",
-  "Strategic Improvements", "Final Scorecard",
-];
-
-function normalizeReportText(rawText) {
-  let t = (rawText || "").replace(/\r\n/g, "\n").replace(/```[a-z]*\n?/gi, "");
-  // Normalize any heading depth (#, ##, ###) to a single '# '
-  t = t.replace(/^#{1,6}\s+/gm, "# ");
-  // Convert bold-only section title lines (e.g. **Executive Summary**) into headers
-  const sectionAlt = KNOWN_SECTIONS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  t = t.replace(new RegExp(`^\\s*\\*{1,2}(${sectionAlt})\\*{1,2}\\s*$`, "gmi"), "# $1");
-  // Also catch plain title lines that exactly match a known section name
-  t = t.replace(new RegExp(`^(${sectionAlt})\\s*$`, "gmi"), (m, name) => `# ${name}`);
-  // Strip bold markers around field labels so the issue regex matches
-  t = t.replace(/\*\*(Issue|Severity|Why it matters|Recommendation|Expected User Benefit|Expected Business Benefit|Overall UX Score|Overall Assessment|Top Strengths|Top Concerns|Final Verdict|Usability|Accessibility|Visual Design|Trust|Conversion):\*\*/gi, "$1:");
-  t = t.replace(/\*\*(Issue|Severity|Why it matters|Recommendation|Expected User Benefit|Expected Business Benefit|Final Verdict):\s*/gi, "$1: ");
-  return t;
-}
-
-function parseReport(rawText) {
-  const clean = normalizeReportText(rawText);
-  const headerRe = /^#\s+(.+?)\s*$/gm;
-  const matches = [...clean.matchAll(headerRe)];
-  const sections = {};
-  for (let i = 0; i < matches.length; i++) {
-    const title = matches[i][1].trim();
-    const start = matches[i].index + matches[i][0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : clean.length;
-    sections[title] = clean.slice(start, end).trim();
-  }
-  const find = (key) =>
-    sections[Object.keys(sections).find((k) => k.toLowerCase().includes(key))] || "";
-
-  return {
-    raw: clean,
-    hasContent: matches.length > 0,
-    summary: parseSummary(find("executive summary")),
-    usability: parseIssues(find("usability analysis")),
-    visual: parseIssues(find("visual design analysis")),
-    accessibility: parseIssues(find("accessibility review")),
-    trust: parseIssues(find("trust")),
-    conversion: parseIssues(find("conversion optimization")),
-    cognitive: parseIssues(find("cognitive load")),
-    aiRecommendations: stripDashLines(find("ai recommendations")),
-    top10: parseTop10(find("top 10")),
-    quickWins: parseDashList(find("quick wins")),
-    strategic: parseDashList(find("strategic improvements")),
-    scorecard: parseScorecard(find("final scorecard")),
-  };
-}
-
-function buildPlainTextSummary(report, source, saved) {
-  if (!report) return "";
-  // Keep well under ~1800 chars: long mailto: URLs are silently dropped by
-  // many mail clients and browsers.
-  const lines = [];
-  const src = source && source.mode === "url" && source.url ? source.url : "uploaded screens";
-  lines.push(`Nest Audit — ${src}`);
-  lines.push(`Overall score: ${report.summary.score ?? "—"}/100 (${report.summary.assessment ?? "Unrated"})`);
-  if (report.summary.concerns.length) {
-    lines.push("", "Top concerns:");
-    report.summary.concerns.slice(0, 3).forEach((c, i) => lines.push(`${i + 1}. ${String(c).slice(0, 120)}`));
-  }
-  if (report.scorecard.verdict) {
-    lines.push("", "Verdict: " + String(report.scorecard.verdict).slice(0, 300));
-  }
-  lines.push("", "View the full report, slide deck and PDF export:");
-  lines.push(saved ? `${SITE_URL}/#myaudits` : SITE_URL);
-  if (!saved) {
-    lines.push("(Log in and re-run to keep audits in your history.)");
-  }
-  return lines.join("\n").slice(0, 1500);
-}
 
 /* ----------------------------------------------------------------------- */
 /* Storage / lightweight accounts                                          */
@@ -564,145 +590,6 @@ const api = {
 
 
 /* ----------------------------------------------------------------------- */
-/* Small UI atoms                                                           */
-/* ----------------------------------------------------------------------- */
-function Squiggle({ width = 64, color = C.gold }) {
-  return (
-    <svg width={width} height="8" viewBox="0 0 64 8" fill="none" style={{ display: "block" }}>
-      <path
-        d="M1 5.5C4 2 7 1 10 4C13 7 16 2 19 2C22 2 25 6.5 28 6.5C31 6.5 34 1.5 37 1.5C40 1.5 43 6 46 6C49 6 52 1.5 55 2C58 2.5 60 5 63 4.5"
-        stroke={color}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        fill="none"
-      />
-    </svg>
-  );
-}
-
-function SeverityBadge({ severity, size = "sm" }) {
-  const s = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
-  const Icon = s.icon;
-  const pad = size === "sm" ? "3px 9px" : "4px 12px";
-  const fs = size === "sm" ? 11 : 12;
-  return (
-    <span
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 5, padding: pad, borderRadius: 99,
-        background: s.bg, color: s.color, fontFamily: "'IBM Plex Mono', monospace", fontSize: fs,
-        letterSpacing: 0.4, fontWeight: 500, border: `1px solid ${s.color}33`, whiteSpace: "nowrap",
-      }}
-    >
-      <Icon size={size === "sm" ? 12 : 13} strokeWidth={2.2} />
-      {s.label.toUpperCase()}
-    </span>
-  );
-}
-
-function IssueCard({ issue }) {
-  const s = SEVERITY_STYLES[issue.severity] || SEVERITY_STYLES.Medium;
-  return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${s.color}`, borderRadius: 10, padding: "16px 18px", marginBottom: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-        <h4 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 16.5, color: C.text, lineHeight: 1.3 }}>{issue.title}</h4>
-        <SeverityBadge severity={issue.severity} />
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.muted, marginBottom: 3 }}>WHY IT MATTERS</div>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: C.textDim }}>{issue.why}</p>
-      </div>
-      <div>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, letterSpacing: 0.6, color: C.gold, marginBottom: 3 }}>RECOMMENDATION</div>
-        <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55, color: C.text }}>{issue.recommendation}</p>
-      </div>
-    </div>
-  );
-}
-
-function ScoreBar({ label, value }) {
-  const v = value == null ? 0 : value;
-  const color = v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical;
-  return (
-    <div style={{ marginBottom: 13 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-        <span style={{ fontSize: 13, color: C.textDim, fontWeight: 500 }}>{label}</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: C.text }}>{value == null ? "—" : `${value}/100`}</span>
-      </div>
-      <div style={{ height: 6, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${v}%`, background: color, borderRadius: 99, transition: "width 900ms cubic-bezier(.2,.8,.2,1)" }} />
-      </div>
-    </div>
-  );
-}
-
-function SectionIntro({ text }) {
-  if (!text) return null;
-  return <p style={{ color: C.textDim, fontSize: 14, lineHeight: 1.6, margin: "0 0 14px 0" }}>{text}</p>;
-}
-
-function EmptyIssueState() {
-  return (
-    <p style={{ color: C.muted, fontSize: 13.5, fontStyle: "italic", margin: 0 }}>
-      The director found nothing structured to flag here yet — try regenerating, or this area may be clean.
-    </p>
-  );
-}
-
-function Section({ icon: Icon, title, data }) {
-  return (
-    <div>
-      <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 18, margin: "0 0 14px 0", display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon size={17} color={C.gold} /> {title}
-      </h3>
-      <SectionIntro text={data.intro} />
-      {data.issues.length === 0 ? <EmptyIssueState /> : data.issues.map((issue, i) => <IssueCard key={i} issue={issue} />)}
-    </div>
-  );
-}
-
-function ListBlock({ icon: Icon, title, subtitle, items, color }) {
-  return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18 }}>
-      <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: C.text, fontSize: 17, margin: "0 0 2px 0", display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon size={16} color={color} /> {title}
-      </h3>
-      <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>{subtitle}</div>
-      {items.length === 0 ? (
-        <EmptyIssueState />
-      ) : (
-        <div>
-          {items.map((it, i) => (
-            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: i < items.length - 1 ? `1px solid ${C.borderSoft}` : "none" }}>
-              <CircleDot size={14} color={color} style={{ marginTop: 3, flexShrink: 0 }} />
-              <span style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.55 }}>{it}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Modal({ children, onClose, maxWidth = 420 }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(44,32,19,0.55)", display: "flex",
-        alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22, maxWidth, width: "100%", maxHeight: "85vh", overflowY: "auto" }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------------------- */
 /* Disclaimer modal                                                        */
 /* ----------------------------------------------------------------------- */
 function DisclaimerModal({ onAccept, onCancel }) {
@@ -811,6 +698,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
   const [mobile, setMobile] = useState("");
   const [company, setCompany] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [step, setStep] = useState("form");       // form | verify
@@ -1001,7 +889,24 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       {mode === "signup" && (
         <input type="tel" placeholder="Mobile number (optional)" value={mobile} onChange={(e) => setMobile(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
       )}
-      <input type="password" placeholder="Password (min 6 characters)" value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, marginTop: 10 }} />
+      <div style={{ position: "relative", marginTop: 10 }}>
+        <input
+          type={showPassword ? "text" : "password"}
+          placeholder="Password (min 6 characters)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={{ ...inputStyle, paddingRight: 46 }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((visible) => !visible)}
+          aria-label={showPassword ? "Hide password" : "Show password"}
+          title={showPassword ? "Hide password" : "Show password"}
+          style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "transparent", color: C.muted, cursor: "pointer", borderRadius: 7 }}
+        >
+          {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      </div>
 
       {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
 
@@ -1454,7 +1359,42 @@ function AssessmentChip({ assessment }) {
   );
 }
 
-function ReportScreen({ report, images, source, auditedPages = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+
+function VisualEvidencePanel({ screenshot, evidence = [] }) {
+  if (!screenshot || !evidence.length) return null;
+  return (
+    <div style={{ borderTop: "1px solid " + C.borderSoft, paddingTop: 14, marginBottom: 14 }}>
+      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 5 }}>Visual Evidence</div>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 12 }}>Highlighted areas are mapped only where the finding is visible in the rendered page.</div>
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid " + C.border, background: C.surfaceAlt }}>
+        <img src={screenshot} alt="Rendered website evidence" style={{ display: "block", width: "100%", height: "auto" }} />
+        {evidence.map((item, index) => {
+          const r = item.radius ?? Math.max(1.5, Math.min(3.5, Math.min(item.w || 12, item.h || 8) / 4));
+          const cx = item.cx ?? ((item.x || 0) + (item.w || 0) / 2);
+          const cy = item.cy ?? ((item.y || 0) + (item.h || 0) / 2);
+          return (
+            <div key={item.id} style={{ position: "absolute", left: cx + "%", top: cy + "%", width: (r * 2) + "%", minWidth: 14, maxWidth: 34, aspectRatio: "1 / 1", transform: "translate(-50%, -50%)", border: "2px solid " + C.critical, borderRadius: "50%", boxShadow: "0 0 0 1px rgba(255,255,255,0.9), 0 2px 8px rgba(128,36,25,0.2)", pointerEvents: "none" }}>
+              <span style={{ position: "absolute", top: 0, left: 0, transform: "translate(-30%, -30%)", width: 24, height: 24, borderRadius: "50%", background: C.critical, color: "#fff", border: "2px solid #fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.2)" }}>{index + 1}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+        {evidence.map((item, index) => (
+          <div key={item.id + "-note"} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 11px", borderRadius: 10, background: C.surfaceAlt, border: "1px solid " + C.borderSoft }}>
+            <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: C.critical, color: "#fff", fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{index + 1}</span>
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: C.text, marginBottom: 2 }}>{item.issueTitle}</div>
+              <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.45 }}>{item.explanation}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
@@ -1531,6 +1471,8 @@ function ReportScreen({ report, images, source, auditedPages = [], onReset, isLo
               ))}
             </div>
           )}
+
+          <VisualEvidencePanel screenshot={auditScreenshot} evidence={visualEvidence} />
 
           {summary.intro && (
             <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
@@ -1699,7 +1641,8 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
-  const TOTAL = 12;
+  const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
@@ -1837,27 +1780,27 @@ ${auditedPages.length ? `<section class="slide">
 const SLIDE = {
   page: {
     width: "296mm", height: "166mm", boxSizing: "border-box", padding: "14mm 16mm",
-    background: C.goldSoft, color: C.text, pageBreakAfter: "always", position: "relative",
+    background: "#FCFBF8", color: C.text, pageBreakAfter: "always", position: "relative",
     fontFamily: "'Plus Jakarta Sans', sans-serif", overflow: "hidden", display: "flex", flexDirection: "column",
-    border: `1.2mm solid ${C.gold}`,
+    border: "0.3mm solid #E7E1D8", boxShadow: "inset 0 3mm 0 #F3EEE5",
   },
-  kicker: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "10pt", letterSpacing: 2, color: C.gold, marginBottom: "3mm", textTransform: "uppercase" },
-  title: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "26pt", margin: "0 0 3mm 0", color: C.dark, letterSpacing: "-0.5pt" },
-  rule: { width: "26mm", height: "1.2mm", background: C.gold, borderRadius: 99, marginBottom: "6mm" },
-  footer: { position: "absolute", bottom: "8mm", left: "16mm", right: "16mm", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", color: C.muted },
+  kicker: { display: "inline-flex", alignSelf: "flex-start", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 700, fontSize: "8pt", letterSpacing: 1.4, color: C.gold, background: C.goldSoft, border: `0.3mm solid ${C.gold}33`, borderRadius: 99, padding: "1.3mm 3mm", marginBottom: "3.5mm", textTransform: "uppercase" },
+  title: { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: "28pt", margin: "0 0 3.5mm 0", color: C.dark, letterSpacing: "-0.8pt", lineHeight: 1.05 },
+  rule: { width: "30mm", height: "1mm", background: `linear-gradient(90deg, ${C.gold}, ${C.now})`, borderRadius: 99, marginBottom: "6mm" },
+  footer: { position: "absolute", bottom: "7mm", left: "16mm", right: "16mm", paddingTop: "3mm", borderTop: "0.25mm solid #E8E2D9", display: "flex", justifyContent: "space-between", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 0.35, color: C.muted },
 };
 
-function SlideIconBadge({ icon: Icon, size = 14 }) {
+function SlideIconBadge({ icon: Icon, size = 14, theme = REPORT_THEME_FALLBACK }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "9mm", height: "9mm", borderRadius: "50%", background: C.gold, flexShrink: 0 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "9mm", height: "9mm", borderRadius: `${Math.max(8, Math.min(theme.radius || 14, 24))}px`, background: theme.primary || C.gold, flexShrink: 0 }}>
       <Icon size={size} color="#FFFFFF" />
     </span>
   );
 }
 
-function SlideFooter({ n, total, sourceLabel }) {
+function SlideFooter({ n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
   return (
-    <div style={SLIDE.footer}>
+    <div style={{ ...SLIDE.footer, color: theme.muted, borderTopColor: theme.border }}>
       <span>NEST AUDIT · {sourceLabel}</span>
       <span>{n} / {total}</span>
     </div>
@@ -1873,69 +1816,160 @@ function SevChip({ severity }) {
   );
 }
 
-function IssueSlide({ title, data, n, total, sourceLabel, icon }) {
+function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
   const issues = data.issues.slice(0, 3);
   return (
-    <div className="deck-slide" style={SLIDE.page}>
-      <div style={SLIDE.kicker}>Findings</div>
-      <h2 style={SLIDE.title}>{title}</h2>
-      <div style={SLIDE.rule} />
+    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Findings</div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>{title}</h2>
+      <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
         {issues.map((iss, i) => (
-          <div key={i} style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm", display: "flex", flexDirection: "column", gap: "3mm" }}>
+          <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
-              <div style={{ fontWeight: 800, fontSize: "12pt", lineHeight: 1.25, color: C.dark }}>{iss.title}</div>
+              <div style={{ fontWeight: 800, fontSize: `${12 * (T.titleScale || 1)}pt`, lineHeight: 1.25, color: T.text }}>{iss.title}</div>
               <SevChip severity={iss.severity} />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: C.textDim }}>{iss.why}</div>
+              <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
+              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: T.textDim }}>{iss.why}</div>
             </div>
-            <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${C.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
-              <SlideIconBadge icon={Check} size={12} />
+            <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${T.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
+              <SlideIconBadge icon={Check} size={12} theme={T} />
               <div>
-                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: C.gold, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
-                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: C.text }}>{iss.recommendation}</div>
+                <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.primary, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
+                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: T.text }}>{iss.recommendation}</div>
               </div>
             </div>
           </div>
         ))}
       </div>
-      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} />
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
   );
 }
 
-function DeckSlides({ report, source, auditedPages = [] }) {
+function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, issue, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
+  const severity = issue?.severity || "Medium";
+  const sev = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
+  const cx = Number.isFinite(Number(item.cx)) ? Number(item.cx) : 50;
+  const cy = Number.isFinite(Number(item.cy)) ? Number(item.cy) : 50;
+  const tight = Math.max(1.5, Math.min(4.5, Number(item.radius) || 2.5));
+
+  return (
+    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>
+        Evidence · Finding {index + 1}
+      </div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${27 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>
+        {item.issueTitle}
+      </h2>
+      <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.45fr 0.9fr", gap: "8mm", flex: 1, minHeight: 0 }}>
+        <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow }}>
+          <img
+            src={screenshot}
+            alt={`Focused evidence for finding ${index + 1}`}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: `${cx}% ${cy}%`, display: "block" }}
+          />
+          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(8, tight * 3)}mm`, height: `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
+            <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
+              {index + 1}
+            </span>
+          </div>
+          <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
+            ZOOMED EVIDENCE · PRECISE TARGET
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "4mm", minHeight: 0 }}>
+          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm" }}>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
+              <SevChip severity={severity} />
+            </div>
+            <div style={{ fontSize: "14pt", fontWeight: T.titleWeight || 800, lineHeight: 1.25, color: T.text }}>{item.issueTitle}</div>
+          </div>
+
+          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINTS</div>
+            <div style={{ fontSize: "10pt", lineHeight: 1.5, color: T.text }}>{item.explanation}</div>
+          </div>
+
+          {issue?.why && (
+            <div style={{ padding: "0 1mm" }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.muted, marginBottom: "2mm" }}>WHY IT MATTERS</div>
+              <div style={{ fontSize: "9.5pt", lineHeight: 1.5, color: T.textDim }}>{issue.why}</div>
+            </div>
+          )}
+
+          {issue?.recommendation && (
+            <div style={{ marginTop: "auto", padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
+              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>RECOMMENDED IMPROVEMENT</div>
+              <div style={{ fontSize: "9.5pt", lineHeight: 1.5, color: T.text }}>{issue.recommendation}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
+    </div>
+  );
+}
+
+function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
+  const T = theme || REPORT_THEME_FALLBACK;
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
-  const TOTAL = 12;
+  const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
+  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const next = () => ++n;
 
   return (
     <div>
       {/* 1 — Title */}
-      <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center", alignItems: "center", textAlign: "center" }}>
-        <div style={SLIDE.kicker}>Senior UX Review</div>
-        <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "40pt", marginBottom: "4mm" }}>Nest Audit Report</div>
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "11pt", color: C.textDim, marginBottom: "10mm" }}>{sourceLabel}</div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "3mm" }}>
-          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: "64pt", color: scoreColor(summary.score ?? 0) }}>{summary.score ?? "—"}</span>
-          <span style={{ fontSize: "16pt", color: C.muted }}>/100 · {summary.assessment ?? "Unrated"}</span>
+      <div className="deck-slide" style={{ ...SLIDE.page, background: `linear-gradient(135deg, ${T.coverStart} 0%, ${T.coverEnd} 100%)`, color: "#FFFFFF", border: "none", boxShadow: "none", justifyContent: "center", alignItems: "center", textAlign: "center" }}>
+        <div style={{ position: "absolute", width: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "96mm", height: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "62mm", borderRadius: T.ornament === "block" ? "8mm" : T.ornament === "frame" ? "0" : "50%", border: T.ornament === "line" ? "0.5mm solid rgba(255,255,255,0.13)" : "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm", transform: T.ornament === "block" ? "rotate(14deg)" : "none" }} />
+        <div style={{ position: "absolute", width: T.ornament === "grid" ? "74mm" : "70mm", height: T.ornament === "grid" ? "74mm" : "70mm", borderRadius: T.ornament === "block" ? "7mm" : T.ornament === "frame" ? "0" : "50%", background: T.ornament === "line" ? "transparent" : "rgba(255,255,255,0.035)", border: T.ornament === "grid" ? "0.5mm solid rgba(255,255,255,0.07)" : "none", left: "-18mm", bottom: "-22mm" }} />
+        <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
+          <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review · {T.descriptor || "ADAPTIVE SYSTEM"}</div>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: T.titleWeight || 800, fontSize: 58 * (T.titleScale || 1), lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: T.letterSpacing || "-1.5pt" }}>UXNest Audit Report</div>
+          <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, lineHeight: 1.3, color: "#BFD8D2", maxWidth: "190mm", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</div>
+          <div style={{ marginTop: 10, padding: "8mm 13mm", minWidth: "92mm", borderRadius: `${T.radius || 14}px`, background: "rgba(255,255,255,0.08)", border: "0.35mm solid rgba(255,255,255,0.16)", backdropFilter: "blur(6px)" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1.3, color: "#9CCFC5", marginBottom: "2mm" }}>OVERALL UX SCORE</div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "center", gap: 10, lineHeight: 1 }}>
+              <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 92, lineHeight: 0.9, color: "#FFFFFF" }}>{summary.score ?? "—"}</span>
+              <span style={{ fontSize: 18, color: "#BFD8D2", whiteSpace: "nowrap" }}>/100</span>
+            </div>
+            <div style={{ marginTop: "3mm", fontSize: 12, fontWeight: 700, color: scoreColor(summary.score ?? 0), textTransform: "uppercase", letterSpacing: 0.8 }}>{summary.assessment ?? "Unrated"}</div>
+          </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <div style={{ ...SLIDE.footer, color: "#9CCFC5", borderTopColor: "rgba(255,255,255,0.12)" }}><span>UXNEST · {sourceLabel}</span><span>{next()} / {TOTAL}</span></div>
       </div>
 
       {/* 2 — Executive Summary */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Overview</div>
-        <h2 style={SLIDE.title}>Executive Summary</h2>
-        <div style={SLIDE.rule} />
-        <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{summary.intro}</p>
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Overview</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Executive Summary</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+        <p style={{ fontSize: "11pt", lineHeight: 1.55, color: C.textDim, maxWidth: "220mm", margin: "0 0 5mm 0" }}>{summary.intro}</p>
+        {source?.mode === "url" && (
+          <div style={{ background: C.surfaceAlt, border: `0.35mm solid ${C.border}`, borderRadius: "2.5mm", padding: "3.5mm 4mm", marginBottom: "5mm", maxWidth: "240mm" }}>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 0.8, color: C.gold, marginBottom: "2mm" }}>PAGES TESTED IN THIS AUDIT</div>
+            {auditedPages.length > 0 ? auditedPages.map((url) => (
+              <div key={url} style={{ fontSize: "8.5pt", color: C.textDim, lineHeight: 1.45, wordBreak: "break-all" }}>• {url}</div>
+            )) : (
+              <div style={{ fontSize: "8.5pt", color: C.muted }}>No individual page list was captured for this legacy audit.</div>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
           <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.low}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>TOP STRENGTHS</div>
@@ -1950,22 +1984,45 @@ function DeckSlides({ report, source, auditedPages = [] }) {
             ))}
           </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 3–8 — Section slides */}
-      <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
-      <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+      <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+
+      {/* Pages reviewed — visual record of the URLs actually tested */}
+      {hasScreenshots && (
+        <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+          <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Audit Coverage</div>
+          <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Pages Reviewed</h2>
+          <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+          <div style={{ fontSize: "10pt", color: C.textDim, marginBottom: "5mm" }}>Visual snapshots of the live pages UXNest retrieved and used as evidence for this audit.</div>
+          <div style={{ display: "grid", gridTemplateColumns: (auditScreenshots.length || 1) > 1 ? "1fr 1fr" : "1fr", gap: "6mm", flex: 1, alignContent: "start" }}>
+            {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
+              <div key={item.url || index} style={{ border: "0.3mm solid #E5DED4", borderRadius: "4mm", overflow: "hidden", background: "#FFFFFF", boxShadow: "0 2mm 6mm rgba(30,43,40,0.06)" }}>
+                <div style={{ height: "82mm", background: C.surfaceAlt, display: "flex", alignItems: "flex-start", justifyContent: "center", overflow: "hidden" }}>
+                  <img src={item.screenshot} alt={"Audited page " + (index + 1)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }} />
+                </div>
+                <div style={{ padding: "3.5mm 4mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", color: C.textDim, wordBreak: "break-all" }}>
+                  {item.url || "Audited page"}
+                </div>
+              </div>
+            ))}
+          </div>
+          <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+        </div>
+      )}
 
       {/* 9 — Top 10 */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Priorities</div>
-        <h2 style={SLIDE.title}>Top 10 Improvements</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Priorities</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Top 10 Improvements</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3mm 8mm", flex: 1, alignContent: "start" }}>
           {top10.slice(0, 10).map((t) => (
             <div key={t.rank} style={{ display: "flex", gap: "3mm", alignItems: "baseline", borderBottom: `1px solid ${C.borderSoft}`, paddingBottom: "2.5mm" }}>
@@ -1974,14 +2031,14 @@ function DeckSlides({ report, source, auditedPages = [] }) {
             </div>
           ))}
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 10 — Roadmap */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Roadmap</div>
-        <h2 style={SLIDE.title}>Quick Wins vs. Strategic Bets</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Roadmap</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Quick Wins vs. Strategic Bets</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ display: "flex", gap: "8mm", flex: 1 }}>
           <div style={{ flex: 1, background: "#FFFFFF", border: `0.4mm solid ${C.gold}`, borderRadius: "3mm", padding: "6mm" }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", letterSpacing: 1, color: C.low, marginBottom: "3mm" }}>QUICK WINS · UNDER A DAY</div>
@@ -1996,14 +2053,14 @@ function DeckSlides({ report, source, auditedPages = [] }) {
             ))}
           </div>
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
       {/* 11 — Scorecard */}
-      <div className="deck-slide" style={SLIDE.page}>
-        <div style={SLIDE.kicker}>Scorecard</div>
-        <h2 style={SLIDE.title}>Final Scores</h2>
-        <div style={SLIDE.rule} />
+      <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Scorecard</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Final Scores</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: "5mm", maxWidth: "230mm" }}>
           {[["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]].map(([label, v]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "5mm" }}>
@@ -2015,14 +2072,43 @@ function DeckSlides({ report, source, auditedPages = [] }) {
             </div>
           ))}
         </div>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
-      {/* 12 — Verdict & disclaimer */}
+      {/* Focused visual evidence — one finding per slide so the UI is readable at presentation size */}
+      {auditScreenshot && visualEvidence.length > 0 && (() => {
+        const allIssues = [
+          ...(usability?.issues || []),
+          ...(visual?.issues || []),
+          ...(accessibility?.issues || []),
+          ...(trust?.issues || []),
+          ...(conversion?.issues || []),
+          ...(cognitive?.issues || []),
+        ];
+        return visualEvidence.map((item, index) => {
+          const issue = item.findingIndex
+            ? allIssues[item.findingIndex - 1]
+            : allIssues.find((candidate) => candidate.title === item.issueTitle);
+          return (
+            <EvidenceFocusSlide
+              key={item.id || index}
+              screenshot={auditScreenshot}
+              item={item}
+              index={index}
+              n={next()}
+              total={TOTAL}
+              sourceLabel={sourceLabel}
+              issue={issue}
+              theme={T}
+            />
+          );
+        });
+      })()}
+
       <div className="deck-slide" style={{ ...SLIDE.page, justifyContent: "center" }}>
-        <div style={SLIDE.kicker}>Decision</div>
-        <h2 style={SLIDE.title}>Final Verdict</h2>
-        <div style={SLIDE.rule} />
+        <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Decision</div>
+        <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>Final Verdict</h2>
+        <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
         <p style={{ fontSize: "13pt", lineHeight: 1.6, color: C.text, maxWidth: "220mm", margin: "0 0 6mm 0" }}>{scorecard.verdict || "—"}</p>
         {aiRecommendations && (
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: "3mm", padding: "6mm", maxWidth: "230mm" }}>
@@ -2033,17 +2119,17 @@ function DeckSlides({ report, source, auditedPages = [] }) {
         <p style={{ position: "absolute", bottom: "16mm", left: "16mm", right: "16mm", fontSize: "7.5pt", color: C.muted, lineHeight: 1.4 }}>
           AI-generated analysis by UXNest. Not a certified accessibility audit, legal advice, or professional UX research. Validate critical findings with qualified professionals.
         </p>
-        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} />
+        <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
     </div>
   );
 }
 
-function PrintableReport({ report, source, auditedPages = [] }) {
+function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
   return (
     <div id="uxnest-print-area" className="print-only">
-      <DeckSlides report={report} source={source} auditedPages={auditedPages} />
+      <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={theme} />
     </div>
   );
 }
@@ -2051,7 +2137,7 @@ function PrintableReport({ report, source, auditedPages = [] }) {
 /* Fullscreen in-app deck viewer: slides scaled to the device width so users
    can present or screenshot directly, since sandboxed iframes block both
    window.print() and file downloads on some platforms. */
-function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, exporting }) {
+function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK, onClose, onTryPrint, exporting }) {
   const [scale, setScale] = useState(0.3);
   const SLIDE_W = 1119; // 296mm at 96dpi
   useEffect(() => {
@@ -2061,9 +2147,9 @@ function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, ex
     return () => window.removeEventListener("resize", compute);
   }, []);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#3A3129", zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
-      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "rgba(58,49,41,0.95)", backdropFilter: "blur(4px)" }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#D8CBB6" }}>SLIDE DECK · PINCH OR ROTATE TO ZOOM</span>
+    <div style={{ position: "fixed", inset: 0, background: theme.coverStart, zIndex: 100, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: theme.coverStart, backdropFilter: "blur(4px)" }}>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#E8F0ED" }}>BRAND-ADAPTIVE · {theme.personality || "corporate"} · {theme.confidence === "image" ? "STYLE EXTRACTED FROM AUDITED SCREEN" : "UXNEST FALLBACK"} · PINCH OR ROTATE TO ZOOM</span>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Print / Save PDF
@@ -2073,10 +2159,10 @@ function DeckViewer({ report, source, auditedPages = [], onClose, onTryPrint, ex
           </button>
         </div>
       </div>
-      <div style={{ width: SLIDE_W * scale, margin: "10px auto 40px" }}>
+      <div style={{ width: exporting ? SLIDE_W : SLIDE_W * scale, margin: "10px auto 40px" }}>
         <div className="deck-scale" style={{ transform: exporting ? "none" : `scale(${scale})`, transformOrigin: "top left", width: SLIDE_W }}>
           <div className="deck-screen">
-            <DeckSlides report={report} source={source} auditedPages={auditedPages} />
+            <DeckSlides report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={theme} />
           </div>
         </div>
       </div>
@@ -2625,6 +2711,14 @@ export default function UxnestApp() {
   }, []);
   const [auditTitle, setAuditTitle] = useState("");
   const [auditedPages, setAuditedPages] = useState([]);
+  const [auditScreenshot, setAuditScreenshot] = useState(null);
+  const [auditScreenshots, setAuditScreenshots] = useState([]);
+  const auditScreenshotRef = useRef(null);
+  const [visualEvidence, setVisualEvidence] = useState([]);
+  const [reportTheme, setReportTheme] = useState(REPORT_THEME_FALLBACK);
+  // State is for rendering; the ref guarantees the exact tested URLs survive
+  // the async audit/save flow and are included in saved reports and decks.
+  const auditedPagesRef = useRef([]);
   const [auditsUsed, setAuditsUsed] = useState(0);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
@@ -2751,25 +2845,44 @@ export default function UxnestApp() {
     checkRunState();
   }
 
-  async function callClaude(messages, tools, attempt = 0) {
+  async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
     const body = { model: "claude-sonnet-4-6", max_tokens: 1000, messages };
     if (tools) body.tools = tools;
 
+    const requestId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    // Do not race a browser AbortController against the server's controlled
+    // upstream timeout. The API returns a structured timeout before Vercel's
+    // function ceiling, while a client abort can turn an otherwise valid late
+    // response into the generic "fetch failed" message.
     let response;
     try {
       response = await fetch("/api/audit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-UXNest-Stage": stage,
+          "X-UXNest-Request-Id": requestId,
+        },
         body: JSON.stringify(body),
       });
     } catch (networkErr) {
-      if (attempt >= 4) {
-        throw new Error("Couldn't reach the audit service. This usually means the server took too long or the API key isn't configured. Check your connection and try again — if it keeps happening, try fewer screens per audit.");
+      if (attempt >= 1) {
+        const timeout = networkErr && networkErr.name === "AbortError";
+        throw new Error(timeout
+          ? "This audit step timed out twice. Please try again in a moment."
+          : "Couldn't reach the audit service after a retry. Check your connection and try again.");
       }
-      setRunProgress((p) => ({ ...p, status: `Connection hiccup — retrying (${attempt + 1}/4)…` }));
-      await waitInterruptible(Math.min(1000 * 2 ** attempt, 6000) + Math.random() * 800);
-      return callClaude(messages, tools, attempt + 1);
+      const timeout = networkErr && networkErr.name === "AbortError";
+      setRunProgress((p) => ({ ...p, status: timeout ? "This step is taking longer than expected — retrying once…" : "Connection hiccup — retrying once…" }));
+      await waitInterruptible(800 + Math.random() * 400);
+      return callClaude(messages, tools, attempt + 1, stage);
+    } finally {
+      // The server owns request timeout handling so valid responses are not
+      // discarded by a competing browser-side timer.
     }
 
     if (response.status === 429 || response.status >= 500) {
@@ -2789,7 +2902,7 @@ export default function UxnestApp() {
       const waitMs = retryAfter ? Math.min(Number(retryAfter) * 1000, 8000) : Math.min(1000 * 2 ** attempt, 4000);
       setRunProgress((p) => ({ ...p, status: `Service busy — retrying (${attempt + 1}/3)…` }));
       await waitInterruptible(waitMs);
-      return callClaude(messages, tools, attempt + 1);
+      return callClaude(messages, tools, attempt + 1, stage);
     }
     if (!response.ok) {
       let msg = "";
@@ -2806,18 +2919,18 @@ export default function UxnestApp() {
     } catch {
       if (attempt >= 3) throw new Error("Received an unreadable response from the audit service. Please try again.");
       await waitInterruptible(Math.min(1000 * 2 ** attempt, 4000));
-      return callClaude(messages, tools, attempt + 1);
+      return callClaude(messages, tools, attempt + 1, stage);
     }
   }
 
-  async function runWithContinuation(initialMessages, tools, onRound) {
+  async function runWithContinuation(initialMessages, tools, onRound, stage = "audit") {
     let messages = initialMessages;
     let fullText = "";
     let iterations = 0;
     while (iterations < 10) {
       iterations++;
       if (onRound) onRound(iterations);
-      const data = await callClaude(messages, tools);
+      const data = await callClaude(messages, tools, 0, stage);
       const blocks = data.content || [];
       fullText += blocks.filter((b) => b.type === "text").map((b) => b.text).join("");
       // pause_turn: the model paused mid-search — resume by returning its turn.
@@ -2848,8 +2961,12 @@ export default function UxnestApp() {
     let completed = 0;
     setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
 
-    const CONCURRENCY = 3;
-    const STAGGER_MS = 500;
+    // Keep only two report requests in flight. Three concurrent long-lived
+    // requests reproduce a mobile/browser connection failure where later
+    // requests fail before reaching /api/audit. Two still provide parallelism
+    // while keeping the transport stable.
+    const CONCURRENCY = 2;
+    const STAGGER_MS = 250;
     const results = new Array(REPORT_BATCHES.length);
     let nextIndex = 0;
 
@@ -2863,7 +2980,12 @@ export default function UxnestApp() {
           { type: "text", text: buildPromptForBatch(REPORT_BATCHES[i]) },
         ];
         try {
-          const text = await runWithContinuation([{ role: "user", content }], tools);
+          const text = await runWithContinuation(
+            [{ role: "user", content }],
+            tools,
+            undefined,
+            `report-section-${i + 1}`
+          );
           results[i] = { status: "fulfilled", value: text };
         } catch (e) {
           results[i] = { status: "rejected", reason: e };
@@ -2914,26 +3036,114 @@ export default function UxnestApp() {
   const executeUrlAudit = async () => {
     let cleanUrl = urlInput.trim();
     if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) cleanUrl = `https://${cleanUrl}`;
-    const tools = [{ type: "web_search_20250305", name: "web_search" }];
-
-    // Stage 1: one exploration pass produces a factual dossier of the site.
-    setRunProgress({ round: 0, status: "Exploring the site…", done: 0, total: REPORT_BATCHES.length + 1 });
-    const dossier = await runWithContinuation(
-      [{ role: "user", content: [{ type: "text", text: EXPLORATION_PROMPT(cleanUrl, navLimit) }] }],
-      tools
-    );
-    const pagesMatch = dossier.match(/PAGES AUDITED:\s*(.+)/i);
-    const pages = pagesMatch
-      ? pagesMatch[1].split("|").map((u) => u.trim()).filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
-      : [];
-    setAuditedPages(pages);
-    if (!dossier || dossier.trim().length < 100) {
-      throw new Error("Couldn't gather enough content from that site to audit it — it may block automated access. Try a different URL or upload screenshots instead.");
+    try {
+      const parsedUrl = new URL(cleanUrl);
+      if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) throw new Error();
+      cleanUrl = parsedUrl.toString();
+    } catch {
+      throw new Error("Enter a valid website address, for example uxnest.ai or https://uxnest.ai.");
     }
-    setRunProgress((p) => ({ ...p, status: "", done: 1 }));
 
-    // Stage 2: batches consume the dossier as plain text — no tools, fast.
-    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier.trim(), batch), [], undefined, 1);
+    // Stage 1: retrieve the actual public website directly. Search indexing is
+    // supplementary information, not a prerequisite for auditing a live URL.
+    setRunProgress({ round: 0, status: "Retrieving the live website…", done: 0, total: REPORT_BATCHES.length + 1 });
+    const response = await fetch("/api/fetch-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: cleanUrl, navLimit }),
+    });
+    const evidence = await response.json().catch(() => ({}));
+
+    const visualOnly = response.ok && evidence.evidenceStatus === "VISUAL_ONLY";
+    if (!response.ok || (evidence.evidenceStatus !== "SUFFICIENT" && !visualOnly)) {
+      const blocked = evidence.code === "AUDIT_ENVIRONMENT_BLOCKED" || evidence.evidenceStatus === "BLOCKED";
+      const err = new Error(blocked
+        ? "UXNest's audit environment was blocked by this website."
+        : "UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = evidence.reason || evidence.error || "The website could not be retrieved.";
+      err.evidenceDiagnostics = evidence.diagnostics || "";
+      throw err;
+    }
+
+    const pages = Array.isArray(evidence.pages)
+      ? evidence.pages.filter((u) => /^https?:\/\//i.test(u)).slice(0, 20)
+      : [];
+    const dossier = String(evidence.dossier || "").trim();
+
+    // Keep the exact URLs that were actually retrieved or visually captured.
+    // These are shown in the report and slide deck and are also persisted.
+    auditedPagesRef.current = pages.length ? pages : [cleanUrl];
+    setAuditedPages(auditedPagesRef.current);
+    const capturedScreenshots = Array.isArray(evidence.screenshots)
+      ? evidence.screenshots.filter((item) => item && /^https?:\/\//i.test(String(item.url || "")) && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
+      : [];
+    const primaryScreenshot = capturedScreenshots[0]?.screenshot || evidence.screenshot || null;
+    auditScreenshotRef.current = primaryScreenshot;
+    setAuditScreenshot(primaryScreenshot);
+    setAuditScreenshots(capturedScreenshots);
+
+    if (visualOnly) {
+      if (!primaryScreenshot) {
+        const err = new Error("UXNest captured no usable visual evidence for this page.");
+        err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+        err.evidenceReason = "The visual browser fallback did not return an image.";
+        throw err;
+      }
+      setRunProgress((p) => ({ ...p, status: "Analyzing the rendered page visually…", done: 1 }));
+      const visionScreenshot = await compressScreenshotForVision(primaryScreenshot);
+      const comma = visionScreenshot.indexOf(",");
+      if (comma < 0) throw new Error("The visual capture could not be prepared for analysis.");
+      const header = visionScreenshot.slice(0, comma);
+      const base64 = visionScreenshot.slice(comma + 1);
+      const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+      const visualContent = [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }];
+      return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1);
+    }
+
+    if (!dossier || dossier.length < 100 || pages.length === 0) {
+      const err = new Error("UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = "No meaningful public page content was returned.";
+      throw err;
+    }
+
+    setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser-rendered" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
+
+    // Stage 2: batches consume deterministic retrieved evidence as plain text.
+    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
+  };
+
+
+  const generateVisualEvidence = async (parsed, screenshot) => {
+    if (!screenshot || typeof screenshot !== "string" || !screenshot.startsWith("data:image/")) return [];
+    const allIssues = [
+      ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
+      ["Trust & Credibility", parsed.trust], ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
+    ].flatMap(([section, data]) => (data?.issues || []).map((issue) => ({ ...issue, section })))
+      .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
+      .slice(0, 8);
+    if (!allIssues.length) return [];
+
+    const visionScreenshot = await compressScreenshotForVision(screenshot);
+    const comma = visionScreenshot.indexOf(",");
+    if (comma < 0) return [];
+    const header = visionScreenshot.slice(0, comma);
+    const base64 = visionScreenshot.slice(comma + 1);
+    const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+
+    try {
+      setRunProgress((p) => ({ ...p, status: "Mapping visible findings to the live screenshot…" }));
+      const data = await callClaude([{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+        { type: "text", text: buildVisualEvidencePrompt(allIssues) },
+      ] }], undefined, 0, "visual-evidence");
+      const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
+      return parseVisualEvidence(raw, allIssues);
+    } catch (err) {
+      console.warn("Visual evidence mapping failed", err);
+      return [];
+    }
   };
 
   const startRun = (which) => {
@@ -2958,6 +3168,11 @@ export default function UxnestApp() {
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
+      const mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
+      setVisualEvidence(mappedEvidence);
+      const themeImage = which === "url" ? auditScreenshotRef.current : (images[0]?.dataUrl || images[0]?.url || null);
+      const adaptiveTheme = await extractBrandTheme(themeImage);
+      setReportTheme(adaptiveTheme);
       setRawReport(text);
       setReport(parsed);
       setSource(which === "url" ? { mode: "url", url: urlInput.trim() } : { mode: "files", url: "" });
@@ -2978,7 +3193,7 @@ export default function UxnestApp() {
               high: [parsed.usability, parsed.visual, parsed.accessibility, parsed.trust, parsed.conversion, parsed.cognitive]
                 .flatMap((sec) => sec.issues).filter((i) => i.severity === "High").length,
             },
-            pages: auditedPages,
+            pages: auditedPagesRef.current,
             rawText: text,
           });
           setHistorySaved(true);
@@ -2994,6 +3209,11 @@ export default function UxnestApp() {
         setError(null); // user chose to stop; no error banner needed
       } else if (msg === "DEADLINE") {
         setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
+      } else if (e && e.code === "AUDIT_ENVIRONMENT_BLOCKED") {
+        setError("⚠️ Audit incomplete — this website blocked UXNest's audit environment. This does not mean the website is inaccessible to normal visitors, so we did not generate UX scores. Try again later, use a specific public page, or upload screenshots for a visual audit.");
+      } else if (e && e.code === "AUDIT_INSUFFICIENT_EVIDENCE") {
+        const detail = e.evidenceReason ? ` Reason: ${e.evidenceReason}` : "";
+        setError(`We couldn't complete this audit because UXNest couldn't verify enough public website content. We won't generate a score based on guesses.${detail} Try a specific public page, retry later, or upload screenshots instead.`);
       } else {
         setError(msg || "Something went wrong running the audit. Please try again.");
       }
@@ -3045,6 +3265,12 @@ export default function UxnestApp() {
     setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
     setAuditedPages([]);
+    setAuditScreenshot(null);
+    setAuditScreenshots([]);
+    auditScreenshotRef.current = null;
+    setVisualEvidence([]);
+    setReportTheme(REPORT_THEME_FALLBACK);
+    auditedPagesRef.current = [];
   }, []);
 
   /* ---- auth ---- */
@@ -3082,7 +3308,7 @@ export default function UxnestApp() {
         score: report.summary.score,
         assessment: report.summary.assessment,
         scorecard: report.scorecard,
-        pages: auditedPages,
+        pages: auditedPagesRef.current,
         rawText: rawReport,
       }).then((saved) => {
         setHistorySaved(true);
@@ -3111,13 +3337,19 @@ export default function UxnestApp() {
      open so the slides exist in the DOM at full size. */
   const tryExportDeck = useCallback(async () => {
     if (!report || exporting) return;
-    const slides = Array.from(document.querySelectorAll(".deck-screen .deck-slide"));
-    if (!slides.length) {
-      setError("Open the slide deck first, then export.");
-      return;
-    }
     setExporting(true);
     try {
+      // Wait for the deck to re-render at its full, unscaled size before capture.
+      // This prevents html2canvas from rasterizing a mobile-scaled slide.
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const slides = Array.from(document.querySelectorAll(".deck-screen .deck-slide"));
+      if (!slides.length) {
+        setError("Open the slide deck first, then export.");
+        return;
+      }
+
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [296, 166] });
       for (let i = 0; i < slides.length; i++) {
         const canvas = await html2canvas(slides[i], {
@@ -3149,7 +3381,7 @@ export default function UxnestApp() {
       setHistoryEntries((audits || []).map((a) => ({
         id: a.id, date: new Date(a.created_at).getTime(), title: a.title || "",
         mode: a.mode, url: a.url || "", screenCount: a.screen_count || 0,
-        score: a.score, assessment: a.assessment, rawText: a.raw_text || "",
+        score: a.score, assessment: a.assessment, rawText: a.raw_text || "", pages: Array.isArray(a.pages) ? a.pages : [],
       })));
     } catch {
       setHistoryEntries([]);
@@ -3162,6 +3394,13 @@ export default function UxnestApp() {
     setReport(parsed);
     setRawReport(entry.rawText);
     setSource({ mode: entry.mode, url: entry.url || "" });
+    const savedPages = Array.isArray(entry.pages) ? entry.pages : [];
+    auditedPagesRef.current = savedPages;
+    setAuditedPages(savedPages);
+    setAuditScreenshot(null);
+    auditScreenshotRef.current = null;
+    setVisualEvidence([]);
+    setReportTheme(REPORT_THEME_FALLBACK);
     setImages([]);
     setShowHistory(false);
   };
@@ -3352,6 +3591,8 @@ export default function UxnestApp() {
                 images={images}
                 source={source}
                 auditedPages={auditedPages}
+                auditScreenshot={auditScreenshot}
+                visualEvidence={visualEvidence}
                 onReset={onReset}
                 isLoggedIn={!!user}
                 onRequireLogin={requireLogin}
@@ -3370,10 +3611,10 @@ export default function UxnestApp() {
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
 
       {showDeck && report && (
-        <DeckViewer report={report} source={source} auditedPages={auditedPages} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
+        <DeckViewer report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={reportTheme} onClose={() => setShowDeck(false)} onTryPrint={tryExportDeck} exporting={exporting} />
       )}
       <SupportChat C={C} user={user} report={report} source={source} />
-      <PrintableReport report={report} source={source} auditedPages={auditedPages} />
+      <PrintableReport report={report} source={source} auditedPages={auditedPages} auditScreenshot={auditScreenshot} auditScreenshots={auditScreenshots} visualEvidence={visualEvidence} theme={reportTheme} />
     </div>
   );
 }

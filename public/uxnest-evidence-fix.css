@@ -1,0 +1,90 @@
+/* Canonical evidence presentation fallback.
+   The data contract lives in src/utils/evidenceModel.js; this stylesheet keeps
+   legacy inline renderers visually aligned until they are fully componentized.
+   A finding marker is a point, not a bounding box. */
+
+/* In-app evidence marker and exported deck focus marker. */
+div[style*="translate(-50%, -50%)"],
+img[alt^="Focused evidence for finding"] + div {
+  width: 6.5mm !important;
+  min-width: 6.5mm !important;
+  max-width: 6.5mm !important;
+  height: 6.5mm !important;
+  min-height: 6.5mm !important;
+  max-height: 6.5mm !important;
+  aspect-ratio: 1 / 1 !important;
+  border-width: 0.5mm !important;
+  border-radius: 50% !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 0 0 0.3mm rgba(255,255,255,.96), 0 0.7mm 2mm rgba(0,0,0,.18) !important;
+  pointer-events: none !important;
+}
+
+/* Number badge: centered on the exact target rather than offset outside a
+   large focus ring. This prevents the "number here, oval somewhere below"
+   failure seen in the Tesla evidence export. */
+div[style*="translate(-50%, -50%)"] > span,
+img[alt^="Focused evidence for finding"] + div > span {
+  left: 50% !important;
+  top: 50% !important;
+  width: 5.5mm !important;
+  min-width: 5.5mm !important;
+  max-width: 5.5mm !important;
+  height: 5.5mm !important;
+  min-height: 5.5mm !important;
+  max-height: 5.5mm !important;
+  transform: translate(-50%, -50%) !important;
+  background: #802419 !important;
+  color: #fff !important;
+  border: 0.4mm solid #fff !important;
+  border-radius: 50% !important;
+  font-size: 6pt !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 0.5mm 1.5mm rgba(0,0,0,.18) !important;
+}
+
+/* Evidence focus slides have a fixed 16:9 page. The right-hand evidence
+   narrative can be taller than the remaining content box when a finding has
+   a two-line title plus finding, pinpoint explanation, impact, and fix.
+   Scale only that narrative column so every block remains inside the slide;
+   never clip or push content below the footer. */
+.deck-slide:has(img[alt^="Focused evidence for finding"]) > div:nth-child(4) > div:nth-child(2) {
+  transform: scale(.82) !important;
+  transform-origin: top left !important;
+  width: 121.95% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+.deck-slide:has(img[alt^="Focused evidence for finding"]) > div:nth-child(4) {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Responsive safety: never let an evidence marker scale with a screenshot's
+   dimensions or inherit a percentage-sized legacy ring. */
+@media (max-width: 700px) {
+  div[style*="translate(-50%, -50%)"],
+  img[alt^="Focused evidence for finding"] + div {
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    max-height: 24px !important;
+  }
+
+  div[style*="translate(-50%, -50%)"] > span,
+  img[alt^="Focused evidence for finding"] + div > span {
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    height: 20px !important;
+    font-size: 10px !important;
+  }
+}
