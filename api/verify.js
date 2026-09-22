@@ -12,6 +12,7 @@
 //                     (during testing Resend allows onboarding@resend.dev)
 
 import crypto from "crypto";
+import { requireDb, hashPassword, cleanEmail, isEmail } from "./_lib.js";
 
 export const maxDuration = 20;
 
@@ -46,7 +47,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { action, email, code, token } = req.body || {};
+  const { action, email, code, token, purpose: requestedPurpose, newPassword } = req.body || {};
   const cleanEmail = String(email || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     res.status(400).json({ error: "A valid email address is required" });
@@ -65,9 +66,10 @@ export default async function handler(req, res) {
       return;
     }
 
+    const purpose = requestedPurpose === "reset" ? "reset" : "signup";
     const generated = String(crypto.randomInt(100000, 1000000)); // 6 digits
     const expires = Date.now() + CODE_TTL_MS;
-    const issued = `${cleanEmail}.${generated}.${expires}`;
+    const issued = `${cleanEmail}.${purpose}.${generated}.${expires}`;
     const signature = sign(issued, secret);
 
     try {
@@ -80,8 +82,8 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           from: process.env.VERIFY_FROM || "UXNest <onboarding@resend.dev>",
           to: [cleanEmail],
-          subject: `${generated} is your UXNest verification code`,
-          text: `Your UXNest verification code is ${generated}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+          subject: `${generated} is your UXNest ${purpose === "reset" ? "password reset" : "verification"} code`,
+          text: `Your UXNest ${purpose === "reset" ? "password reset" : "verification"} code is ${generated}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
           html: `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#12302B">
             <h2 style="margin:0 0 8px;font-size:20px">Verify your email</h2>
             <p style="color:#3E5A54;font-size:14px;line-height:1.6;margin:0 0 20px">Enter this code in UXNest to finish creating your account.</p>
@@ -101,24 +103,24 @@ export default async function handler(req, res) {
     }
 
     // The code itself is never returned — only the signed envelope.
-    res.status(200).json({ token: `${expires}.${signature}`, expires });
+    res.status(200).json({ token: `${purpose}.${expires}.${signature}`, expires, purpose });
     return;
   }
 
   // ---------- Check a code ----------
   if (action === "verify") {
     const parts = String(token || "").split(".");
-    if (parts.length !== 2) {
+    if (parts.length !== 3) {
       res.status(400).json({ error: "Invalid verification token" });
       return;
     }
-    const [expiresStr, signature] = parts;
+    const [purpose, expiresStr, signature] = parts;
     const expires = Number(expiresStr);
     if (!expires || Date.now() > expires) {
       res.status(400).json({ error: "That code has expired. Request a new one." });
       return;
     }
-    const expected = sign(`${cleanEmail}.${String(code || "").trim()}.${expires}`, secret);
+    const expected = sign(`${cleanEmail}.${purpose}.${String(code || "").trim()}.${expires}`, secret);
     const a = Buffer.from(expected);
     const b = Buffer.from(String(signature));
     const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -126,7 +128,52 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "That code isn't right. Check the email and try again." });
       return;
     }
-    res.status(200).json({ verified: true });
+    res.status(200).json({ verified: true, purpose });
+    return;
+  }
+
+  // ---------- Reset an existing password ----------
+  if (action === "reset") {
+    if (!isEmail(cleanEmail)) {
+      res.status(400).json({ error: "A valid email address is required" });
+      return;
+    }
+    if (!newPassword || String(newPassword).length < 6) {
+      res.status(400).json({ error: "Password must be at least 6 characters." });
+      return;
+    }
+    const parts = String(token || "").split(".");
+    if (parts.length !== 3 || parts[0] !== "reset") {
+      res.status(400).json({ error: "Invalid password reset token" });
+      return;
+    }
+    const [, expiresStr, signature] = parts;
+    const expires = Number(expiresStr);
+    if (!expires || Date.now() > expires) {
+      res.status(400).json({ error: "That reset code has expired. Request a new one." });
+      return;
+    }
+    const expected = sign(`${cleanEmail}.reset.${String(code || "").trim()}.${expires}`, secret);
+    const a = Buffer.from(expected);
+    const b = Buffer.from(String(signature));
+    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!ok) {
+      res.status(400).json({ error: "That code isn't right. Check the email and try again." });
+      return;
+    }
+    const db = requireDb(res);
+    if (!db) return;
+    const { data: account } = await db.from("accounts").select("id").eq("email", cleanEmail).maybeSingle();
+    if (!account) {
+      res.status(404).json({ error: "No account exists with that email address." });
+      return;
+    }
+    const { error } = await db.from("accounts").update({
+      password_hash: hashPassword(newPassword),
+      last_login_at: new Date().toISOString(),
+    }).eq("id", account.id);
+    if (error) throw error;
+    res.status(200).json({ reset: true });
     return;
   }
 
