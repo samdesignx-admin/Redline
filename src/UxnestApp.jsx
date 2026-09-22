@@ -382,45 +382,66 @@ ${list}`;
 
 function parseVisualEvidence(raw, issues) {
   const text = String(raw || "").trim();
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) return [];
-  try {
-    const data = JSON.parse(match[0]);
-    if (!Array.isArray(data)) return [];
-    return data.map((item, index) => {
-      const findingIndex = Math.round(Number(item?.findingIndex));
-      const issue = issues[findingIndex - 1];
-      if (!issue) return null;
-      const clamp = (value, fallback) => {
-        const n = Number(value);
-        return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
-      };
-      const hasPinpoint = Number.isFinite(Number(item?.targetX)) && Number.isFinite(Number(item?.targetY));
-      const hasLegacyFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
-      let cx;
-      let cy;
-      let radius;
-      if (hasPinpoint || hasLegacyFocalPoint) {
-        cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
-        cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
-        radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
-      } else {
-        // Old box responses do not identify a precise target. Their center is
-        // retained for continuity, but rendered only as a small pinpoint.
-        const x = clamp(item.x, 0), y = clamp(item.y, 0);
-        const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
-        const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
-        cx = Math.max(3, Math.min(97, x + w / 2));
-        cy = Math.max(3, Math.min(97, y + h / 2));
-        radius = Math.max(1.5, Math.min(3.5, Math.min(w, h) / 4));
-      }
-      const explanation = String(item.explanation || "").trim().slice(0, 220);
-      if (!explanation) return null;
-      return { id: `F-${findingIndex}-${index}`, findingIndex, issueTitle: issue.title, cx, cy, radius, target: String(item.target || "").trim().slice(0, 100), explanation };
-    }).filter(Boolean).slice(0, 6);
-  } catch {
-    return [];
+  if (!text) return [];
+
+  // Claude may wrap JSON in a code fence or add a short sentence around it.
+  // Extract the first balanced JSON array instead of relying on a greedy regex.
+  const candidates = [];
+  const fenced = text.match(/\`\`\`(?:json)?\\s*([\\s\\S]*?)\`\`\`/i);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+  const first = text.indexOf("[");
+  const last = text.lastIndexOf("]");
+  if (first >= 0 && last > first) candidates.push(text.slice(first, last + 1));
+
+  let data = null;
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) { data = parsed; break; }
+    } catch {}
   }
+  if (!Array.isArray(data)) return [];
+
+  return data.map((item, index) => {
+    const findingIndex = Math.round(Number(item?.findingIndex));
+    const issue = issues[findingIndex - 1];
+    if (!issue) return null;
+
+    const clamp = (value, fallback) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
+    };
+
+    const hasPinpoint = Number.isFinite(Number(item?.targetX)) && Number.isFinite(Number(item?.targetY));
+    const hasLegacyFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
+    let cx;
+    let cy;
+    let radius;
+
+    if (hasPinpoint || hasLegacyFocalPoint) {
+      cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
+      cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
+      radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
+    } else {
+      const x = clamp(item.x, 0), y = clamp(item.y, 0);
+      const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
+      const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
+      cx = Math.max(3, Math.min(97, x + w / 2));
+      cy = Math.max(3, Math.min(97, y + h / 2));
+      radius = Math.max(1.5, Math.min(3.5, Math.min(w, h) / 4));
+    }
+
+    const explanation = String(item.explanation || "").trim().slice(0, 220);
+    if (!explanation) return null;
+    return {
+      id: `F-${findingIndex}-${index}`,
+      findingIndex,
+      issueTitle: issue.title,
+      cx, cy, radius,
+      target: String(item.target || "").trim().slice(0, 100),
+      explanation,
+    };
+  }).filter(Boolean).slice(0, 6);
 }
 
 async function compressScreenshotForVision(dataUrl) {
@@ -1469,11 +1490,15 @@ function AssessmentChip({ assessment }) {
 
 
 function VisualEvidencePanel({ screenshot, evidence = [] }) {
-  if (!screenshot || !evidence.length) return null;
+  if (!screenshot) return null;
   return (
     <div style={{ borderTop: "1px solid " + C.borderSoft, paddingTop: 14, marginBottom: 14 }}>
       <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 5 }}>Visual Evidence</div>
-      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 12 }}>Highlighted areas are mapped only where the finding is visible in the rendered page.</div>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 12 }}>
+        {evidence.length
+          ? "Highlighted areas are mapped only where the finding is visible in the rendered page."
+          : "Rendered screenshot captured successfully. Pin targets are added only when the AI can identify an exact visible element confidently."}
+      </div>
       <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid " + C.border, background: C.surfaceAlt }}>
         <img src={screenshot} alt="Rendered website evidence" style={{ display: "block", width: "100%", height: "auto" }} />
         {evidence.map((item, index) => {
@@ -1487,6 +1512,11 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
           );
         })}
       </div>
+      {evidence.length === 0 ? (
+        <div style={{ marginTop: 12, padding: "10px 11px", borderRadius: 10, background: C.surfaceAlt, border: "1px solid " + C.borderSoft, color: C.muted, fontSize: 12 }}>
+          No confident pinpoint was returned for the visible findings on this capture. The screenshot remains available as the primary visual evidence.
+        </div>
+      ) : (
       <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
         {evidence.map((item, index) => (
           <div key={item.id + "-note"} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 11px", borderRadius: 10, background: C.surfaceAlt, border: "1px solid " + C.borderSoft }}>
@@ -1498,6 +1528,7 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -3225,6 +3256,7 @@ export default function UxnestApp() {
 
   const generateVisualEvidence = async (parsed, screenshot) => {
     if (!screenshot || typeof screenshot !== "string" || !screenshot.startsWith("data:image/")) return [];
+
     const allIssues = [
       ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
       ["Trust & Credibility", parsed.trust], ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
@@ -3240,18 +3272,27 @@ export default function UxnestApp() {
     const base64 = visionScreenshot.slice(comma + 1);
     const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
 
-    try {
-      setRunProgress((p) => ({ ...p, status: "Mapping visible findings to the live screenshot…" }));
-      const data = await callClaude([{ role: "user", content: [
-        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-        { type: "text", text: buildVisualEvidencePrompt(allIssues) },
-      ] }], undefined, 0, "visual-evidence");
-      const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
-      return parseVisualEvidence(raw, allIssues);
-    } catch (err) {
-      console.warn("Visual evidence mapping failed", err);
-      return [];
+    const attempts = [
+      buildVisualEvidencePrompt(allIssues),
+      `Map the visible UX problems in this screenshot to exact UI targets. Return JSON only as an array of objects using this schema: [{"findingIndex":1,"targetX":50,"targetY":30,"targetRadius":2.5,"explanation":"Exact visible element and why it is the target."}]. Use only findings that are clearly visible. Maximum 6 pins. FINDINGS:\n${allIssues.map((issue, i) => `Finding ${i + 1}: [${issue.section}] ${issue.title} — ${issue.why}`).join("\n")}`,
+    ];
+
+    for (let attempt = 0; attempt < attempts.length; attempt++) {
+      try {
+        setRunProgress((p) => ({ ...p, status: attempt === 0 ? "Mapping visible findings to the live screenshot…" : "Retrying pinpoint mapping…" }));
+        const data = await callClaude([{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: attempts[attempt] },
+        ] }], undefined, 0, "visual-evidence");
+        const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
+        const mapped = parseVisualEvidence(raw, allIssues);
+        if (mapped.length) return mapped;
+      } catch (err) {
+        console.warn("Visual evidence mapping attempt failed", err);
+      }
     }
+
+    return [];
   };
 
   const startRun = (which) => {
