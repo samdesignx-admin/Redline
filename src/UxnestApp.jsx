@@ -727,11 +727,11 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     }
   }, [onAuth]);
 
-  const sendCode = async (targetEmail) => {
+  const sendCode = async (targetEmail, purpose = "signup") => {
     const r = await fetch("/api/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "send", email: targetEmail }),
+      body: JSON.stringify({ action: "send", email: targetEmail, purpose }),
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.error || "Couldn't send the verification email.");
@@ -742,11 +742,63 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     setError(null);
     setLoading(true);
     try {
-      const t = await sendCode(email.trim().toLowerCase());
+      const t = await sendCode(email.trim().toLowerCase(), "signup");
       setVerifyToken(t);
       setResendIn(30);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startReset = async () => {
+    setError(null);
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setError("Enter your email address first.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const t = await sendCode(cleanEmail, "reset");
+      setVerifyToken(t);
+      setCode("");
+      setPassword("");
+      setResendIn(30);
+      setStep("reset");
+    } catch (e) {
+      setError(e.message || "Couldn't send the password reset code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmReset = async () => {
+    setError(null);
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const r = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "reset", email: cleanEmail, code: code.trim(), token: verifyToken, newPassword: password }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || !body.reset) throw new Error(body.error || "Password reset failed.");
+      const { account, token } = await api.login(cleanEmail, password);
+      setToken(token);
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
+    } catch (e) {
+      setError(e.message || "Password reset failed.");
     } finally {
       setLoading(false);
     }
@@ -810,7 +862,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         // Send a verification code; the account is created only after the
         // code is confirmed, so unverified addresses never become accounts.
         try {
-          const t = await sendCode(cleanEmail);
+          const t = await sendCode(cleanEmail, "signup");
           setVerifyToken(t);
           setResendIn(30);
           setStep("verify");
@@ -910,6 +962,12 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
 
       {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
 
+      {mode === "login" && (
+        <div style={{ textAlign: "right", marginTop: 7 }}>
+          <button onClick={startReset} disabled={loading} style={linkBtnStyle}>Forgot password?</button>
+        </div>
+      )}
+
       <button
         onClick={submit}
         disabled={loading}
@@ -935,8 +993,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       )}
 
       <p style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
-        Early access: accounts are stored in your browser and passwords are hashed. There's no password
-        recovery yet, so please use a unique password.
+        Passwords are securely hashed. Password reset codes expire after 10 minutes.
       </p>
     </Modal>
   );
