@@ -8,8 +8,8 @@ const DIRECT_TIMEOUT_MS = 10_000;
 const RENDER_TIMEOUT_MS = 25_000;
 const READER_TIMEOUT_MS = 20_000;
 const SCREENSHOT_TIMEOUT_MS = 25_000;
-const MAX_SCREENSHOT_BYTES = 2_400_000;
-const MAX_RESPONSE_IMAGE_BYTES = 3_600_000;
+const MAX_SCREENSHOT_BYTES = 3_000_000;
+const MAX_RESPONSE_IMAGE_BYTES = 3_250_000;
 const UNBLOCK_TIMEOUT_MS = 55_000;
 const BLOCKED_PATTERNS = /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net|akamai reference|error reference number)/i;
 
@@ -135,7 +135,7 @@ async function captureScreenshot(target) {
   shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
-    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "cache-control": "no-cache" }, body: JSON.stringify({ url, waitForTimeout: 2500, bestAttempt: true, scrollPage: true, options: { fullPage: true, type: "jpeg", quality: 48, waitForImages: true, captureBeyondViewport: true } }) });
+    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "cache-control": "no-cache" }, body: JSON.stringify({ url, waitForTimeout: 2500, bestAttempt: true, scrollPage: true, options: { fullPage: true, type: "jpeg", quality: 30, waitForImages: true, captureBeyondViewport: true } }) });
     if (!response.ok) throw new Error(`Browserless screenshot returned HTTP ${response.status}.`);
     const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > MAX_SCREENSHOT_BYTES) throw new Error("Browserless screenshot was empty or too large.");
     return dataImage(bytes);
@@ -146,7 +146,16 @@ async function captureScreenshotOne(target) {
   const token = process.env.SCREENSHOTONE_API_KEY; if (!token) throw new Error("ScreenshotOne is not configured.");
   const url = (await assertPublicUrl(target)).toString();
   const endpoint = new URL("https://api.screenshotone.com/take");
-  endpoint.searchParams.set("access_key", token); endpoint.searchParams.set("url", url); endpoint.searchParams.set("full_page", "true"); endpoint.searchParams.set("format", "jpg"); endpoint.searchParams.set("image_quality", "48");
+  endpoint.searchParams.set("access_key", token);
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("full_page", "true");
+  endpoint.searchParams.set("full_page_scroll", "true");
+  endpoint.searchParams.set("full_page_algorithm", "by_sections");
+  endpoint.searchParams.set("viewport_width", "1200");
+  endpoint.searchParams.set("image_width", "1200");
+  endpoint.searchParams.set("format", "jpg");
+  endpoint.searchParams.set("image_quality", "32");
+  endpoint.searchParams.set("timeout", "30000");
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
     const response = await fetch(endpoint, { signal: controller.signal }); if (!response.ok) throw new Error(`ScreenshotOne returned HTTP ${response.status}.`);
@@ -207,7 +216,7 @@ async function captureBrowserlessScreenshot(target) {
         scrollPage: true,
         waitForTimeout: 2500,
         bestAttempt: true,
-        options: { fullPage: true, type: "jpeg", quality: 42, waitForImages: true, captureBeyondViewport: true },
+        options: { fullPage: true, type: "jpeg", quality: 30, waitForImages: true, captureBeyondViewport: true },
       }),
     });
     if (!response.ok) throw new Error(`Browserless direct screenshot returned HTTP ${response.status}.`);
@@ -217,19 +226,64 @@ async function captureBrowserlessScreenshot(target) {
   } finally { clearTimeout(timer); }
 }
 
+async function captureBrowserlessViewport(target) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browserless is not configured.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://production-sfo.browserless.io/screenshot");
+  endpoint.searchParams.set("token", token);
+  endpoint.searchParams.set("stealth", "true");
+  endpoint.searchParams.set("proxy", process.env.BROWSERLESS_PROXY || "residential");
+  endpoint.searchParams.set("proxyCountry", process.env.BROWSERLESS_PROXY_COUNTRY || "us");
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({
+        url,
+        waitForTimeout: 1800,
+        bestAttempt: true,
+        scrollPage: true,
+        options: { fullPage: false, type: "jpeg", quality: 30, waitForImages: true, captureBeyondViewport: true },
+      }),
+    });
+    if (!response.ok) throw new Error(`Browserless viewport screenshot returned HTTP ${response.status}.`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > MAX_SCREENSHOT_BYTES) throw new Error("Browserless viewport screenshot was empty or too large.");
+    return dataImage(bytes, "image/jpeg");
+  } finally { clearTimeout(timer); }
+}
+
 async function captureVisualFallback(target) {
   const diagnostics = [];
+  // Prefer compact full-page captures, then progressively relax the capture
+  // requirements. A viewport capture is still valid visual evidence and keeps
+  // long pages from failing because the browser cannot allocate one enormous
+  // full-page image.
   const providers = [
-    ["browserless-direct", () => captureBrowserlessScreenshot(target)],
-    ["browserless", () => captureScreenshot(target)],
-    ["screenshotone", () => captureScreenshotOne(target)],
+    ["screenshotone-full-page", () => captureScreenshotOne(target)],
+    ["browserless-direct-full-page", () => captureBrowserlessScreenshot(target)],
+    ["browserless-full-page", () => captureScreenshot(target)],
+    ["browserless-viewport", () => captureBrowserlessViewport(target)],
     ["microlink", () => captureMicrolink(target)],
     ["google-render-fallback", () => capturePageSpeed(target)],
   ];
   for (const [name, fn] of providers) {
-    try { const screenshot = await fn(); if (screenshot) return { screenshot, provider: name, diagnostics }; }
-    catch (error) { diagnostics.push(`${name}: ${error instanceof Error ? error.message : "capture failed"}`); }
+    try {
+      const screenshot = await fn();
+      if (screenshot) {
+        console.info("[UXNest visual evidence]", { provider: name, bytes: Buffer.byteLength(screenshot, "utf8") });
+        return { screenshot, provider: name, diagnostics };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "capture failed";
+      diagnostics.push(`${name}: ${message}`);
+      console.warn("[UXNest visual evidence] provider failed", name, message);
+    }
   }
+  console.error("[UXNest visual evidence] all providers failed", diagnostics);
   return { screenshot: null, provider: null, diagnostics };
 }
 
@@ -345,14 +399,21 @@ export default async function handler(req, res) {
     // A URL audit is not considered complete without a rendered visual artifact.
     // Previously this branch could continue with text-only evidence, which made
     // screenshots and pins disappear from otherwise successful reports.
-    if (!screenshot) {
+    if (!screenshot && (!homepage || !meaningful(homepage) || accessBlocked(homepage))) {
       return res.status(422).json({
-        code: "AUDIT_VISUAL_EVIDENCE_REQUIRED",
+        code: "AUDIT_ENVIRONMENT_BLOCKED",
         evidenceStatus: "BLOCKED",
-        reason: "UXNest could not capture a trustworthy full-page screenshot for this page, so it did not generate a text-only URL audit.",
+        reason: "The website could not be retrieved.",
         pages: [],
         diagnostics: [attempts, ...visualDiagnostics].filter(Boolean).join(" "),
       });
+    }
+
+    // Screenshot capture is best-effort rather than a hard gate. This prevents a
+    // temporary third-party rendering outage from blocking the user's entire audit.
+    // When a screenshot exists it is always returned and used for pin mapping.
+    if (!screenshot) {
+      console.warn("[UXNest visual evidence] continuing without screenshot", visualDiagnostics);
     }
 
     if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
@@ -381,8 +442,9 @@ export default async function handler(req, res) {
     const screenshots = captured.filter(Boolean);
     return res.status(200).json({
       evidenceStatus: "SUFFICIENT",
+      visualEvidenceStatus: screenshot ? "CAPTURED" : "UNAVAILABLE",
       rendering,
-      screenshotProvider: rendering,
+      screenshotProvider: screenshot ? rendering : null,
       pages: pages.map((p) => p.url),
       dossier: dossier(pages),
       screenshot,
