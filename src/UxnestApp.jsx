@@ -1533,7 +1533,7 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
   );
 }
 
-function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], visualEvidenceStatus = "CAPTURED", onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
@@ -1612,6 +1612,14 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
           )}
 
           <VisualEvidencePanel screenshot={auditScreenshot} evidence={visualEvidence} />
+          {!auditScreenshot && source.mode === "url" && (
+            <div style={{ borderTop: "1px solid " + C.borderSoft, paddingTop: 14, marginBottom: 14 }}>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 5 }}>Visual Capture</div>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                The UX audit completed using retrieved page evidence. Screenshot capture was temporarily unavailable, so no visual pins were generated for this run. Re-running the audit will retry the visual capture providers.
+              </div>
+            </div>
+          )
 
           {summary.intro && (
             <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
@@ -3229,12 +3237,13 @@ export default function UxnestApp() {
     setAuditScreenshot(primaryScreenshot);
     setAuditScreenshots(capturedScreenshots);
 
-    // Visual evidence is mandatory for URL audits. Never silently fall back
-    // to a text-only report after the screenshot feature has been requested.
-    if (!primaryScreenshot) {
-      const err = new Error("UXNest captured no usable screenshot for this URL.");
-      err.code = "AUDIT_VISUAL_EVIDENCE_REQUIRED";
-      err.evidenceReason = "The screenshot capture service returned no image.";
+    // Screenshot capture is best-effort. If it is temporarily unavailable,
+    // continue the URL audit and expose the visual status instead of blocking
+    // the entire report.
+    if (visualOnly && !primaryScreenshot) {
+      const err = new Error("The rendered visual capture was unavailable.");
+      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+      err.evidenceReason = "The visual-only fallback returned no image.";
       throw err;
     }
 
