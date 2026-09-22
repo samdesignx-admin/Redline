@@ -742,7 +742,8 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     setError(null);
     setLoading(true);
     try {
-      const t = await sendCode(email.trim().toLowerCase(), "signup");
+      const purpose = step === "reset" ? "reset" : "signup";
+      const t = await sendCode(email.trim().toLowerCase(), purpose);
       setVerifyToken(t);
       setResendIn(30);
     } catch (e) {
@@ -894,7 +895,57 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       {reason && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 14px 0" }}>{reason}</p>}
       {!reason && <div style={{ marginBottom: 14 }} />}
 
-      {step === "verify" ? (
+      {step === "reset" ? (
+        <div>
+          <p style={{ fontSize: 13, color: C.textDim, lineHeight: 1.6, margin: "0 0 14px" }}>
+            We sent a 6-digit password reset code to <strong style={{ color: C.text }}>{email.trim().toLowerCase()}</strong>. Enter it below and choose a new password.
+          </p>
+          <input
+            inputMode="numeric"
+            maxLength={6}
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ""))}
+            style={{ ...inputStyle, textAlign: "center", fontSize: 24, letterSpacing: 8, fontWeight: 700 }}
+          />
+          <div style={{ position: "relative", marginTop: 10 }}>
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="New password (min 6 characters)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ ...inputStyle, paddingRight: 46 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((visible) => !visible)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", border: "none", background: "transparent", color: C.muted, cursor: "pointer", borderRadius: 7 }}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </div>
+          {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.critical }}>{error}</div>}
+          <button
+            onClick={confirmReset}
+            disabled={loading}
+            style={{ width: "100%", marginTop: 16, padding: "13px 0", borderRadius: 999, border: "none", background: C.now, color: C.dark, fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+          >
+            {loading ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Lock size={15} />}
+            Reset password
+          </button>
+          <div style={{ textAlign: "center", marginTop: 14, fontSize: 12.5, color: C.muted }}>
+            {resendIn > 0 ? (
+              <>Didn't get it? Resend in {resendIn}s</>
+            ) : (
+              <>Didn't get it? <button onClick={resend} style={linkBtnStyle}>Resend code</button></>
+            )}
+            <div style={{ marginTop: 6 }}>
+              <button onClick={() => { setStep("form"); setError(null); setCode(""); setVerifyToken(""); }} style={linkBtnStyle}>Back to log in</button>
+            </div>
+          </div>
+        </div>
+      ) : step === "verify" ? (
         <div>
           <p style={{ fontSize: 13, color: C.textDim, lineHeight: 1.6, margin: "0 0 14px" }}>
             We sent a 6-digit code to <strong style={{ color: C.text }}>{email.trim().toLowerCase()}</strong>. Enter it below to finish creating your account.
