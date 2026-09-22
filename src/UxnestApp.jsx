@@ -1533,7 +1533,7 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
   );
 }
 
-function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], visualEvidenceStatus = "CAPTURED", onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
+function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
   const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
@@ -1612,14 +1612,6 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
           )}
 
           <VisualEvidencePanel screenshot={auditScreenshot} evidence={visualEvidence} />
-          {!auditScreenshot && source.mode === "url" && (
-            <div style={{ borderTop: "1px solid " + C.borderSoft, paddingTop: 14, marginBottom: 14 }}>
-              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 14, color: C.text, marginBottom: 5 }}>Visual Capture</div>
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                The UX audit completed using retrieved page evidence. Screenshot capture was temporarily unavailable, so no visual pins were generated for this run. Re-running the audit will retry the visual capture providers.
-              </div>
-            </div>
-          )
 
           {summary.intro && (
             <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 14, marginBottom: 14 }}>
@@ -3203,18 +3195,11 @@ export default function UxnestApp() {
 
     const visualOnly = response.ok && evidence.evidenceStatus === "VISUAL_ONLY";
     if (!response.ok || (evidence.evidenceStatus !== "SUFFICIENT" && !visualOnly)) {
-      const visualRequired = evidence.code === "AUDIT_VISUAL_EVIDENCE_REQUIRED";
       const blocked = evidence.code === "AUDIT_ENVIRONMENT_BLOCKED" || evidence.evidenceStatus === "BLOCKED";
-      const err = new Error(
-        visualRequired
-          ? "UXNest could not capture the required rendered screenshot for this URL."
-          : blocked
-            ? "UXNest's audit environment was blocked by this website."
-            : "UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses."
-      );
-      err.code = visualRequired
-        ? "AUDIT_VISUAL_EVIDENCE_REQUIRED"
-        : blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE";
+      const err = new Error(blocked
+        ? "UXNest's audit environment was blocked by this website."
+        : "UXNest couldn't retrieve enough public content to produce a reliable audit. We didn't generate a score because that would be based on guesses.");
+      err.code = blocked ? "AUDIT_ENVIRONMENT_BLOCKED" : "AUDIT_INSUFFICIENT_EVIDENCE";
       err.evidenceReason = evidence.reason || evidence.error || "The website could not be retrieved.";
       err.evidenceDiagnostics = evidence.diagnostics || "";
       throw err;
@@ -3237,16 +3222,6 @@ export default function UxnestApp() {
     setAuditScreenshot(primaryScreenshot);
     setAuditScreenshots(capturedScreenshots);
 
-    // Screenshot capture is best-effort. If it is temporarily unavailable,
-    // continue the URL audit and expose the visual status instead of blocking
-    // the entire report.
-    if (visualOnly && !primaryScreenshot) {
-      const err = new Error("The rendered visual capture was unavailable.");
-      err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
-      err.evidenceReason = "The visual-only fallback returned no image.";
-      throw err;
-    }
-
     if (visualOnly) {
       if (!primaryScreenshot) {
         const err = new Error("UXNest captured no usable visual evidence for this page.");
@@ -3263,6 +3238,13 @@ export default function UxnestApp() {
       const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
       const visualContent = [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }];
       return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1);
+    }
+
+    // Screenshot capture is best-effort. If all visual providers are temporarily
+    // unavailable, keep the audit running with the retrieved page evidence.
+    // When a screenshot exists, the existing pin/evidence pipeline remains active.
+    if (!primaryScreenshot && !visualOnly) {
+      setRunProgress((p) => ({ ...p, status: "Screenshot capture unavailable — continuing with page evidence…", done: 1 }));
     }
 
     if (!dossier || dossier.length < 100 || pages.length === 0) {
@@ -3383,9 +3365,6 @@ export default function UxnestApp() {
         setError(null); // user chose to stop; no error banner needed
       } else if (msg === "DEADLINE") {
         setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
-      } else if (e && e.code === "AUDIT_VISUAL_EVIDENCE_REQUIRED") {
-        const detail = e.evidenceReason ? ` Reason: ${e.evidenceReason}` : "";
-        setError(`We couldn't complete this URL audit because the rendered screenshot could not be captured. UXNest will not silently substitute a text-only report.${detail} Try again, or upload a screenshot for an immediate visual audit.`);
       } else if (e && e.code === "AUDIT_ENVIRONMENT_BLOCKED") {
         setError("⚠️ Audit incomplete — this website blocked UXNest's audit environment. This does not mean the website is inaccessible to normal visitors, so we did not generate UX scores. Try again later, use a specific public page, or upload screenshots for a visual audit.");
       } else if (e && e.code === "AUDIT_INSUFFICIENT_EVIDENCE") {
