@@ -87,7 +87,10 @@ export default async function handler(req, res) {
         integration_identifier: "custom_embedded_web_0002",
       });
 
-      res.status(200).json({\n        client_secret: session.client_secret,\n        session_id: session.id,\n      });
+      res.status(200).json({
+        client_secret: session.client_secret,
+        session_id: session.id,
+      });
       return;
     }
 
