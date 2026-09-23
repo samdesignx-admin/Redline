@@ -742,7 +742,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
     try {
       const { account, token } = await api.google(credential);
       setToken(token);
-      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
     } catch (e) {
       setError(e.message || "Google sign-in failed.");
     } finally {
