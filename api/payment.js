@@ -1,11 +1,13 @@
 // One-time Stripe Checkout for UXNest audits.
-// First audit is free; each additional completed audit costs $5 USD.
+// First audit is free; each additional completed audit costs $10 USD, with a 50% beta discount.
 import { requireDb, readSession } from "./_lib.js";
 
 export const maxDuration = 20;
 
 const SITE_URL = "https://uxnest.ai";
-const PRICE_CENTS = 500;
+const REGULAR_PRICE_CENTS = 1000;
+const BETA_DISCOUNT_PERCENT = 50;
+const PRICE_CENTS = REGULAR_PRICE_CENTS * (1 - BETA_DISCOUNT_PERCENT / 100);
 
 async function stripeRequest(path, params) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -66,7 +68,7 @@ export default async function handler(req, res) {
       const session = await stripeRequest("checkout/sessions", {
         mode: "payment",
         "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][product_data][name]": "UXNest UX Audit",
+        "line_items[0][price_data][product_data][name]": "UXNest UX Audit — Beta 50% Off",
         "line_items[0][price_data][product_data][description]": "One complete UXNest audit.",
         "line_items[0][price_data][unit_amount]": String(PRICE_CENTS),
         "line_items[0][quantity]": "1",
