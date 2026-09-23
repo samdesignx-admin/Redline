@@ -41,3 +41,20 @@ create index if not exists accounts_created_idx on accounts(created_at desc);
 -- therefore never read this data directly from a browser.
 alter table accounts enable row level security;
 alter table audits   enable row level security;
+
+
+-- One-time $5 audit purchases. Stripe Checkout session IDs are unique so
+-- verifying the same payment twice cannot grant duplicate audit credits.
+create table if not exists audit_purchases (
+  id                 uuid primary key default gen_random_uuid(),
+  account_id         uuid not null references accounts(id) on delete cascade,
+  stripe_session_id  text unique not null,
+  amount_cents       integer not null default 500,
+  created_at         timestamptz not null default now()
+);
+
+create index if not exists audit_purchases_account_idx on audit_purchases(account_id);
+alter table audit_purchases enable row level security;
+
+-- Existing installations: run this once if the accounts table already exists.
+-- alter table accounts add column if not exists paid_audits integer not null default 0;
