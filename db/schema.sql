@@ -11,6 +11,7 @@ create table if not exists accounts (
   provider      text not null default 'password',
   email_verified boolean not null default false,
   audits_used   integer not null default 0,
+  paid_audits   integer not null default 0,
   plan          text not null default 'free',
   created_at    timestamptz not null default now(),
   last_login_at timestamptz
