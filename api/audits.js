@@ -40,16 +40,19 @@ export default async function handler(req, res) {
     if (action === "quota") {
       const { data } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
       const used = (data && data.audits_used) || 0;
-      res.status(200).json({ used, quota: AUDIT_QUOTA, remaining: Math.max(AUDIT_QUOTA - used, 0) });
+      const paid = (data && data.paid_audits) || 0;
+      res.status(200).json({ used, quota: AUDIT_QUOTA, paid, remaining: Math.max(AUDIT_QUOTA - used, 0) + paid });
       return;
     }
 
     /* ---------------- Save a completed audit ---------------- */
     if (action === "create") {
-      const { data: acct } = await db.from("accounts").select("audits_used").eq("id", accountId).maybeSingle();
+      const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
       const used = (acct && acct.audits_used) || 0;
-      if (used >= AUDIT_QUOTA) {
-        res.status(403).json({ error: "You've used your included audit." });
+      const paid = (acct && acct.paid_audits) || 0;
+      const hasFreeAudit = used < AUDIT_QUOTA;
+      if (!hasFreeAudit && paid <= 0) {
+        res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
         return;
       }
 
@@ -69,8 +72,15 @@ export default async function handler(req, res) {
       }).select().single();
       if (error) throw error;
 
-      await db.from("accounts").update({ audits_used: used + 1 }).eq("id", accountId);
-      res.status(200).json({ audit: data, used: used + 1, remaining: Math.max(AUDIT_QUOTA - used - 1, 0) });
+      if (hasFreeAudit) {
+        await db.from("accounts").update({ audits_used: used + 1 }).eq("id", accountId);
+      } else {
+        await db.from("accounts").update({ paid_audits: Math.max(paid - 1, 0) }).eq("id", accountId);
+      }
+      const nextPaid = hasFreeAudit ? paid : Math.max(paid - 1, 0);
+      const nextUsed = hasFreeAudit ? used + 1 : used;
+      const remaining = Math.max(AUDIT_QUOTA - nextUsed, 0) + nextPaid;
+      res.status(200).json({ audit: data, used: nextUsed, paid: nextPaid, remaining });
       return;
     }
 
