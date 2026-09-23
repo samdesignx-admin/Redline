@@ -57,4 +57,4 @@ create index if not exists audit_purchases_account_idx on audit_purchases(accoun
 alter table audit_purchases enable row level security;
 
 -- Existing installations: run this once if the accounts table already exists.
--- alter table accounts add column if not exists paid_audits integer not null default 0;
+alter table accounts add column if not exists paid_audits integer not null default 0;
