@@ -13,7 +13,7 @@ import {
   ListBlock,
   Modal,
 } from "./components/ui/AuditAtoms.jsx";
-import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, QUOTA_MESSAGE } from "./config/index.js";
+import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, AUDIT_PRICE_USD, QUOTA_MESSAGE } from "./config/index.js";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -603,7 +603,7 @@ const api = {
   login: (email, password) => apiPost("/api/account", { action: "login", email, password }),
   google: (credential) => apiPost("/api/account", { action: "google", credential }),
   listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
-  quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
+  quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),\n  checkoutAudit: () => apiPost("/api/payment", { action: "checkout", token: getToken() }),\n  verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
 };
@@ -2593,13 +2593,13 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* Free access */}
       <div style={sect}>
         <SectionKicker>Pricing</SectionKicker>
-        <h2 style={h2}>Free during early access</h2>
+        <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
           Try any URL instantly without an account. Sign up free and every account includes {AUDIT_QUOTA} complete
           audits — up to {SCREEN_LIMIT} screens or {NAV_LIMIT} pages each, with the full report, slide deck and PDF export.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["Instant preview with no account", `${AUDIT_QUOTA} full audits, ${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages each`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No credit card required"].map((f) => (
+          {["1 complete audit free", "$5 for each additional audit", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
@@ -2858,7 +2858,7 @@ export default function UxnestApp() {
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
   const auditedPagesRef = useRef([]);
-  const [auditsUsed, setAuditsUsed] = useState(0);
+  const [auditsUsed, setAuditsUsed] = useState(0);\n  const [paidAudits, setPaidAudits] = useState(0);\n  const [paymentLoading, setPaymentLoading] = useState(false);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -2875,7 +2875,7 @@ export default function UxnestApp() {
         const { account } = await api.session(token);
         if (account) {
           setUser({ email: account.email, name: account.name, plan: account.plan, id: account.id });
-          setAuditsUsed(account.auditsUsed || 0);
+          setAuditsUsed(account.auditsUsed || 0);\n          setPaidAudits(account.paidAudits || 0);
         } else {
           setToken("");
         }
@@ -3393,7 +3393,7 @@ export default function UxnestApp() {
     setError(null);
     if (!images.length) return;
     if (!user) { requireLogin("runAudit"); return; }
-    if (auditsUsed >= AUDIT_QUOTA) { setError(QUOTA_MESSAGE); return; }
+    if (auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) { setError(QUOTA_MESSAGE); return; }
     startRun("files");
   };
   const onRunUrl = () => {
@@ -3708,13 +3708,22 @@ export default function UxnestApp() {
                 </div>
 
                 {user && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: auditsUsed >= AUDIT_QUOTA ? C.highSoft : C.goldSoft, border: `1px solid ${auditsUsed >= AUDIT_QUOTA ? C.high : C.gold}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
-                    <FileText size={15} color={auditsUsed >= AUDIT_QUOTA ? C.high : C.gold} style={{ flexShrink: 0 }} />
-                    <span style={{ fontSize: 12.5, color: C.text }}>
-                      {auditsUsed >= AUDIT_QUOTA
-                        ? QUOTA_MESSAGE
-                        : `${AUDIT_QUOTA - auditsUsed} of ${AUDIT_QUOTA} audit${AUDIT_QUOTA === 1 ? "" : "s"} remaining on your account.`}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: (auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.highSoft : C.goldSoft, border: `1px solid ${(auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.high : C.gold}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <FileText size={15} color={(auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.high : C.gold} style={{ flexShrink: 0 }} />
+                      <span style={{ fontSize: 12.5, color: C.text }}>
+                        {auditsUsed < AUDIT_QUOTA
+                          ? "1 free audit included"
+                          : paidAudits > 0
+                            ? `${paidAudits} paid audit${paidAudits === 1 ? "" : "s"} available`
+                            : QUOTA_MESSAGE}
+                      </span>
+                    </div>
+                    {auditsUsed >= AUDIT_QUOTA && (
+                      <button onClick={buyAudit} disabled={paymentLoading} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: paymentLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                        {paymentLoading ? "Opening…" : `Buy audit — ${AUDIT_PRICE_USD}`}
+                      </button>
+                    )}
                   </div>
                 )}
 
