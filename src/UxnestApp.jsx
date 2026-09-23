@@ -13,7 +13,7 @@ import {
   ListBlock,
   Modal,
 } from "./components/ui/AuditAtoms.jsx";
-import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, AUDIT_PRICE_USD, QUOTA_MESSAGE } from "./config/index.js";
+import { C, FONT_IMPORT, SEVERITY_STYLES, SITE_URL, SCREEN_LIMIT, NAV_LIMIT, AUDIT_QUOTA, AUDIT_PRICE_USD, BETA_DISCOUNT_PERCENT, BETA_AUDIT_PRICE_USD, QUOTA_MESSAGE } from "./config/index.js";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import {
@@ -2597,10 +2597,10 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         <SectionKicker>Pricing</SectionKicker>
         <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          Get your first complete audit free. After that, pay only when you need another audit — $5 per audit, with no subscription.
+          Get your first complete audit free. Additional audits are $10 each, with a 50% beta discount — just $5 during beta. No subscription.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["1 complete audit free", "$5 for each additional audit", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
+          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
@@ -2641,7 +2641,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* CTA */}
       <div style={{ ...sect, position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "52px 18px", marginBottom: 0 }}>
         <h2 style={{ ...h2, color: "#FFFFFF" }}>Ready to Transform Your UX?</h2>
-        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Start free, no credit card required.</p>
+        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Your first audit is free; additional audits are $5 during beta (normally $10).</p>
         <button onClick={onStart} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
           Start Your Free Audit <ArrowRight size={15} />
         </button>
