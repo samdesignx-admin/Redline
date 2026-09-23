@@ -664,7 +664,7 @@ function StripeCheckoutForm({ clientSecret, sessionId, onComplete, onClose }) {
         form.on("confirm", async (event) => {
           try {
             setStatus("Confirming payment…");
-            await loadActionsResult.actions.confirm({ formConfirmEvent: event });
+            await loadActionsResult.actions.confirm({\n              formConfirmEvent: event,\n              returnUrl: `${window.location.origin}/?payment=success&session_id=${encodeURIComponent(sessionId)}`,\n            });
             await onComplete(sessionId);
           } catch (e) {
             setError(e?.message || "Payment confirmation failed. Please try again.");
