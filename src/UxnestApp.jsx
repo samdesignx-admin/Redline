@@ -820,7 +820,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       if (!r.ok || !body.reset) throw new Error(body.error || "Password reset failed.");
       const { account, token } = await api.login(cleanEmail, password);
       setToken(token);
-      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
     } catch (e) {
       setError(e.message || "Password reset failed.");
     } finally {
@@ -855,7 +855,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         emailVerified: true,
       });
       setToken(token);
-      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
+      onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
     } catch (e) {
       setError(e.message || "Verification failed.");
     } finally {
@@ -898,7 +898,7 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       } else {
         const { account, token } = await api.login(cleanEmail, password);
         setToken(token);
-        onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed });
+        onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
       }
     } catch (e) {
       setError(`Couldn't complete that: ${(e && e.message) || "unknown error"}. Please try again.`);
