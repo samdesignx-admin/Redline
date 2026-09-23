@@ -603,7 +603,9 @@ const api = {
   login: (email, password) => apiPost("/api/account", { action: "login", email, password }),
   google: (credential) => apiPost("/api/account", { action: "google", credential }),
   listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
-  quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),\n  checkoutAudit: () => apiPost("/api/payment", { action: "checkout", token: getToken() }),\n  verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
+  quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
+  checkoutAudit: () => apiPost("/api/payment", { action: "checkout", token: getToken() }),
+  verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
 };
@@ -2595,8 +2597,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         <SectionKicker>Pricing</SectionKicker>
         <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          Try any URL instantly without an account. Sign up free and every account includes {AUDIT_QUOTA} complete
-          audits — up to {SCREEN_LIMIT} screens or {NAV_LIMIT} pages each, with the full report, slide deck and PDF export.
+          Get your first complete audit free. After that, pay only when you need another audit — $5 per audit, with no subscription.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
           {["1 complete audit free", "$5 for each additional audit", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
@@ -2858,7 +2859,9 @@ export default function UxnestApp() {
   // State is for rendering; the ref guarantees the exact tested URLs survive
   // the async audit/save flow and are included in saved reports and decks.
   const auditedPagesRef = useRef([]);
-  const [auditsUsed, setAuditsUsed] = useState(0);\n  const [paidAudits, setPaidAudits] = useState(0);\n  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [auditsUsed, setAuditsUsed] = useState(0);
+  const [paidAudits, setPaidAudits] = useState(0);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -2875,13 +2878,48 @@ export default function UxnestApp() {
         const { account } = await api.session(token);
         if (account) {
           setUser({ email: account.email, name: account.name, plan: account.plan, id: account.id });
-          setAuditsUsed(account.auditsUsed || 0);\n          setPaidAudits(account.paidAudits || 0);
+          setAuditsUsed(account.auditsUsed || 0);
+          setPaidAudits(account.paidAudits || 0);
         } else {
           setToken("");
         }
       } catch { /* offline or server unavailable; stay logged out */ }
     })();
   }, []);
+
+  // Verify a successful Stripe Checkout redirect and credit exactly one paid audit.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("payment");
+    const sessionId = params.get("session_id");
+    if (status !== "success" || !sessionId || !getToken()) return;
+    (async () => {
+      try {
+        const result = await api.verifyAuditPayment(sessionId);
+        if (typeof result.paid === "number") setPaidAudits(result.paid);
+        setError(null);
+      } catch (e) {
+        setError(e.message || "Payment was received, but we couldn't confirm the audit credit yet. Please refresh.");
+      } finally {
+        window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+      }
+    })();
+  }, []);
+
+  const buyAudit = useCallback(async () => {
+    if (!user || paymentLoading) return;
+    setPaymentLoading(true);
+    setError(null);
+    try {
+      const result = await api.checkoutAudit();
+      if (!result.url) throw new Error("Couldn't start checkout.");
+      window.location.href = result.url;
+    } catch (e) {
+      setError(e.message || "Couldn't start payment. Please try again.");
+      setPaymentLoading(false);
+    }
+  }, [user, paymentLoading]);
+
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [authReason, setAuthReason] = useState("");
