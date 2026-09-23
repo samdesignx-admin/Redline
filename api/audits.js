@@ -5,7 +5,7 @@ import { requireDb, readSession } from "./_lib.js";
 
 export const maxDuration = 20;
 
-const AUDIT_QUOTA = Number(process.env.AUDIT_QUOTA || 1);
+const AUDIT_QUOTA = 1; // first completed audit is free; additional audits consume purchased credits
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
 
     /* ---------------- Check remaining quota ---------------- */
     if (action === "quota") {
-      const { data } = await db.from("accounts").select("audits_used").eq("id", accountId).maybeSingle();
+      const { data } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
       const used = (data && data.audits_used) || 0;
       res.status(200).json({ used, quota: AUDIT_QUOTA, remaining: Math.max(AUDIT_QUOTA - used, 0) });
       return;
