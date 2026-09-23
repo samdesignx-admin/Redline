@@ -40,7 +40,10 @@ async function stripeGet(path) {
   }
   const response = await fetch("https://api.stripe.com/v1/" + path, {
     method: "GET",
-    headers: { authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}` },
+    headers: {
+      authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+      "stripe-version": "2026-03-25.dahlia; custom_checkout_payment_form_preview=v1",
+    },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || "Stripe request failed.");
