@@ -76,7 +76,7 @@ export function publicAccount(row) {
     name: row.name || "",
     company: row.company || "",
     plan: row.plan || "free",
-    auditsUsed: row.audits_used || 0,
+    auditsUsed: row.audits_used || 0,\n    paidAudits: row.paid_audits || 0,
     emailVerified: !!row.email_verified,
   };
 }
