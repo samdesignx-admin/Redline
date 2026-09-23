@@ -4,7 +4,6 @@ import { requireDb, readSession } from "./_lib.js";
 
 export const maxDuration = 20;
 
-const SITE_URL = "https://uxnest.ai";
 const REGULAR_PRICE_CENTS = 1000;
 const BETA_DISCOUNT_PERCENT = 50;
 const PRICE_CENTS = REGULAR_PRICE_CENTS * (1 - BETA_DISCOUNT_PERCENT / 100);
@@ -21,6 +20,7 @@ async function stripeRequest(path, params) {
     headers: {
       authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
       "content-type": "application/x-www-form-urlencoded",
+      "stripe-version": "2026-03-25.dahlia; custom_checkout_payment_form_preview=v1",
     },
     body: new URLSearchParams(params),
   });
@@ -66,6 +66,7 @@ export default async function handler(req, res) {
     if (req.body.action === "checkout") {
       const accountId = sess.accountId;
       const session = await stripeRequest("checkout/sessions", {
+        ui_mode: "form",
         mode: "payment",
         "line_items[0][price_data][currency]": "usd",
         "line_items[0][price_data][product_data][name]": "UXNest UX Audit — Beta 50% Off",
@@ -73,12 +74,17 @@ export default async function handler(req, res) {
         "line_items[0][price_data][unit_amount]": String(PRICE_CENTS),
         "line_items[0][quantity]": "1",
         "metadata[account_id]": accountId,
-        success_url: `${SITE_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${SITE_URL}/?payment=cancelled`,
         billing_address_collection: "auto",
+        "phone_number_collection[enabled]": "false",
+        "automatic_tax[enabled]": "false",
+        submit_type: "auto",
+        "name_collection[individual][enabled]": "true",
+        "name_collection[business][enabled]": "true",
+        "name_collection[business][optional]": "true",
+        integration_identifier: "custom_embedded_web_0002",
       });
 
-      res.status(200).json({ url: session.url });
+      res.status(200).json({ client_secret: session.client_secret });
       return;
     }
 
