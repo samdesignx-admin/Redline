@@ -1305,7 +1305,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
         <input
           id="uxnest-file-input"
           type="file"
-          accept="image/png,image/jpeg,image/webp,application/pdf"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.svg"
           multiple
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 1 }}
           onChange={(e) => { onAddFiles(e.target.files); e.target.value = ""; }}
@@ -1315,7 +1315,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
             <Upload size={26} color={C.gold} strokeWidth={1.8} style={{ marginBottom: 10 }} />
             <div style={{ color: C.text, fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Drop screens or PDFs here, or tap to browse</div>
             <div style={{ color: C.muted, fontSize: 12.5 }}>
-              PNG, JPG, WEBP or PDF · up to {screenLimit} files
+              PNG, JPG, WEBP, SVG or PDF · up to {screenLimit} files
             </div>
           </>
         ) : (
@@ -1328,7 +1328,12 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
                     <span style={{ fontSize: 9, color: C.muted, textAlign: "center", wordBreak: "break-all", lineHeight: 1.2 }}>{img.name}</span>
                   </div>
                 ) : (
-                  <img src={img.dataUrl} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <div style={{ width: "100%", height: "100%", position: "relative", background: "#fff" }}>
+                    <img src={img.dataUrl} alt={img.name} role="img" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+                    {img.kind === "svg" && (
+                      <span style={{ position: "absolute", left: 5, bottom: 5, fontFamily: "'IBM Plex Mono', monospace", fontSize: 8, color: C.gold, background: C.goldSoft, borderRadius: 4, padding: "2px 5px" }}>SVG</span>
+                    )}
+                  </div>
                 )}
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(img.id); }}
@@ -1530,7 +1535,7 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
         <div style={{ position: "relative", display: "flex", justifyContent: "center", gap: 8, marginBottom: 20, overflow: "hidden", padding: "2px 0" }}>
           {thumbs.slice(0, 5).map((img) => (
             <div key={img.id} style={{ position: "relative", width: 40, height: 52, borderRadius: 6, overflow: "hidden", border: `1px solid ${C.border}`, opacity: 0.9, background: C.surfaceAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {img.kind === "pdf" ? <FileType2 size={15} color={C.gold} /> : <img src={img.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+              {img.kind === "pdf" ? <FileType2 size={15} color={C.gold} /> : <img src={img.dataUrl} alt="" role="img" style={{ width: "100%", height: "100%", objectFit: "contain" }} />}
               <div className="scan-sweep" style={{ position: "absolute", top: 0, left: "-60%", width: "60%", height: "100%", background: `linear-gradient(90deg, transparent, ${C.gold}55, transparent)` }} />
             </div>
           ))}
@@ -3076,32 +3081,63 @@ export default function UxnestApp() {
   /* ---- file handling ---- */
   /* Downscale images before upload: full-res phone screenshots are multi-MB
      base64 blobs that slow every API round-trip. 1568px longest edge matches
-     the model's effective max input resolution, so nothing useful is lost. */
+     the model's effective max input resolution, so nothing useful is lost.
+     SVG is always rasterized to PNG because the vision API accepts raster image
+     formats, while the browser's image context keeps SVG scripts non-executable. */
   function downscaleImage(dataUrl, mediaType) {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const MAX_EDGE = 1568;
-        const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
-        if (scale >= 1 && dataUrl.length < 1_500_000) {
+        try {
+          const MAX_EDGE = 1568;
+          const widthSource = img.naturalWidth || img.width || 1568;
+          const heightSource = img.naturalHeight || img.height || 1568;
+          const scale = Math.min(1, MAX_EDGE / Math.max(widthSource, heightSource));
+          const mustRasterize = mediaType === "image/svg+xml";
+          if (!mustRasterize && scale >= 1 && dataUrl.length < 1_500_000) {
+            resolve({ dataUrl, base64: dataUrl.split(",")[1], mediaType });
+            return;
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(widthSource * scale));
+          canvas.height = Math.max(1, Math.round(heightSource * scale));
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Canvas is unavailable.");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const outUrl = canvas.toDataURL(mustRasterize ? "image/png" : "image/jpeg", mustRasterize ? undefined : 0.85);
+          resolve({
+            dataUrl: outUrl,
+            base64: outUrl.split(",")[1],
+            mediaType: mustRasterize ? "image/png" : "image/jpeg",
+          });
+        } catch {
           resolve({ dataUrl, base64: dataUrl.split(",")[1], mediaType });
-          return;
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-        const outUrl = canvas.toDataURL("image/jpeg", 0.85);
-        resolve({ dataUrl: outUrl, base64: outUrl.split(",")[1], mediaType: "image/jpeg" });
       };
       img.onerror = () => resolve({ dataUrl, base64: dataUrl.split(",")[1], mediaType });
       img.src = dataUrl;
     });
   }
 
+  function isSupportedAuditFile(file) {
+    const type = String(file?.type || "").toLowerCase();
+    const name = String(file?.name || "").toLowerCase();
+    return type.startsWith("image/")
+      || type === "application/pdf"
+      || name.endsWith(".svg")
+      || name.endsWith(".png")
+      || name.endsWith(".jpg")
+      || name.endsWith(".jpeg")
+      || name.endsWith(".webp")
+      || name.endsWith(".pdf");
+  }
+
   const onAddFiles = useCallback((fileList) => {
-    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/") || f.type === "application/pdf");
-    if (!files.length) return;
+    const files = Array.from(fileList || []).filter(isSupportedAuditFile);
+    if (!files.length) {
+      setError("Supported files are PNG, JPG, WEBP, SVG, and PDF.");
+      return;
+    }
     setError(null);
     setImages((prev) => {
       if (prev.length >= screenLimit) {
@@ -3114,10 +3150,12 @@ export default function UxnestApp() {
       const reader = new FileReader();
       reader.onload = async () => {
         const rawUrl = String(reader.result);
-        const isPdf = file.type === "application/pdf";
+        const name = String(file.name || "").toLowerCase();
+        const isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
+        const isSvg = file.type === "image/svg+xml" || name.endsWith(".svg");
         const processed = isPdf
           ? { dataUrl: rawUrl, base64: rawUrl.split(",")[1], mediaType: "application/pdf" }
-          : await downscaleImage(rawUrl, file.type || "image/png");
+          : await downscaleImage(rawUrl, isSvg ? "image/svg+xml" : (file.type || "image/png"));
         setImages((prev) => {
           if (prev.length >= screenLimit) return prev;
           return [
@@ -3128,7 +3166,7 @@ export default function UxnestApp() {
               dataUrl: processed.dataUrl,
               base64: processed.base64,
               mediaType: processed.mediaType,
-              kind: isPdf ? "pdf" : "image",
+              kind: isPdf ? "pdf" : isSvg ? "svg" : "image",
             },
           ];
         });
