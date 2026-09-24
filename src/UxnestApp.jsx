@@ -1882,7 +1882,7 @@ function esc(s) {
 }
 
 function buildDeckHtml(report, source, auditedPages = []) {
-  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const { summary, usability, visual, accessibility, seo, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const srcLabel = source && source.mode === "url" && source.url ? esc(source.url.replace(/^https?:\/\//, "").toUpperCase()) : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
