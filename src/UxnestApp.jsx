@@ -1573,6 +1573,7 @@ const TABS = [
   { key: "usability", label: "Usability", icon: NavIcon },
   { key: "visual", label: "Visual", icon: Palette },
   { key: "accessibility", label: "A11y", icon: A11yIcon },
+  { key: "seo", label: "SEO", icon: Search },
   { key: "trust", label: "Trust", icon: ShieldCheck },
   { key: "conversion", label: "Conversion", icon: TrendingUp },
   { key: "cognitive", label: "Cog. Load", icon: Brain },
@@ -1640,7 +1641,7 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
 
 function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
-  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const { summary, usability, visual, accessibility, seo, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
   return (
     <div>
@@ -1783,6 +1784,7 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
         {tab === "usability" && <Section icon={NavIcon} title="Usability Analysis" data={usability} />}
         {tab === "visual" && <Section icon={Palette} title="Visual Design Analysis" data={visual} />}
         {tab === "accessibility" && <Section icon={A11yIcon} title="Accessibility Review" data={accessibility} />}
+        {tab === "seo" && <Section icon={Search} title="SEO & Search Visibility Review" data={seo} />}
         {tab === "trust" && <Section icon={ShieldCheck} title="Trust & Credibility Review" data={trust} />}
         {tab === "conversion" && <Section icon={TrendingUp} title="Conversion Optimization Review" data={conversion} />}
         {tab === "cognitive" && <Section icon={Brain} title="Cognitive Load Assessment" data={cognitive} />}
@@ -1886,7 +1888,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
   const sevColor = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).color;
   const sevBg = (sev) => (SEVERITY_STYLES[sev] || SEVERITY_STYLES.Medium).bg;
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
-  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
+  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const footer = () => `<div class="ft"><span>NEST AUDIT · ${srcLabel}</span><span>${++n} / ${TOTAL}</span></div>`;
 
