@@ -3554,7 +3554,7 @@ export default function UxnestApp() {
     }
     if (v !== urlInput.trim()) setUrlInput(v);
     if (!user) { requireLogin("runAudit"); return; }
-    if (auditsUsed >= AUDIT_QUOTA) { setError(QUOTA_MESSAGE); return; }
+    if (auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) { setError(QUOTA_MESSAGE); return; }
     startRun("url");
   };
 
