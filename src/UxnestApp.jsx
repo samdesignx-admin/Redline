@@ -3856,7 +3856,7 @@ export default function UxnestApp() {
 
           {/* Mobile: New Audit pill + hamburger */}
           <div className="nav-mobile" style={{ display: "none", alignItems: "center", gap: 8 }}>
-            <button onClick={() => { setPage("audit"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 14px", cursor: "pointer" }}>
+            <button onClick={() => { onReset(); setPage("audit"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 14px", cursor: "pointer" }}>
               <Zap size={13} /> New Audit
             </button>
             <button onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" style={{ ...iconBtnStyle, width: 36, height: 36 }}>
@@ -3865,7 +3865,7 @@ export default function UxnestApp() {
           </div>
 
           {/* Desktop New Audit CTA */}
-          <button className="nav-desktop" onClick={() => { setPage("audit"); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 16px", cursor: "pointer" }}>
+          <button className="nav-desktop" onClick={() => { onReset(); setPage("audit"); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 16px", cursor: "pointer" }}>
             <Zap size={13} /> New Audit
           </button>
         </div>
