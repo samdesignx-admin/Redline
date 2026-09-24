@@ -1485,11 +1485,13 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
     return () => clearInterval(tInterval);
   }, []);
 
-  /* Blend real batch progress with elapsed time so steps advance smoothly
-     even between batch completions, but never show ahead of reality. */
+  /* Show a smooth, believable progress signal. The audit reports progress
+     at batch boundaries, so only allow a small amount of time-based motion
+     beyond the last confirmed stage. This prevents the old 18% → 32% jump
+     while a long-running model request is still in flight. */
   const realFrac = progress.total ? (progress.done || 0) / progress.total : 0;
   const timeFrac = Math.min(elapsed / 100, 0.92);
-  const frac = Math.min(Math.max(realFrac, Math.min(timeFrac, realFrac + 0.18)), 0.98);
+  const frac = Math.min(Math.max(realFrac, Math.min(timeFrac, realFrac + 0.025)), 0.98);
   const activeIndex = Math.min(Math.floor(frac * AUDIT_STEPS.length), AUDIT_STEPS.length - 1);
   const pct = Math.round(frac * 100);
 
