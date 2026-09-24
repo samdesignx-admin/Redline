@@ -2620,12 +2620,12 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       <div style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "56px 0 64px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, alignItems: "center" }}>
           <div style={{ textAlign: "left" }}>
-            <SectionKicker onDark>AI-Powered UX Audit</SectionKicker>
+            <SectionKicker onDark>AI-POWERED UX &amp; PRODUCT TOOLS</SectionKicker>
             <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 44, color: "#FFFFFF", margin: "0 0 16px 0", lineHeight: 1.08, letterSpacing: -1 }}>
-              Professional UX audits in minutes.
+              AI-powered tools for better digital experiences.
             </h1>
             <p style={{ color: "#BFD8D2", fontSize: 16, lineHeight: 1.6, margin: "0 0 24px 0", maxWidth: 420 }}>
-              AI-powered insight across 6 critical UX dimensions. Upload screenshots, PDFs, or enter a URL for a comprehensive, actionable audit report.
+              UXNest is a growing suite of AI-powered tools for research, auditing, analysis, and product design. Start with a comprehensive UX Audit today.
             </p>
             <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "15px 30px", fontSize: 15.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
               {isLoggedIn ? "Start Free Audit" : "Sign Up & Start Free"} <ArrowRight size={16} />
