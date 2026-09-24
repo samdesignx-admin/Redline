@@ -618,7 +618,7 @@ const api = {
   google: (credential) => apiPost("/api/account", { action: "google", credential }),
   listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
   quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
-  checkoutAudit: () => apiPost("/api/payment", { action: "checkout", token: getToken() }),
+  checkoutAudit: (quantity) => apiPost("/api/payment", { action: "checkout", token: getToken(), quantity }),
   verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
@@ -629,7 +629,7 @@ const api = {
 /* ----------------------------------------------------------------------- */
 /* Disclaimer modal                                                        */
 /* ----------------------------------------------------------------------- */
-function StripeCheckoutForm({ clientSecret, sessionId, onComplete, onClose }) {
+function StripeCheckoutForm({ clientSecret, sessionId, quantity = 1, onComplete, onClose }) {
   const mountRef = useRef(null);
   const [status, setStatus] = useState("Loading secure checkout…");
   const [error, setError] = useState("");
@@ -709,8 +709,9 @@ function StripeCheckoutForm({ clientSecret, sessionId, onComplete, onClose }) {
       <div style={{ marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div>
-            <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 19, color: C.text }}>Purchase 1 UX audit</h3>
-            <div style={{ marginTop: 4, fontSize: 12, color: C.muted }}>$5 during beta · normally $10 · one-time payment</div>
+            <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 19, color: C.text }}>Purchase {quantity} UX audit{quantity === 1 ? "" : "s"}</h3>
+            <div style={{ marginTop: 4, fontSize: 12, color: C.muted }}>$5 per audit during beta · normally $10 · one-time payment</div>
+            <div style={{ marginTop: 6, fontSize: 12.5, color: C.textDim, fontWeight: 600 }}>Total: ${(BETA_AUDIT_PRICE_USD * quantity).toFixed(2)}</div>
           </div>
           <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: C.low, background: C.lowSoft, borderRadius: 99, padding: "4px 8px" }}>BETA 50% OFF</span>
         </div>
@@ -2724,7 +2725,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         <SectionKicker>Pricing</SectionKicker>
         <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          Get your first complete audit free. Additional audits are $10 each, with a 50% beta discount — just $5 during beta. No subscription.
+          Get your first complete audit free. Additional audits are $5 each during beta (normally $10). Buy 1–20 audit credits per purchase. No subscription.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
           {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
@@ -2768,7 +2769,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* CTA */}
       <div style={{ ...sect, position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "52px 18px", marginBottom: 0 }}>
         <h2 style={{ ...h2, color: "#FFFFFF" }}>Ready to Transform Your UX?</h2>
-        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Your first audit is free; additional audits are $5 during beta (normally $10).</p>
+        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Your first audit is free; additional audits are $5 during beta (normally $10). Buy 1–20 audit credits per purchase.</p>
         <button onClick={onStart} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
           Start Your Free Audit <ArrowRight size={15} />
         </button>
@@ -2990,6 +2991,7 @@ export default function UxnestApp() {
   const [auditsUsed, setAuditsUsed] = useState(0);
   const [paidAudits, setPaidAudits] = useState(0);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
   const [checkout, setCheckout] = useState(null);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
@@ -3006,7 +3008,7 @@ export default function UxnestApp() {
       try {
         const { account } = await api.session(token);
         if (account) {
-          setUser({ email: account.email, name: account.name, plan: account.plan, id: account.id });
+          setUser({ email: account.email, name: account.name, plan: account.plan, id: account.id, paidAudits: account.paidAudits || 0 });
           setAuditsUsed(account.auditsUsed || 0);
           setPaidAudits(account.paidAudits || 0);
         } else {
@@ -3035,14 +3037,15 @@ export default function UxnestApp() {
     })();
   }, []);
 
-  const buyAudit = useCallback(async () => {
+  const buyAudit = useCallback(async (quantity = 1) => {
     if (!user || paymentLoading) return;
+    const count = Math.max(1, Math.min(20, Number(quantity) || 1));
     setPaymentLoading(true);
     setError(null);
     try {
-      const result = await api.checkoutAudit();
+      const result = await api.checkoutAudit(count);
       if (!result.client_secret || !result.session_id) throw new Error("Stripe did not return a checkout client secret.");
-      setCheckout({ clientSecret: result.client_secret, sessionId: result.session_id });
+      setCheckout({ clientSecret: result.client_secret, sessionId: result.session_id, quantity: count });
     } catch (e) {
       setError(e.message || "Couldn't start payment. Please try again.");
     } finally {
@@ -3619,6 +3622,7 @@ export default function UxnestApp() {
   const onAuthSuccess = async (u) => {
     setUser(u);
     setAuditsUsed(u.auditsUsed || 0);
+    setPaidAudits(u.paidAudits || 0);
     kvSet("uxnest:session", JSON.stringify({ emailHash: u.emailHash })).catch(() => {});
     setShowAuth(false);
     const action = pendingAuthActionRef.current;
@@ -3895,9 +3899,22 @@ export default function UxnestApp() {
                       </span>
                     </div>
                     {auditsUsed >= AUDIT_QUOTA && (
-                      <button onClick={buyAudit} disabled={paymentLoading} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: paymentLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
-                        {paymentLoading ? "Opening…" : `Buy audit — ${BETA_AUDIT_PRICE_USD}`}
-                      </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <select
+                          value={purchaseQuantity}
+                          onChange={(e) => setPurchaseQuantity(Number(e.target.value))}
+                          disabled={paymentLoading}
+                          aria-label="Number of audits to purchase"
+                          style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 999, padding: "7px 9px", fontSize: 12, cursor: paymentLoading ? "wait" : "pointer" }}
+                        >
+                          {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => buyAudit(purchaseQuantity)} disabled={paymentLoading} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: paymentLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
+                          {paymentLoading ? "Opening…" : "Buy audits"}
+                        </button>
+                      </div>
                     )}
                   </div>
                 )}
@@ -3946,7 +3963,7 @@ export default function UxnestApp() {
         <Footer onOpenLegal={setLegalPage} />
       </main>
 
-      {checkout && <StripeCheckoutForm clientSecret={checkout.clientSecret} sessionId={checkout.sessionId} onComplete={completeCheckout} onClose={() => setCheckout(null)} />}
+      {checkout && <StripeCheckoutForm clientSecret={checkout.clientSecret} sessionId={checkout.sessionId} quantity={checkout.quantity} onComplete={completeCheckout} onClose={() => setCheckout(null)} />}
       {showDisclaimer && <DisclaimerModal onAccept={onAcceptDisclaimer} onCancel={() => { setShowDisclaimer(false); pendingRunRef.current = null; }} />}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={onAuthSuccess} reason={authReason} initialMode={authMode} />}
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
