@@ -7,6 +7,12 @@ export const maxDuration = 20;
 const REGULAR_PRICE_CENTS = 1000;
 const BETA_DISCOUNT_PERCENT = 50;
 const PRICE_CENTS = REGULAR_PRICE_CENTS * (1 - BETA_DISCOUNT_PERCENT / 100);
+const MAX_PURCHASE_QUANTITY = 20;
+
+function parseQuantity(value) {
+  const quantity = Number(value);
+  return Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_PURCHASE_QUANTITY ? quantity : null;
+}
 
 async function stripeRequest(path, params) {
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -67,16 +73,24 @@ export default async function handler(req, res) {
 
   try {
     if (req.body.action === "checkout") {
+      const quantity = parseQuantity(req.body.quantity);
+      if (!quantity) {
+        res.status(400).json({ error: "Choose between 1 and 20 audits." });
+        return;
+      }
+
       const accountId = sess.accountId;
+      const totalCents = PRICE_CENTS * quantity;
       const session = await stripeRequest("checkout/sessions", {
         ui_mode: "form",
         mode: "payment",
         "line_items[0][price_data][currency]": "usd",
         "line_items[0][price_data][product_data][name]": "UXNest UX Audit — Beta 50% Off",
-        "line_items[0][price_data][product_data][description]": "One complete UXNest audit.",
+        "line_items[0][price_data][product_data][description]": `One complete UXNest audit credit × ${quantity}.`,
         "line_items[0][price_data][unit_amount]": String(PRICE_CENTS),
-        "line_items[0][quantity]": "1",
+        "line_items[0][quantity]": String(quantity),
         "metadata[account_id]": accountId,
+        "metadata[quantity]": String(quantity),
         billing_address_collection: "auto",
         "phone_number_collection[enabled]": "false",
         "automatic_tax[enabled]": "false",
@@ -90,6 +104,8 @@ export default async function handler(req, res) {
       res.status(200).json({
         client_secret: session.client_secret,
         session_id: session.id,
+        quantity,
+        total_cents: totalCents,
       });
       return;
     }
@@ -110,7 +126,15 @@ export default async function handler(req, res) {
         res.status(403).json({ error: "This payment belongs to a different account." });
         return;
       }
-      if (Number(session.amount_total) !== PRICE_CENTS || session.currency !== "usd") {
+
+      const quantity = parseQuantity(session.metadata?.quantity);
+      if (!quantity) {
+        res.status(400).json({ error: "Unexpected audit quantity." });
+        return;
+      }
+
+      const expectedAmount = PRICE_CENTS * quantity;
+      if (Number(session.amount_total) !== expectedAmount || session.currency !== "usd") {
         res.status(400).json({ error: "Unexpected payment amount." });
         return;
       }
@@ -125,11 +149,12 @@ export default async function handler(req, res) {
         const { error: insertError } = await db.from("audit_purchases").insert({
           account_id: sess.accountId,
           stripe_session_id: session.id,
-          amount_cents: PRICE_CENTS,
+          amount_cents: expectedAmount,
+          quantity,
         });
 
         // A simultaneous verification can hit the unique constraint. In that
-        // case the other request has already granted the credit.
+        // case the other request has already granted the credits.
         if (!insertError) {
           const { data: acct } = await db
             .from("accounts")
@@ -138,7 +163,7 @@ export default async function handler(req, res) {
             .maybeSingle();
           const paid = (acct && acct.paid_audits) || 0;
           await db.from("accounts")
-            .update({ paid_audits: paid + 1 })
+            .update({ paid_audits: paid + quantity })
             .eq("id", sess.accountId);
         } else {
           const duplicate = await db.from("audit_purchases")
@@ -159,6 +184,7 @@ export default async function handler(req, res) {
         paid: (acct && acct.paid_audits) || 0,
         used: (acct && acct.audits_used) || 0,
         credited: true,
+        quantity,
       });
       return;
     }
