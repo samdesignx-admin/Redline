@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
+import BrandLogo from "./components/BrandLogo.jsx";
 import SupportChat from "./SupportChat.jsx";
 import { stripDashLines, parseIssues, parseNumberedList, parseDashList, parseSummary, parseTop10, parseScorecard, normalizeReportText, parseReport, buildPlainTextSummary } from "./utils/reportParser.js";
 import {
@@ -2212,6 +2213,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         <div style={{ position: "absolute", width: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "96mm", height: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "62mm", borderRadius: T.ornament === "block" ? "8mm" : T.ornament === "frame" ? "0" : "50%", border: T.ornament === "line" ? "0.5mm solid rgba(255,255,255,0.13)" : "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm", transform: T.ornament === "block" ? "rotate(14deg)" : "none" }} />
         <div style={{ position: "absolute", width: T.ornament === "grid" ? "74mm" : "70mm", height: T.ornament === "grid" ? "74mm" : "70mm", borderRadius: T.ornament === "block" ? "7mm" : T.ornament === "frame" ? "0" : "50%", background: T.ornament === "line" ? "transparent" : "rgba(255,255,255,0.035)", border: T.ornament === "grid" ? "0.5mm solid rgba(255,255,255,0.07)" : "none", left: "-18mm", bottom: "-22mm" }} />
         <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
+          <BrandLogo size={64} dark />
           <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review · {T.descriptor || "ADAPTIVE SYSTEM"}</div>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: T.titleWeight || 800, fontSize: 58 * (T.titleScale || 1), lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: T.letterSpacing || "-1.5pt" }}>UXNest Audit Report</div>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, lineHeight: 1.3, color: "#BFD8D2", maxWidth: "190mm", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</div>
@@ -3829,11 +3831,8 @@ export default function UxnestApp() {
 
       <header style={{ position: "sticky", top: 0, zIndex: 40, background: C.surface, boxShadow: "0 1px 0 rgba(18,48,43,0.08)", margin: "-20px -14px 18px", padding: "12px 14px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div onClick={() => { setPage("landing"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-            <div style={{ width: 26, height: 26, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Eye size={14} color="#FFFFFF" strokeWidth={2.4} />
-            </div>
-            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 16, color: C.text, letterSpacing: -0.2 }}>UXNest</span>
+          <div onClick={() => { setPage("landing"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", cursor: "pointer" }} aria-label="UXNest home">
+            <BrandLogo size={28} />
           </div>
 
           {/* Desktop nav — hidden on mobile via CSS class */}
@@ -3918,7 +3917,7 @@ export default function UxnestApp() {
                     <Stamp size={20} color={C.gold} strokeWidth={2} />
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: 2, color: C.gold }}>SENIOR UX REVIEW</span>
                   </div>
-                  <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 30, color: C.text, margin: "0 0 8px 0", letterSpacing: -0.3 }}>UXNest</h1>
+                  <div style={{ display: "flex", justifyContent: "center", margin: "0 0 12px" }}><BrandLogo size={54} /></div>
                   <p style={{ color: C.muted, fontSize: 14.5, lineHeight: 1.55, margin: "0 auto", maxWidth: 440 }}>
                     Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
                   </p>
