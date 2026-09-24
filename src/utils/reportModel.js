@@ -7,7 +7,7 @@ const DIMENSION_META = {
   usability: { id: "usability", label: "Usability" }, accessibility: { id: "accessibility", label: "Accessibility" },
   visual: { id: "visual", label: "Visual Design" }, trust: { id: "trust", label: "Trust" }, conversion: { id: "conversion", label: "Conversion" },
 };
-const FINDING_SECTION_ORDER = ["usability", "visual", "accessibility", "trust", "conversion", "cognitive"];
+const FINDING_SECTION_ORDER = ["usability", "visual", "accessibility", "seo", "trust", "conversion", "cognitive"];
 
 function normalizeIssue(issue, id, section) { return { ...issue, id, section }; }
 function normalizeIssueSection(sectionData, section, nextFindingNumber) {
