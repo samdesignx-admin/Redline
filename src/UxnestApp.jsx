@@ -2170,11 +2170,11 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
 function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
   const T = theme || REPORT_THEME_FALLBACK;
-  const { summary, usability, visual, accessibility, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const { summary, usability, visual, accessibility, seo = { intro: "", issues: [] }, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
-  const TOTAL = 12 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
+  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
   let n = 0;
   const next = () => ++n;
 
@@ -2237,6 +2237,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       <IssueSlide icon={NavIcon} title="Usability" data={usability} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      <IssueSlide icon={Search} title="SEO & Search Visibility" data={seo} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
