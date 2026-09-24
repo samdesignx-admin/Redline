@@ -286,8 +286,59 @@ async function unblockFetch(target, wantScreenshot = true) {
   } finally { clearTimeout(timer); }
 }
 
-function dossier(pages) {
-  return pages.map((p, i) => [
+async function fetchSeoInfrastructure(baseUrl) {
+  const origin = new URL(baseUrl).origin;
+  const result = {
+    robots: { status: null, exists: false, sitemapUrls: [], content: "" },
+    sitemap: { status: null, exists: false, validXml: false, urls: [], location: null },
+  };
+  async function fetchResource(url, accept) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(url, {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept },
+      });
+      return { status: response.status, ok: response.ok, text: (await response.text()).slice(0, 500_000) };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  try {
+    const response = await fetchResource(new URL("/robots.txt", origin).toString(), "text/plain,*/*;q=0.8");
+    result.robots.status = response.status;
+    result.robots.exists = response.ok;
+    result.robots.content = response.ok ? response.text : "";
+    if (response.ok) {
+      result.robots.sitemapUrls = [...response.text.matchAll(/^\s*sitemap\s*:\s*(\S+)\s*$/gim)]
+        .map((m) => m[1].trim()).filter(Boolean).slice(0, 5);
+    }
+  } catch {}
+  const candidates = [...result.robots.sitemapUrls, new URL("/sitemap.xml", origin).toString()]
+    .filter((url, i, arr) => arr.indexOf(url) === i).slice(0, 5);
+  for (const sitemapUrl of candidates) {
+    try {
+      const response = await fetchResource(sitemapUrl, "application/xml,text/xml,text/plain,*/*;q=0.8");
+      if (!response.ok || !/<\?xml|<urlset\b|<sitemapindex\b/i.test(response.text)) continue;
+      result.sitemap = {
+        status: response.status,
+        exists: true,
+        validXml: /<urlset\b|<sitemapindex\b/i.test(response.text),
+        urls: [...response.text.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)]
+          .map((m) => m[1].trim()).filter(Boolean).slice(0, 500),
+        location: sitemapUrl,
+      };
+      break;
+    } catch {}
+  }
+  if (result.sitemap.status == null) result.sitemap.status = 404;
+  return result;
+}
+
+function dossier(pages, infrastructure = null, targetKeywords = []) {
+  const pageDossier = pages.map((p, i) => [
     `PAGE ${i + 1}: ${p.url}`,
     p.title && `TITLE: ${p.title}`,
     p.description && `DESCRIPTION: ${p.description}`,
@@ -299,12 +350,23 @@ function dossier(pages) {
     ].join("\n"),
     `CONTENT: ${p.text.slice(0, 3500)}`,
   ].filter(Boolean).join("\n\n")).join("\n\n");
+  const infra = infrastructure ? [
+    "SITE SEO INFRASTRUCTURE:",
+    `robots.txt: ${infrastructure.robots.exists ? `present (HTTP ${infrastructure.robots.status})` : `not found (HTTP ${infrastructure.robots.status || "unknown"})`}`,
+    `robots.txt sitemap references: ${infrastructure.robots.sitemapUrls.join(" | ") || "none"}`,
+    `sitemap: ${infrastructure.sitemap.exists ? `present at ${infrastructure.sitemap.location} (HTTP ${infrastructure.sitemap.status}); XML=${infrastructure.sitemap.validXml ? "valid-looking" : "not verified"}; URLs sampled=${infrastructure.sitemap.urls.length}` : "not found"}`,
+    targetKeywords.length ? `TARGET KEYWORDS: ${targetKeywords.join(" | ")}` : "TARGET KEYWORDS: not provided; do not make keyword-specific ranking claims.",
+  ].join("\n") : "";
+  return [pageDossier, infra].filter(Boolean).join("\n\n");
 }
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const rawUrl = String(req.body?.url || "").trim(); if (!rawUrl) return res.status(400).json({ error: "A URL is required." });
   try {
     const normalized = (await assertPublicUrl(rawUrl)).toString();
+    const targetKeywords = String(req.body?.targetKeywords || "")
+      .split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
+    const seoInfrastructure = await fetchSeoInfrastructure(normalized);
     let homepage = null, screenshot = null, rendering = "visual-first", directError = null, renderError = null, readerError = null, unblockError = null;
     const visualDiagnostics = [];
 
@@ -387,7 +449,7 @@ export default async function handler(req, res) {
       return image ? { url: page.url, screenshot: image } : null;
     }));
     const screenshots = captured.filter(Boolean); const primaryScreenshot = screenshots[0]?.screenshot || screenshot || null;
-    return res.status(200).json({ evidenceStatus: "SUFFICIENT", rendering, pages: pages.map((p) => p.url), dossier: dossier(pages), screenshot: primaryScreenshot, screenshots });
+    return res.status(200).json({ evidenceStatus: "SUFFICIENT", rendering, pages: pages.map((p) => p.url), dossier: dossier(pages, seoInfrastructure, targetKeywords), screenshot: primaryScreenshot, screenshots, seoInfrastructure });
   } catch (error) {
     return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: error instanceof Error ? error.message : "UXNest could not retrieve the website.", pages: [] });
   }
