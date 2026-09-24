@@ -2243,7 +2243,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             {(auditScreenshots.length ? auditScreenshots : [{ url: source?.url || "", screenshot: auditScreenshot }]).slice(0, 3).map((item, index) => (
               <div key={item.url || index} style={{ border: "0.3mm solid #E5DED4", borderRadius: "4mm", overflow: "hidden", background: "#FFFFFF", boxShadow: "0 2mm 6mm rgba(30,43,40,0.06)" }}>
                 <div style={{ height: "82mm", background: C.surfaceAlt, display: "flex", alignItems: "flex-start", justifyContent: "center", overflow: "hidden" }}>
-                  <img src={item.screenshot} alt={"Audited page " + (index + 1)} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top center" }} />
+                  <img src={item.screenshot} alt={"Audited page " + (index + 1)} style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center", background: "#FFFFFF" }} />
                 </div>
                 <div style={{ padding: "3.5mm 4mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", color: C.textDim, wordBreak: "break-all" }}>
                   {item.url || "Audited page"}
