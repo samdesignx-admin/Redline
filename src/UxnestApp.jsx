@@ -337,7 +337,7 @@ If evidence is sufficient, write a factual SITE OBSERVATION DOSSIER (plain text,
 
 If evidence is insufficient, do not invent a dossier and do not analyze the website. Briefly state only what access failed and why, if known.`;
 
-function buildUrlBatchPrompt(url, dossier, batchSections) {
+function buildUrlBatchPrompt(url, dossier, batchSections, targetKeywords = []) {
   return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
 
 You are auditing the website ${url}. Below is a factual observation dossier gathered from the live site's content and structure. Base your audit on it. Because it reflects content/structure rather than pixels, do not fabricate claims about exact colors, spacing, or pixel alignment; where something can't be assessed without a visual screenshot, say so inside that issue's "Why it matters" rather than guessing.
@@ -345,6 +345,11 @@ You are auditing the website ${url}. Below is a factual observation dossier gath
 --- SITE OBSERVATION DOSSIER ---
 ${dossier}
 --- END DOSSIER ---
+
+${targetKeywords.length
+    ? `TARGET KEYWORDS PROVIDED BY THE USER: ${targetKeywords.join(", ")}
+Evaluate keyword alignment only against the retrieved page evidence. Discuss whether each keyword is naturally represented in the title, H1, headings, and visible/content text. Do not recommend keyword stuffing or claim ranking impact.`
+    : `No target keywords were provided. Do not invent a target keyword or make a keyword-specific ranking claim. You may identify obvious topic/intent mismatches from the page content, but label them as content-alignment observations.`}
 
 ${SHARED_RULES}
 
@@ -1366,7 +1371,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
   );
 }
 
-function UrlScreen({ url, setUrl, onRun, error, navLimit }) {
+function UrlScreen({ url, setUrl, targetKeywords, setTargetKeywords, onRun, error, navLimit }) {
   return (
     <div>
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
@@ -1385,6 +1390,20 @@ function UrlScreen({ url, setUrl, onRun, error, navLimit }) {
           onChange={(e) => setUrl(e.target.value)}
           style={inputStyle}
         />
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.textDim, marginTop: 14, marginBottom: 6 }}>
+          Target SEO keywords <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. AI UX audit, UX audit tool"
+          value={targetKeywords}
+          onChange={(e) => setTargetKeywords(e.target.value)}
+          maxLength={240}
+          style={inputStyle}
+        />
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>
+          Add up to 8 comma-separated keywords so UXNest can check title, H1, headings, and content alignment.
+        </div>
         {error && <div style={{ marginTop: 10, fontSize: 13, color: C.critical }}>{error}</div>}
         <button
           disabled={!url.trim()}
@@ -2923,6 +2942,7 @@ export default function UxnestApp() {
   const [images, setImages] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [urlInput, setUrlInput] = useState("");
+  const [targetKeywords, setTargetKeywords] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [report, setReport] = useState(null);
   const [rawReport, setRawReport] = useState("");
@@ -3342,7 +3362,7 @@ export default function UxnestApp() {
     const response = await fetch("/api/fetch-url", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: cleanUrl, navLimit }),
+      body: JSON.stringify({ url: cleanUrl, navLimit, targetKeywords }),
     });
     const evidence = await response.json().catch(() => ({}));
 
@@ -3410,7 +3430,7 @@ export default function UxnestApp() {
     setRunProgress((p) => ({ ...p, status: evidence.rendering === "browser-rendered" ? "Analyzing browser-rendered pages…" : "Analyzing retrieved pages…", done: 1 }));
 
     // Stage 2: batches consume deterministic retrieved evidence as plain text.
-    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch), [], undefined, 1);
+    return runBatchedAudit((batch) => buildUrlBatchPrompt(cleanUrl, dossier, batch, targetKeywords.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8)), [], undefined, 1);
   };
 
 
@@ -3571,7 +3591,7 @@ export default function UxnestApp() {
   };
 
   const onReset = useCallback(() => {
-    setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setError(null); setHistorySaved(false);
+    setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setTargetKeywords(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
     setAuditedPages([]);
     setAuditScreenshot(null);
@@ -3890,7 +3910,7 @@ export default function UxnestApp() {
                 {mode === "files" ? (
                   <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} />
                 ) : (
-                  <UrlScreen url={urlInput} setUrl={setUrlInput} onRun={onRunUrl} error={error} navLimit={navLimit} />
+                  <UrlScreen url={urlInput} setUrl={setUrlInput} targetKeywords={targetKeywords} setTargetKeywords={setTargetKeywords} onRun={onRunUrl} error={error} navLimit={navLimit} />
                 )}
 
                 <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 22, flexWrap: "wrap" }}>
