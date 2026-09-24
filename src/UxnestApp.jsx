@@ -208,6 +208,11 @@ Use the issue block format, exactly 3 issues.`,
 Evaluate Contrast, Readability, Touch Targets, Screen Reader Friendliness, Keyboard Accessibility.
 Use the issue block format, exactly 3 issues.
 
+# SEO & Search Visibility Review
+For URL audits, evaluate technical and on-page SEO using only the SEO evidence in the site dossier: title, meta description, H1 structure, canonical, robots/noindex directives, Open Graph metadata, structured data, language/viewport metadata, and image alt coverage.
+Use the issue block format, exactly 3 issues.
+For uploaded screenshots/documents where technical SEO cannot be verified, state that clearly rather than inventing SEO defects.
+
 # Trust & Credibility Review
 Evaluate Professional appearance, Transparency, Security signals, User confidence.
 Use the issue block format, exactly 2 issues.`,
@@ -251,7 +256,9 @@ function buildFilesBatchPrompt(batchSections) {
 
 Perform a professional UX audit of the attached screenshot(s) and/or document(s). Do not merely describe the screen — analyze the experience as a UX expert.
 
-Evaluate using Nielsen's 10 Usability Heuristics, Accessibility Best Practices (WCAG), Conversion Optimization Principles, Cognitive Load Reduction, Visual Hierarchy Principles, User Trust & Credibility Principles, and Mobile/Responsive UX Best Practices.
+Evaluate using Nielsen's 10 Usability Heuristics, Accessibility Best Practices (WCAG), Conversion Optimization Principles, Cognitive Load Reduction, Visual Hierarchy Principles, User Trust & Credibility Principles, Mobile/Responsive UX Best Practices, and current technical/on-page SEO best practices for URL audits.
+
+For SEO, distinguish what UXNest directly verified in the page HTML from what would require Google Search Console, server logs, backlink data, crawl statistics, or external ranking data. Do not claim rankings, traffic, indexing status, Core Web Vitals, or search performance unless directly measured.
 
 ${SHARED_RULES}
 
@@ -3409,7 +3416,7 @@ export default function UxnestApp() {
 
     const allIssues = [
       ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
-      ["Trust & Credibility", parsed.trust], ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
+      ["SEO & Search Visibility", parsed.seo], ["Trust & Credibility", parsed.trust], ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
     ].flatMap(([section, data]) => (data?.issues || []).map((issue) => ({ ...issue, section })))
       .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
       .slice(0, 8);
