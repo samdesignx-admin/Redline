@@ -209,9 +209,11 @@ Evaluate Contrast, Readability, Touch Targets, Screen Reader Friendliness, Keybo
 Use the issue block format, exactly 3 issues.
 
 # SEO & Search Visibility Review
-For URL audits, evaluate technical and on-page SEO using only the SEO evidence in the site dossier: title, meta description, H1 structure, canonical, robots/noindex directives, Open Graph metadata, structured data, language/viewport metadata, and image alt coverage.
-Use the issue block format, exactly 3 issues.
-For uploaded screenshots/documents where technical SEO cannot be verified, state that clearly rather than inventing SEO defects.
+For URL audits, evaluate technical and on-page SEO using only the SEO evidence in the site dossier: title, meta description, H1 structure, canonical, robots/noindex directives, robots.txt availability and sitemap references, sitemap availability/valid XML, Open Graph metadata, structured data, language/viewport metadata, image alt coverage, and any user-provided target keywords.
+If target keywords are provided, assess natural alignment across title, H1, headings, URL/content evidence; never recommend keyword stuffing.
+Google Search Console ownership, indexing coverage, rankings, traffic, backlinks, and search performance cannot be verified from the public page alone; explicitly label these as unverified when relevant.
+Use the issue block format, exactly 3 issues only when technical/on-page SEO evidence is available.
+For uploaded screenshots/documents where technical SEO cannot be verified, output the SEO section with 0 issues and a brief verification limitation.
 
 # Trust & Credibility Review
 Evaluate Professional appearance, Transparency, Security signals, User confidence.
