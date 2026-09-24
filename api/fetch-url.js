@@ -70,13 +70,43 @@ function extractLinks(html, baseUrl) {
 
 function extractPage(html, url, rendered = false) {
   const title = cleanText((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1]);
-  const description = cleanText((html.match(/<meta\b[^>]*(?:name|property)\s*=\s*["'](?:description|og:description)["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1]);
+  const description = cleanText((html.match(/<meta\b[^>]*name\s*=\s*["']description["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1]);
   const headings = matchAll(html, /<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi, 20);
   const buttons = [...new Set(matchAll(html, /<(?:button|a)\b[^>]*>([\s\S]*?)<\/(?:button|a)>/gi, 30))];
+  const canonical = ((html.match(/<link\b[^>]*rel\s*=\s*["'][^"']*canonical[^"']*["'][^>]*href\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const robots = ((html.match(/<meta\b[^>]*name\s*=\s*["']robots["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const ogTitle = ((html.match(/<meta\b[^>]*property\s*=\s*["']og:title["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const ogDescription = ((html.match(/<meta\b[^>]*property\s*=\s*["']og:description["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const ogImage = ((html.match(/<meta\b[^>]*property\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const lang = ((html.match(/<html\b[^>]*lang\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const viewport = ((html.match(/<meta\b[^>]*name\s*=\s*["']viewport["'][^>]*content\s*=\s*["']([^"']+)["']/i) || [])[1] || "").trim();
+  const h1s = matchAll(html, /<h1\b[^>]*>([\s\S]*?)<\/h1>/gi, 10);
+  const structuredDataTypes = [...html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => { try { const json = JSON.parse(m[1]); const nodes = Array.isArray(json) ? json : [json]; return nodes.flatMap((node) => Array.isArray(node?.["@graph"]) ? node["@graph"] : [node]).map((node) => node?.["@type"]).flat().filter(Boolean); } catch { return []; } })
+    .flat().map(String);
+  const imageTags = [...html.matchAll(/<img\b([^>]*)>/gi)].slice(0, 200);
+  const imagesMissingAlt = imageTags.filter((m) => !/\balt\s*=\s*["'][^"']*["']/i.test(m[1])).length;
   const text = cleanText(html).slice(0, 10000);
-  return { url, title, description, headings, buttons, text, links: extractLinks(html, url), rendered };
+  return {
+    url, title, description, headings, buttons, text, links: extractLinks(html, url), rendered,
+    seo: {
+      titleLength: title.length,
+      descriptionLength: description.length,
+      canonical,
+      robots,
+      ogTitle,
+      ogDescription,
+      ogImage: !!ogImage,
+      lang,
+      viewport: !!viewport,
+      h1Count: h1s.length,
+      h1s,
+      structuredDataTypes: [...new Set(structuredDataTypes)].slice(0, 20),
+      imageCount: imageTags.length,
+      imagesMissingAlt,
+    },
+  };
 }
-
 function meaningful(page) {
   return !!page && (page.text.length >= 250 || page.headings.length >= 2 || page.description.length >= 40 || page.buttons.length >= 3);
 }
@@ -257,9 +287,19 @@ async function unblockFetch(target, wantScreenshot = true) {
 }
 
 function dossier(pages) {
-  return pages.map((p, i) => [`PAGE ${i + 1}: ${p.url}`, p.title && `TITLE: ${p.title}`, p.description && `DESCRIPTION: ${p.description}`, p.headings.length && `HEADINGS: ${p.headings.join(" | ")}`, p.buttons.length && `LINKS/CTAS: ${p.buttons.join(" | ")}`, `CONTENT: ${p.text.slice(0, 3500)}`].filter(Boolean).join("\n")).join("\n\n");
+  return pages.map((p, i) => [
+    `PAGE ${i + 1}: ${p.url}`,
+    p.title && `TITLE: ${p.title}`,
+    p.description && `DESCRIPTION: ${p.description}`,
+    p.headings.length && `HEADINGS: ${p.headings.join(" | ")}`,
+    p.buttons.length && `LINKS/CTAS: ${p.buttons.join(" | ")}`,
+    p.seo && [
+      `SEO: titleLength=${p.seo.titleLength}; descriptionLength=${p.seo.descriptionLength}; h1Count=${p.seo.h1Count}; canonical=${p.seo.canonical || "missing"}; robots=${p.seo.robots || "not specified"}; lang=${p.seo.lang || "not specified"}; viewport=${p.seo.viewport ? "present" : "missing"}; structuredData=${p.seo.structuredDataTypes.join(", ") || "none"}; og:title=${p.seo.ogTitle ? "present" : "missing"}; og:description=${p.seo.ogDescription ? "present" : "missing"}; og:image=${p.seo.ogImage ? "present" : "missing"}; images=${p.seo.imageCount}; imagesMissingAlt=${p.seo.imagesMissingAlt}`,
+      p.seo.h1s.length ? `H1 TEXT: ${p.seo.h1s.join(" | ")}` : "H1 TEXT: none",
+    ].join("\n"),
+    `CONTENT: ${p.text.slice(0, 3500)}`,
+  ].filter(Boolean).join("\n\n")).join("\n\n");
 }
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const rawUrl = String(req.body?.url || "").trim(); if (!rawUrl) return res.status(400).json({ error: "A URL is required." });
