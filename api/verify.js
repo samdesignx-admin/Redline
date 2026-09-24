@@ -84,12 +84,78 @@ export default async function handler(req, res) {
           to: [cleanEmail],
           subject: `${generated} is your UXNest ${purpose === "reset" ? "password reset" : "verification"} code`,
           text: `Your UXNest ${purpose === "reset" ? "password reset" : "verification"} code is ${generated}.\n\nIt expires in 10 minutes. If you didn't request this, you can ignore this email.`,
-          html: `<div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#12302B">
-            <h2 style="margin:0 0 8px;font-size:20px">Verify your email</h2>
-            <p style="color:#3E5A54;font-size:14px;line-height:1.6;margin:0 0 20px">Enter this code in UXNest to finish creating your account.</p>
-            <div style="font-size:32px;font-weight:800;letter-spacing:6px;background:#DFF3EC;color:#0C7D62;padding:16px;text-align:center;border-radius:12px">${generated}</div>
-            <p style="color:#6E8681;font-size:12px;margin:20px 0 0">This code expires in 10 minutes. If you didn't request it, ignore this email.</p>
-          </div>`,
+          html: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <style>
+    :root { color-scheme: light dark; supported-color-schemes: light dark; }
+    body { margin:0 !important; padding:0 !important; background:#F3F7F5 !important; color:#18211F !important; }
+    .email-bg { background:#F3F7F5 !important; }
+    .email-card { background:#FFFFFF !important; border:1px solid #DCE7E2 !important; }
+    .email-text { color:#18211F !important; }
+    .email-muted { color:#5D6D68 !important; }
+    .email-code { background:#E7F5EF !important; color:#087A78 !important; border:1px solid #C8E7DB !important; }
+    .email-footer { color:#7A8A85 !important; }
+    .email-logo-dark { display:none !important; }
+    .email-logo-light { display:block !important; }
+    @media (prefers-color-scheme: dark) {
+      body { background:#0F1715 !important; color:#F3F7F5 !important; }
+      .email-bg { background:#0F1715 !important; }
+      .email-card { background:#17221F !important; border-color:#2C3B36 !important; }
+      .email-text { color:#F3F7F5 !important; }
+      .email-muted { color:#B7C5C0 !important; }
+      .email-code { background:#203C35 !important; color:#A8E63F !important; border-color:#31594D !important; }
+      .email-footer { color:#8FA39C !important; }
+      .email-logo-light { display:none !important; }
+      .email-logo-dark { display:block !important; }
+    }
+    @media screen and (max-width:600px) {
+      .email-shell { width:100% !important; }
+      .email-card { border-radius:0 !important; }
+      .email-pad { padding:28px 22px !important; }
+    }
+    [data-ogsc] .email-bg { background:#0F1715 !important; }
+    [data-ogsc] .email-card { background:#17221F !important; border-color:#2C3B36 !important; }
+    [data-ogsc] .email-text { color:#F3F7F5 !important; }
+    [data-ogsc] .email-muted { color:#B7C5C0 !important; }
+    [data-ogsc] .email-code { background:#203C35 !important; color:#A8E63F !important; border-color:#31594D !important; }
+    [data-ogsc] .email-footer { color:#8FA39C !important; }
+  </style>
+</head>
+<body class="email-bg" style="margin:0;padding:0;background:#F3F7F5;color:#18211F;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-bg" style="width:100%;background:#F3F7F5;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-shell" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:0 0 18px;">
+              <img class="email-logo-light" src="https://uxnest.ai/uxnest-mark.svg" width="42" height="42" alt="UXNest" style="display:block;width:42px;height:42px;border:0;">
+              <img class="email-logo-dark" src="https://uxnest.ai/uxnest-mark.svg" width="42" height="42" alt="UXNest" style="display:none;width:42px;height:42px;border:0;">
+            </td>
+          </tr>
+          <tr>
+            <td class="email-card email-pad" style="background:#FFFFFF;border:1px solid #DCE7E2;border-radius:18px;padding:36px 34px;">
+              <h1 class="email-text" style="margin:0 0 10px;font-family:Arial,Helvetica,sans-serif;font-size:24px;line-height:1.25;font-weight:800;color:#18211F;">${purpose === "reset" ? "Reset your password" : "Verify your email"}</h1>
+              <p class="email-muted" style="margin:0 0 26px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#5D6D68;">${purpose === "reset" ? "Enter this code in UXNest to choose a new password." : "Enter this code in UXNest to finish creating your account."}</p>
+              <div class="email-code" style="background:#E7F5EF;color:#087A78;border:1px solid #C8E7DB;border-radius:14px;padding:18px;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:34px;line-height:1;font-weight:800;letter-spacing:7px;">${generated}</div>
+              <p class="email-muted" style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#5D6D68;">This code expires in 10 minutes. If you didn't request this email, you can safely ignore it.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="email-footer" style="padding:18px 12px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#7A8A85;">
+              UXNest · AI-powered tools for better digital experiences
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
         }),
       });
       if (!r.ok) {
