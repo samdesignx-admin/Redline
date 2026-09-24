@@ -130,13 +130,31 @@ async function captureScreenshot(target) {
   const token = process.env.BROWSERLESS_TOKEN; if (!token) throw new Error("Browserless is not configured.");
   const url = (await assertPublicUrl(target)).toString();
   const shot = new URL(process.env.BROWSERLESS_BASE_URL || "https://production-sfo.browserless.io/content");
-  shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot"); shot.searchParams.set("token", token);
+  shot.pathname = shot.pathname.replace(/\/content$/, "/screenshot");
+  shot.searchParams.set("token", token);
+  shot.searchParams.set("stealth", "true");
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
-    const response = await fetch(shot, { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "cache-control": "no-cache" }, body: JSON.stringify({ url, waitForTimeout: 2500, bestAttempt: true, scrollPage: true, options: { fullPage: true, type: "jpeg", quality: 65, waitForImages: true } }) });
+    // Use a stable viewport capture for visual evidence and pin mapping.
+    // Full-page stitching can produce distorted/lazy-loaded strips on long pages,
+    // and the report's pin coordinates are meaningful only against a stable viewport.
+    const response = await fetch(shot, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({
+        url,
+        waitForTimeout: 4000,
+        bestAttempt: true,
+        scrollPage: false,
+        gotoOptions: { waitUntil: "networkidle2", timeout: 20000 },
+        options: { fullPage: false, captureBeyondViewport: false, type: "png", waitForImages: true },
+      }),
+    });
     if (!response.ok) throw new Error(`Browserless screenshot returned HTTP ${response.status}.`);
-    const bytes = Buffer.from(await response.arrayBuffer()); if (!bytes.length || bytes.length > 4_500_000) throw new Error("Browserless screenshot was empty or too large.");
-    return dataImage(bytes);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless screenshot was empty or too large.");
+    return dataImage(bytes, "image/png");
   } finally { clearTimeout(timer); }
 }
 
@@ -254,7 +272,15 @@ export default async function handler(req, res) {
     // HTML/text retrieval. This is the primary audit artifact for bot-protected sites.
     try {
       const unblocked = await unblockFetch(normalized, true);
-      homepage = unblocked.page; screenshot = unblocked.screenshot; rendering = "browserless-unblock";
+      homepage = unblocked.page;
+      // Re-capture the primary visual artifact with the stable viewport
+      // screenshot path. Keep the unblock screenshot only as a fallback.
+      try {
+        screenshot = await captureScreenshot(normalized);
+      } catch {
+        screenshot = unblocked.screenshot;
+      }
+      rendering = "browserless-unblock";
     } catch (error) {
       unblockError = error instanceof Error ? error.message : "Browserless unblock failed.";
       if (error?.screenshot) screenshot = error.screenshot;
