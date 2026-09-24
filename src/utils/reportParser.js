@@ -4,7 +4,7 @@ import { normalizeReportModel } from "./reportModel.js";
 
 const KNOWN_SECTIONS = [
   "Executive Summary", "Usability Analysis", "Visual Design Analysis", "Accessibility Review",
-  "Trust & Credibility Review", "Trust and Credibility Review", "Conversion Optimization Review",
+  "Trust & Credibility Review", "Trust and Credibility Review", "SEO & Search Visibility Review", "SEO Review", "Conversion Optimization Review",
   "Cognitive Load Assessment", "AI Recommendations", "Top 10 UX Improvements", "Quick Wins",
   "Strategic Improvements", "Final Scorecard",
 ];
@@ -165,6 +165,7 @@ function parseReport(rawText) {
     usability: parseIssues(find("usability analysis")),
     visual: parseIssues(find("visual design analysis")),
     accessibility: parseIssues(find("accessibility review")),
+    seo: parseIssues(find("seo")),
     trust: parseIssues(find("trust")),
     conversion: parseIssues(find("conversion optimization")),
     cognitive: parseIssues(find("cognitive load")),
