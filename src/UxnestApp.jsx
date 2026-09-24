@@ -167,7 +167,7 @@ Severity levels: Critical, High, Medium, Low.
 
 Be direct, professional, and specific. Avoid generic statements. Always focus on improving user outcomes and business outcomes.
 
-BREVITY IS MANDATORY: "Why it matters" max 35 words. "Recommendation" max 30 words. Output exactly the minimum issue count requested per section — no more. No introductions before sections, no summaries after them.
+BREVITY IS MANDATORY: "Why it matters" max 35 words. "Recommendation" max 30 words. Output exactly the minimum issue count requested per section — no more. Exception: the SEO & Search Visibility Review contains 3 issues only when technical SEO evidence is available; otherwise output the section with 0 issues and a brief verification limitation. No introductions before sections, no summaries after them.
 
 Output ONLY the sections listed below — no other sections, no preamble, no closing commentary, no code fences, no markdown bold/asterisks around labels. Use these exact section headers and labels.
 
@@ -1641,7 +1641,7 @@ function VisualEvidencePanel({ screenshot, evidence = [] }) {
 
 function ReportScreen({ report, images, source, auditedPages = [], auditScreenshot = null, visualEvidence = [], onReset, isLoggedIn, onRequireLogin, onDownload, mailtoHref }) {
   const [tab, setTab] = useState("summary");
-  const { summary, usability, visual, accessibility, seo, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
+  const { summary, usability, visual, accessibility, seo = { intro: "", issues: [] }, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
 
   return (
     <div>
