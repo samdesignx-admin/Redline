@@ -30,28 +30,18 @@ async function getCheckout(checkoutId) {
   return creemRequest(`/v1/checkouts?checkout_id=${encodeURIComponent(checkoutId)}`, { method: "GET" });
 }
 async function grantPurchase(db, { accountId, checkoutId, eventId = null, quantity, amountCents = null, currency = "USD" }) {
-  const { data: existingCheckout } = await db.from("audit_purchases").select("id").eq("creem_checkout_id", checkoutId).maybeSingle();
-  if (existingCheckout) return;
-  if (eventId) {
-    const { data: existingEvent } = await db.from("audit_purchases").select("id").eq("creem_event_id", eventId).maybeSingle();
-    if (existingEvent) return;
-  }
-  const { error: insertError } = await db.from("audit_purchases").insert({
-    account_id: accountId, creem_checkout_id: checkoutId, creem_event_id: eventId,
-    amount_cents: amountCents ?? BETA_PRICE_CENTS * quantity, quantity,
-    currency: String(currency || "USD").toLowerCase(), payment_provider: "creem",
+  const { data, error } = await db.rpc("grant_creem_audit_purchase", {
+    p_account_id: accountId,
+    p_checkout_id: checkoutId,
+    p_event_id: eventId,
+    p_amount_cents: amountCents ?? BETA_PRICE_CENTS * quantity,
+    p_quantity: quantity,
+    p_currency: String(currency || "USD").toLowerCase(),
   });
-  if (insertError) {
-    const { data: duplicate } = await db.from("audit_purchases").select("id").eq("creem_checkout_id", checkoutId).maybeSingle();
-    if (duplicate) return;
-    throw insertError;
-  }
-  const { error: rpcError } = await db.rpc("increment_paid_audits", { p_account_id: accountId, p_amount: quantity });
-  if (rpcError) {
-    await db.from("audit_purchases").delete().eq("creem_checkout_id", checkoutId);
-    throw rpcError;
-  }
+  if (error) throw error;
+  return { granted: data === true, duplicate: data !== true };
 }
+
 async function validateCompletedCheckout(checkout, accountId) {
   const { productId } = creemConfig();
   if (!checkout || checkout.status !== "completed") { const e = new Error("Payment has not been completed yet."); e.status = 402; throw e; }
@@ -76,12 +66,14 @@ export default async function handler(req, res) {
       const quantity = parseQuantity(req.body.quantity);
       if (!quantity) { res.status(400).json({ error: "Choose between 1 and 20 audits." }); return; }
       const { productId } = creemConfig();
+      const { data: account } = await db.from("accounts").select("email").eq("id", sess.accountId).maybeSingle();
+      if (!account?.email) throw new Error("Your account email could not be loaded.");
       const origin = String(req.headers.origin || process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
       const requestId = `uxnest_${sess.accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const checkout = await creemRequest("/v1/checkouts", {
         method: "POST",
         body: JSON.stringify({
-          product_id: productId, request_id: requestId, units: quantity, customer: { id: sess.accountId },
+          product_id: productId, request_id: requestId, units: quantity, customer: { email: account.email },
           success_url: `${origin}/?payment=success&checkout_id={checkout_id}`,
           metadata: { account_id: sess.accountId, quantity: String(quantity), source: "uxnest_web" },
         }),
