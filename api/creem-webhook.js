@@ -27,18 +27,17 @@ export default async function handler(req, res) {
     if (checkout.status !== "completed" || !accountId || !quantity || !checkout.id) throw new Error("Incomplete checkout.completed event.");
     if (!process.env.CREEM_PRODUCT_ID || actualProductId !== process.env.CREEM_PRODUCT_ID) throw new Error("Unexpected Creem product.");
     if (product?.billing_type && product.billing_type !== "onetime") throw new Error("Unexpected Creem billing type.");
-    const { data: existing } = await db.from("audit_purchases").select("id").eq("creem_checkout_id", checkout.id).maybeSingle();
-    if (existing) { res.status(200).send("OK"); return; }
-    const { data: eventExisting } = await db.from("audit_purchases").select("id").eq("creem_event_id", event.id).maybeSingle();
-    if (eventExisting) { res.status(200).send("OK"); return; }
-    const { error: insertError } = await db.from("audit_purchases").insert({
-      account_id: accountId, creem_checkout_id: checkout.id, creem_event_id: event.id || null,
-      amount_cents: product?.price ? Number(product.price) * quantity : 0, quantity,
-      currency: String(product?.currency || "USD").toLowerCase(), payment_provider: "creem",
+    const amountCents = product?.price ? Number(product.price) * quantity : 0;
+    const { error: grantError } = await db.rpc("grant_creem_audit_purchase", {
+      p_account_id: accountId,
+      p_checkout_id: checkout.id,
+      p_event_id: event.id || null,
+      p_amount_cents: amountCents,
+      p_quantity: quantity,
+      p_currency: String(product?.currency || "USD").toLowerCase(),
     });
-    if (insertError) throw insertError;
-    const { error: creditError } = await db.rpc("increment_paid_audits", { p_account_id: accountId, p_amount: quantity });
-    if (creditError) throw creditError;
+    if (grantError) throw grantError;
+
     res.status(200).send("OK");
   } catch (e) { console.error("[UXNest Creem webhook]", e); res.status(500).send("Internal error"); }
 }
