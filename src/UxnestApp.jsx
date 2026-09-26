@@ -630,101 +630,6 @@ const api = {
 /* ----------------------------------------------------------------------- */
 /* Disclaimer modal                                                        */
 /* ----------------------------------------------------------------------- */
-function StripeCheckoutForm({ clientSecret, sessionId, quantity = 1, onComplete, onClose }) {
-  const mountRef = useRef(null);
-  const [status, setStatus] = useState("Loading secure checkout…");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    let form = null;
-    let checkout = null;
-
-    async function init() {
-      try {
-        if (!window.Stripe) throw new Error("Stripe.js did not load. Please refresh and try again.");
-        const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-        if (!publishableKey) throw new Error("Stripe publishable key is not configured.");
-        if (!mountRef.current) return;
-
-        const stripe = window.Stripe(publishableKey, { betas: ["custom_checkout_payment_form_1"] });
-        checkout = stripe.initCheckoutFormSdk({
-          clientSecret,
-          appearance: {
-            theme: "flat",
-            labels: "auto",
-            inputs: "spaced",
-            variables: {
-              borderRadius: "4px",
-              colorBackground: "#ffffff",
-              colorDanger: "#df1b41",
-              colorPrimary: "#176B5B",
-              colorSuccess: "#00c853",
-              colorText: "#30313d",
-              fontFamily: "Inter",
-              fontSizeBase: "16px",
-              spacingUnit: "4px",
-            },
-          },
-        });
-
-        form = checkout.createForm({ layout: "expanded" });
-        form.mount(mountRef.current);
-        const loadActionsResult = await checkout.loadActions();
-        if (cancelled) return;
-        if (loadActionsResult.type !== "success") {
-          throw new Error("Stripe couldn't initialize the payment form.");
-        }
-
-        form.on("confirm", async (event) => {
-          try {
-            setStatus("Confirming payment…");
-            await loadActionsResult.actions.confirm({
-              formConfirmEvent: event,
-              returnUrl: `${window.location.origin}/?payment=success&session_id=${encodeURIComponent(sessionId)}`,
-            });
-            await onComplete(sessionId);
-          } catch (e) {
-            setError(e?.message || "Payment confirmation failed. Please try again.");
-            setStatus("");
-          }
-        });
-        setStatus("");
-      } catch (e) {
-        if (!cancelled) {
-          setError(e?.message || "Unable to load secure checkout.");
-          setStatus("");
-        }
-      }
-    }
-
-    init();
-    return () => {
-      cancelled = true;
-      try { form?.unmount?.(); } catch {}
-    };
-  }, [clientSecret, sessionId, onComplete]);
-
-  return (
-    <Modal onClose={onClose} maxWidth={560}>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <div>
-            <h3 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 19, color: C.text }}>Purchase {quantity} UX audit{quantity === 1 ? "" : "s"}</h3>
-            <div style={{ marginTop: 4, fontSize: 12, color: C.muted }}>$5 per audit during beta · normally $10 · one-time payment</div>
-            <div style={{ marginTop: 6, fontSize: 12.5, color: C.textDim, fontWeight: 600 }}>Total: ${(BETA_AUDIT_PRICE_USD * quantity).toFixed(2)}</div>
-          </div>
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 9, color: C.low, background: C.lowSoft, borderRadius: 99, padding: "4px 8px" }}>BETA 50% OFF</span>
-        </div>
-      </div>
-      {status && <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 12 }}>{status}</div>}
-      {error && <div style={{ fontSize: 12.5, color: C.critical, background: C.highSoft, borderRadius: 8, padding: "9px 10px", marginBottom: 12 }}>{error}</div>}
-      <div ref={mountRef} id="uxnest-checkout-form" />
-      <div style={{ fontSize: 10.5, color: C.muted, textAlign: "center", marginTop: 14 }}>Secure payment powered by Stripe.</div>
-    </Modal>
-  );
-}
-
 function DisclaimerModal({ onAccept, onCancel }) {
   const [checked, setChecked] = useState(false);
   return (
@@ -2999,7 +2904,6 @@ export default function UxnestApp() {
   const [paidAudits, setPaidAudits] = useState(0);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
-  const [checkout, setCheckout] = useState(null);
   const [legalPage, setLegalPage] = useState(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
@@ -3025,15 +2929,14 @@ export default function UxnestApp() {
     })();
   }, []);
 
-  // Verify a successful Stripe Checkout redirect and credit exactly one paid audit.
+  // Verify a successful Creem Checkout return as a fallback.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("payment");
-    const sessionId = params.get("session_id");
-    if (status !== "success" || !sessionId || !getToken()) return;
+    const status = params.get("payment"), checkoutId = params.get("checkout_id");
+    if (status !== "success" || !checkoutId || !getToken()) return;
     (async () => {
       try {
-        const result = await api.verifyAuditPayment(sessionId);
+        const result = await api.verifyAuditPayment(checkoutId);
         if (typeof result.paid === "number") setPaidAudits(result.paid);
         setError(null);
       } catch (e) {
@@ -3051,21 +2954,14 @@ export default function UxnestApp() {
     setError(null);
     try {
       const result = await api.checkoutAudit(count);
-      if (!result.client_secret || !result.session_id) throw new Error("Stripe did not return a checkout client secret.");
-      setCheckout({ clientSecret: result.client_secret, sessionId: result.session_id, quantity: count });
+      if (!result.checkout_url || !result.checkout_id) throw new Error("Creem did not return a checkout URL.");
+      window.location.href = result.checkout_url;
     } catch (e) {
       setError(e.message || "Couldn't start payment. Please try again.");
     } finally {
       setPaymentLoading(false);
     }
   }, [user, paymentLoading]);
-
-  const completeCheckout = useCallback(async (sessionId) => {
-    const result = await api.verifyAuditPayment(sessionId);
-    if (typeof result.paid === "number") setPaidAudits(result.paid);
-    setCheckout(null);
-    setError(null);
-  }, []);
 
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("login");
@@ -4000,7 +3896,6 @@ export default function UxnestApp() {
         <Footer onOpenLegal={setLegalPage} />
       </main>
 
-      {checkout && <StripeCheckoutForm clientSecret={checkout.clientSecret} sessionId={checkout.sessionId} quantity={checkout.quantity} onComplete={completeCheckout} onClose={() => setCheckout(null)} />}
       {showDisclaimer && <DisclaimerModal onAccept={onAcceptDisclaimer} onCancel={() => { setShowDisclaimer(false); pendingRunRef.current = null; }} />}
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} onAuth={onAuthSuccess} reason={authReason} initialMode={authMode} />}
       {showHistory && <HistoryPanel entries={historyEntries} onOpen={openHistoryEntry} onClose={() => setShowHistory(false)} loading={historyLoading} />}
