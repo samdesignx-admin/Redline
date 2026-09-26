@@ -1,200 +1,108 @@
-// One-time Stripe Checkout for UXNest audits.
-// First audit is free; each additional completed audit costs $10 USD, with a 50% beta discount.
+// Creem one-time checkout for UXNest audit credits.
 import { requireDb, readSession } from "./_lib.js";
-
 export const maxDuration = 20;
-
-const REGULAR_PRICE_CENTS = 1000;
-const BETA_DISCOUNT_PERCENT = 50;
-const PRICE_CENTS = REGULAR_PRICE_CENTS * (1 - BETA_DISCOUNT_PERCENT / 100);
+const BETA_PRICE_CENTS = 500;
 const MAX_PURCHASE_QUANTITY = 20;
 
 function parseQuantity(value) {
   const quantity = Number(value);
   return Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_PURCHASE_QUANTITY ? quantity : null;
 }
-
-async function stripeRequest(path, params) {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    const err = new Error("Payments are not configured yet. Add STRIPE_SECRET_KEY in Vercel.");
-    err.code = "STRIPE_NOT_CONFIGURED";
+function creemConfig() {
+  if (!process.env.CREEM_API_KEY || !process.env.CREEM_PRODUCT_ID) {
+    const err = new Error("Payments are not configured yet. Add CREEM_API_KEY and CREEM_PRODUCT_ID in Vercel.");
+    err.code = "CREEM_NOT_CONFIGURED";
     throw err;
   }
-
-  const response = await fetch("https://api.stripe.com/v1/" + path, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      "content-type": "application/x-www-form-urlencoded",
-      "stripe-version": "2026-03-25.dahlia; custom_checkout_payment_form_preview=v1",
-    },
-    body: new URLSearchParams(params),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error?.message || "Stripe request failed.");
-  }
-  return data;
+  return { apiKey: process.env.CREEM_API_KEY, productId: process.env.CREEM_PRODUCT_ID, baseUrl: process.env.CREEM_API_BASE_URL || "https://api.creem.io" };
 }
-
-async function stripeGet(path) {
-  if (!process.env.STRIPE_SECRET_KEY) {
-    const err = new Error("Payments are not configured yet. Add STRIPE_SECRET_KEY in Vercel.");
-    err.code = "STRIPE_NOT_CONFIGURED";
-    throw err;
-  }
-  const response = await fetch("https://api.stripe.com/v1/" + path, {
-    method: "GET",
-    headers: {
-      authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
-      "stripe-version": "2026-03-25.dahlia; custom_checkout_payment_form_preview=v1",
-    },
+async function creemRequest(path, options = {}) {
+  const { apiKey, baseUrl } = creemConfig();
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...options,
+    headers: { "x-api-key": apiKey, "content-type": "application/json", ...(options.headers || {}) },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || "Stripe request failed.");
+  if (!response.ok) throw new Error(data?.message || data?.error || "Creem request failed.");
   return data;
 }
-
+async function getCheckout(checkoutId) {
+  return creemRequest(`/v1/checkouts?checkout_id=${encodeURIComponent(checkoutId)}`, { method: "GET" });
+}
+async function grantPurchase(db, { accountId, checkoutId, eventId = null, quantity, amountCents = null, currency = "USD" }) {
+  const { data: existingCheckout } = await db.from("audit_purchases").select("id").eq("creem_checkout_id", checkoutId).maybeSingle();
+  if (existingCheckout) return;
+  if (eventId) {
+    const { data: existingEvent } = await db.from("audit_purchases").select("id").eq("creem_event_id", eventId).maybeSingle();
+    if (existingEvent) return;
+  }
+  const { error: insertError } = await db.from("audit_purchases").insert({
+    account_id: accountId, creem_checkout_id: checkoutId, creem_event_id: eventId,
+    amount_cents: amountCents ?? BETA_PRICE_CENTS * quantity, quantity,
+    currency: String(currency || "USD").toLowerCase(), payment_provider: "creem",
+  });
+  if (insertError) {
+    const { data: duplicate } = await db.from("audit_purchases").select("id").eq("creem_checkout_id", checkoutId).maybeSingle();
+    if (duplicate) return;
+    throw insertError;
+  }
+  const { error: rpcError } = await db.rpc("increment_paid_audits", { p_account_id: accountId, p_amount: quantity });
+  if (rpcError) {
+    await db.from("audit_purchases").delete().eq("creem_checkout_id", checkoutId);
+    throw rpcError;
+  }
+}
+async function validateCompletedCheckout(checkout, accountId) {
+  const { productId } = creemConfig();
+  if (!checkout || checkout.status !== "completed") { const e = new Error("Payment has not been completed yet."); e.status = 402; throw e; }
+  const metadata = checkout.metadata || {};
+  if (metadata.account_id !== accountId) { const e = new Error("This payment belongs to a different account."); e.status = 403; throw e; }
+  const quantity = parseQuantity(checkout.units || metadata.quantity);
+  if (!quantity) { const e = new Error("Unexpected audit quantity."); e.status = 400; throw e; }
+  const product = typeof checkout.product === "object" ? checkout.product : null;
+  if ((product?.id || checkout.product) !== productId) { const e = new Error("Unexpected payment product."); e.status = 400; throw e; }
+  if (product?.billing_type && product.billing_type !== "onetime") { const e = new Error("Unexpected payment type."); e.status = 400; throw e; }
+  if (product?.currency && String(product.currency).toLowerCase() !== "usd") { const e = new Error("Unexpected payment currency."); e.status = 400; throw e; }
+  if (product?.price != null && Number(product.price) !== BETA_PRICE_CENTS) { const e = new Error("Unexpected payment price."); e.status = 400; throw e; }
+  return { checkoutId: checkout.id, quantity, amountCents: product?.price ? Number(product.price) * quantity : BETA_PRICE_CENTS * quantity, currency: product?.currency || "USD" };
+}
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const db = requireDb(res);
-  if (!db) return;
-
+  if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
+  const db = requireDb(res); if (!db) return;
   const sess = readSession((req.body || {}).token);
-  if (!sess) {
-    res.status(401).json({ error: "Please log in again." });
-    return;
-  }
-
+  if (!sess) { res.status(401).json({ error: "Please log in again." }); return; }
   try {
     if (req.body.action === "checkout") {
       const quantity = parseQuantity(req.body.quantity);
-      if (!quantity) {
-        res.status(400).json({ error: "Choose between 1 and 20 audits." });
-        return;
-      }
-
-      const accountId = sess.accountId;
-      const totalCents = PRICE_CENTS * quantity;
-      const session = await stripeRequest("checkout/sessions", {
-        ui_mode: "form",
-        mode: "payment",
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][product_data][name]": "UXNest UX Audit — Beta 50% Off",
-        "line_items[0][price_data][product_data][description]": `One complete UXNest audit credit × ${quantity}.`,
-        "line_items[0][price_data][unit_amount]": String(PRICE_CENTS),
-        "line_items[0][quantity]": String(quantity),
-        "metadata[account_id]": accountId,
-        "metadata[quantity]": String(quantity),
-        billing_address_collection: "auto",
-        "phone_number_collection[enabled]": "false",
-        "automatic_tax[enabled]": "false",
-        submit_type: "auto",
-        "name_collection[individual][enabled]": "true",
-        "name_collection[business][enabled]": "true",
-        "name_collection[business][optional]": "true",
-        integration_identifier: "custom_embedded_web_0002",
+      if (!quantity) { res.status(400).json({ error: "Choose between 1 and 20 audits." }); return; }
+      const { productId } = creemConfig();
+      const origin = String(req.headers.origin || process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
+      const requestId = `uxnest_${sess.accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const checkout = await creemRequest("/v1/checkouts", {
+        method: "POST",
+        body: JSON.stringify({
+          product_id: productId, request_id: requestId, units: quantity, customer: { id: sess.accountId },
+          success_url: `${origin}/?payment=success&checkout_id={checkout_id}`,
+          metadata: { account_id: sess.accountId, quantity: String(quantity), source: "uxnest_web" },
+        }),
       });
-
-      res.status(200).json({
-        client_secret: session.client_secret,
-        session_id: session.id,
-        quantity,
-        total_cents: totalCents,
-      });
+      if (!checkout.checkout_url || !checkout.id) throw new Error("Creem did not return a checkout URL.");
+      res.status(200).json({ checkout_url: checkout.checkout_url, checkout_id: checkout.id, quantity, total_cents: BETA_PRICE_CENTS * quantity });
       return;
     }
-
     if (req.body.action === "verify") {
-      const sessionId = String(req.body.sessionId || "").trim();
-      if (!sessionId || !/^cs_[A-Za-z0-9_]+$/.test(sessionId)) {
-        res.status(400).json({ error: "Invalid payment session." });
-        return;
-      }
-
-      const session = await stripeGet(`checkout/sessions/${encodeURIComponent(sessionId)}`);
-      if (session.payment_status !== "paid") {
-        res.status(402).json({ error: "Payment has not been completed yet." });
-        return;
-      }
-      if (session.metadata?.account_id !== sess.accountId) {
-        res.status(403).json({ error: "This payment belongs to a different account." });
-        return;
-      }
-
-      const quantity = parseQuantity(session.metadata?.quantity);
-      if (!quantity) {
-        res.status(400).json({ error: "Unexpected audit quantity." });
-        return;
-      }
-
-      const expectedAmount = PRICE_CENTS * quantity;
-      if (Number(session.amount_total) !== expectedAmount || session.currency !== "usd") {
-        res.status(400).json({ error: "Unexpected payment amount." });
-        return;
-      }
-
-      const { data: existing } = await db
-        .from("audit_purchases")
-        .select("id")
-        .eq("stripe_session_id", session.id)
-        .maybeSingle();
-
-      if (!existing) {
-        const { error: insertError } = await db.from("audit_purchases").insert({
-          account_id: sess.accountId,
-          stripe_session_id: session.id,
-          amount_cents: expectedAmount,
-          quantity,
-        });
-
-        // A simultaneous verification can hit the unique constraint. In that
-        // case the other request has already granted the credits.
-        if (!insertError) {
-          const { data: acct } = await db
-            .from("accounts")
-            .select("paid_audits")
-            .eq("id", sess.accountId)
-            .maybeSingle();
-          const paid = (acct && acct.paid_audits) || 0;
-          await db.from("accounts")
-            .update({ paid_audits: paid + quantity })
-            .eq("id", sess.accountId);
-        } else {
-          const duplicate = await db.from("audit_purchases")
-            .select("id")
-            .eq("stripe_session_id", session.id)
-            .maybeSingle();
-          if (!duplicate.data) throw insertError;
-        }
-      }
-
-      const { data: acct } = await db
-        .from("accounts")
-        .select("audits_used, paid_audits")
-        .eq("id", sess.accountId)
-        .maybeSingle();
-
-      res.status(200).json({
-        paid: (acct && acct.paid_audits) || 0,
-        used: (acct && acct.audits_used) || 0,
-        credited: true,
-        quantity,
-      });
+      const checkoutId = String(req.body.checkoutId || "").trim();
+      if (!checkoutId || !/^ch_[A-Za-z0-9_-]+$/.test(checkoutId)) { res.status(400).json({ error: "Invalid payment checkout." }); return; }
+      const checkout = await getCheckout(checkoutId);
+      const verified = await validateCompletedCheckout(checkout, sess.accountId);
+      await grantPurchase(db, { accountId: sess.accountId, checkoutId: verified.checkoutId, quantity: verified.quantity, amountCents: verified.amountCents, currency: verified.currency });
+      const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
+      res.status(200).json({ paid: (acct && acct.paid_audits) || 0, used: (acct && acct.audits_used) || 0, credited: true, quantity: verified.quantity });
       return;
     }
-
     res.status(400).json({ error: "Unknown payment action" });
   } catch (e) {
-    console.error("[UXNest payment]", e);
-    res.status(e?.code === "STRIPE_NOT_CONFIGURED" ? 503 : 500).json({
-      error: e?.message || "Payment request failed.",
-      code: e?.code || "PAYMENT_ERROR",
-    });
+    console.error("[UXNest Creem payment]", e);
+    res.status(e?.code === "CREEM_NOT_CONFIGURED" ? 503 : (e?.status || 500)).json({ error: e?.message || "Payment request failed.", code: e?.code || "PAYMENT_ERROR" });
   }
 }
