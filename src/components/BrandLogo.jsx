@@ -1,40 +1,32 @@
 export default function BrandLogo({ size = 28, showWordmark = true, dark = false, className = "" }) {
   if (!showWordmark) {
     return (
-      <span
+      <img
         className={className}
+        src="/uxnest-icon.png"
+        alt="UXNest"
         style={{
-          display: "inline-block",
           width: size,
           height: size,
-          overflow: "hidden",
+          display: "block",
           flexShrink: 0,
-          borderRadius: Math.max(6, Math.round(size * 0.22)),
+          objectFit: "contain",
         }}
-      >
-        <img
-          src="/uxnest-logo.png"
-          alt="UXNest"
-          style={{
-            height: size,
-            width: Math.round(size * 751 / 244),
-            maxWidth: "none",
-            display: "block",
-            objectFit: "contain",
-          }}
-        />
-      </span>
+      />
     );
   }
+
+  const width = Math.round(size * 3.55);
+  const height = Math.round(width * 244 / 751);
 
   return (
     <img
       className={className}
-      src={dark ? "/uxnest-logo.png" : "/uxnest-logo.png"}
+      src="/uxnest-logo.png"
       alt="UXNest"
       style={{
-        width: Math.max(104, Math.round(size * 3.55)),
-        height: Math.max(34, Math.round(size * 0.325)),
+        width,
+        height,
         display: "block",
         flexShrink: 0,
         objectFit: "contain",
