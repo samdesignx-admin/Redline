@@ -16,8 +16,9 @@ export default function BrandLogo({ size = 28, showWordmark = true, dark = false
     );
   }
 
-  const width = Math.round(size * 3.55);
-  const height = Math.round(width * 244 / 751);
+  // The approved PNG is 900 × 260. Keep its native 3.4615:1 ratio.
+  const height = size;
+  const width = Math.round(size * 900 / 260);
 
   return (
     <img
