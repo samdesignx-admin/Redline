@@ -11,7 +11,7 @@ export default function BrandLogo({ size = 28, showWordmark = true, dark = false
   }
 
   const height = size;
-  const width = Math.round(size * 450 / 137);
+  const width = Math.round(size * 3);
 
   return (
     <img
