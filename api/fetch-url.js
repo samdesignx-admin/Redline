@@ -188,6 +188,56 @@ async function captureScreenshot(target) {
   } finally { clearTimeout(timer); }
 }
 
+async function captureBrowserQL(target) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browserless is not configured.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://production-sfo.browserless.io/stealth/bql");
+  endpoint.searchParams.set("token", token);
+  endpoint.searchParams.set("emulationOs", "windows");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 28_000);
+  const query = `mutation UXNestProtectedAudit {
+    goto(url: "${url.replace(/\\/g, "\\\\").replace(/"/g, '\\\"')}", waitUntil: networkIdle, timeout: 20000) {
+      status
+    }
+    solve(wait: true, timeout: 12000) {
+      found
+      solved
+      time
+    }
+    waitForTimeout(time: 1500) {
+      time
+    }
+    screenshot(type: png, fullPage: false, waitForImages: true, timeout: 10000) {
+      base64
+    }
+  }`;
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({ query, variables: {}, operationName: "UXNestProtectedAudit" }),
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error(`Browserless BrowserQL returned HTTP ${response.status}.`);
+    let payload;
+    try { payload = JSON.parse(raw); } catch { throw new Error("Browserless BrowserQL returned invalid JSON."); }
+    if (Array.isArray(payload?.errors) && payload.errors.length) {
+      throw new Error("Browserless BrowserQL error: " + String(payload.errors[0]?.message || "query failed").slice(0, 240));
+    }
+    const data = payload?.data || {};
+    const b64 = typeof data?.screenshot?.base64 === "string" ? data.screenshot.base64.replace(/^data:image\\/[^;]+;base64,/i, "") : "";
+    if (!b64) throw new Error("Browserless BrowserQL returned no screenshot.");
+    const bytes = Buffer.from(b64, "base64");
+    if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless BrowserQL screenshot was empty or too large.");
+    return `data:image/png;base64,${b64}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function captureSmartScrape(target) {
   const token = process.env.BROWSERLESS_TOKEN;
   if (!token) throw new Error("Browserless is not configured.");
@@ -261,6 +311,7 @@ async function captureMicrolink(target) {
 async function captureVisualFallback(target) {
   const diagnostics = [];
   const providers = [
+    ["browserless-browserql-stealth", () => captureBrowserQL(target)],
     ["browserless-smart-scrape", () => captureSmartScrape(target)],
     ["browserless", () => captureScreenshot(target)],
     ["screenshotone", () => captureScreenshotOne(target)],
