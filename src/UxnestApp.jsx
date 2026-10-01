@@ -3100,7 +3100,7 @@ export default function UxnestApp() {
 
   async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
-    const body = { model: "claude-sonnet-4-6", max_tokens: 1000, messages };
+    const body = { model: "claude-sonnet-5-5", max_tokens: 1000, messages };
     if (tools) body.tools = tools;
 
     const requestId = typeof crypto !== "undefined" && crypto.randomUUID
