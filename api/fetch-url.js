@@ -188,6 +188,31 @@ async function captureScreenshot(target) {
   } finally { clearTimeout(timer); }
 }
 
+async function captureSmartScrape(target) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) throw new Error("Browserless is not configured.");
+  const url = (await assertPublicUrl(target)).toString();
+  const endpoint = new URL("https://production-sfo.browserless.io/smart-scrape");
+  endpoint.searchParams.set("token", token);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json", "cache-control": "no-cache" },
+      body: JSON.stringify({ url, formats: ["screenshot", "rawText"] }),
+    });
+    if (!response.ok) throw new Error(`Browserless Smart Scrape returned HTTP ${response.status}.`);
+    const payload = await response.json();
+    const b64 = typeof payload?.screenshot === "string" ? payload.screenshot.replace(/^data:image\/[^;]+;base64,/i, "") : "";
+    if (!b64) throw new Error("Browserless Smart Scrape returned no screenshot.");
+    const bytes = Buffer.from(b64, "base64");
+    if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless Smart Scrape screenshot was empty or too large.");
+    return `data:image/png;base64,${b64}`;
+  } finally { clearTimeout(timer); }
+}
+
 async function captureScreenshotOne(target) {
   const token = process.env.SCREENSHOTONE_API_KEY; if (!token) throw new Error("ScreenshotOne is not configured.");
   const url = (await assertPublicUrl(target)).toString();
@@ -236,6 +261,7 @@ async function captureMicrolink(target) {
 async function captureVisualFallback(target) {
   const diagnostics = [];
   const providers = [
+    ["browserless-smart-scrape", () => captureSmartScrape(target)],
     ["browserless", () => captureScreenshot(target)],
     ["screenshotone", () => captureScreenshotOne(target)],
     ["microlink", () => captureMicrolink(target)],
@@ -465,7 +491,9 @@ export default async function handler(req, res) {
 
     if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, unblockError && `Browserless unblock: ${unblockError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
-      return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website could not be retrieved and no trustworthy rendered screenshot was captured.", pages: [], diagnostics: [attempts, ...visualDiagnostics].filter(Boolean).join(" ") });
+      const diagnostics = [attempts, ...visualDiagnostics].filter(Boolean).join(" ");
+      console.error("[UXNest] audit blocked", { url: normalized, diagnostics });
+      return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website could not be retrieved and no trustworthy rendered screenshot was captured.", pages: [], diagnostics });
     }
 
     const pages = [homepage];
