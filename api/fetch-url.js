@@ -366,67 +366,84 @@ export default async function handler(req, res) {
     const normalized = (await assertPublicUrl(rawUrl)).toString();
     const targetKeywords = String(req.body?.targetKeywords || "")
       .split(",").map((value) => value.trim()).filter(Boolean).slice(0, 8);
-    const seoInfrastructure = await fetchSeoInfrastructure(normalized);
-    let homepage = null, screenshot = null, rendering = "visual-first", directError = null, renderError = null, readerError = null, unblockError = null;
+    // Acquire page evidence with the cheapest/fastest paths first. The previous
+    // visual-first order could spend most of Vercel's 60s function budget on
+    // Browserless before ever trying a normal HTTP fetch.
+    let homepage = null, screenshot = null, rendering = "direct", directError = null, renderError = null, readerError = null, unblockError = null;
     const visualDiagnostics = [];
 
-    // Visual-first acquisition: capture the complete rendered page before relying on
-    // HTML/text retrieval. This is the primary audit artifact for bot-protected sites.
+    // 1) Normal public HTTP retrieval.
     try {
-      const unblocked = await unblockFetch(normalized, true);
-      homepage = unblocked.page;
-      // Re-capture the primary visual artifact with the stable viewport
-      // screenshot path. Keep the unblock screenshot only as a fallback.
-      try {
-        screenshot = await captureScreenshot(normalized);
-      } catch {
-        screenshot = unblocked.screenshot;
+      homepage = await directFetch(normalized);
+      if (accessBlocked(homepage)) {
+        directError = "Direct retrieval returned an access-control page.";
+        homepage = null;
       }
-      rendering = "browserless-unblock";
     } catch (error) {
-      unblockError = error instanceof Error ? error.message : "Browserless unblock failed.";
-      if (error?.screenshot) screenshot = error.screenshot;
+      directError = error instanceof Error ? error.message : "Direct retrieval failed.";
     }
 
-    // Never let a failed Browserless attempt remove our independent screenshot options.
+    // 2) Reader fallback can bypass some crawler/WAF differences without
+    // requiring a browser service.
+    if (!homepage || !meaningful(homepage)) {
+      try {
+        homepage = await readerFetch(normalized);
+        rendering = "reader-fallback";
+      } catch (error) {
+        readerError = error instanceof Error ? error.message : "Reader fallback failed.";
+      }
+    }
+
+    // 3) Only use Browserless when ordinary retrieval is blocked. Its Unblock
+    // API can return both rendered HTML and a full-page screenshot in one call,
+    // so don't spend another request re-capturing the same page.
+    if (!homepage || !meaningful(homepage)) {
+      try {
+        const unblocked = await unblockFetch(normalized, true);
+        homepage = unblocked.page;
+        screenshot = unblocked.screenshot;
+        rendering = "browserless-unblock";
+      } catch (error) {
+        unblockError = error instanceof Error ? error.message : "Browserless unblock failed.";
+        if (error?.screenshot) screenshot = error.screenshot;
+      }
+    }
+
+    // 4) If Browserless returned content but no screenshot, or if it was
+    // unavailable, try independent visual providers.
     if (!screenshot) {
       const visual = await captureVisualFallback(normalized);
       if (visual.screenshot) {
         screenshot = visual.screenshot;
-        rendering = visual.provider;
+        rendering = visual.provider || rendering;
       }
       visualDiagnostics.push(...visual.diagnostics);
     }
 
+    // 5) Browser-rendered HTML is a final content fallback when available.
     if (!homepage || !meaningful(homepage)) {
       try {
         const rendered = await renderPage(normalized, true);
-        homepage = rendered.page; screenshot = rendered.screenshot || screenshot; rendering = "browser-rendered";
+        homepage = rendered.page;
+        screenshot = rendered.screenshot || screenshot;
+        rendering = "browser-rendered";
       } catch (error) {
         renderError = error instanceof Error ? error.message : "Browser rendering failed.";
         if (error?.screenshot && !screenshot) screenshot = error.screenshot;
       }
     }
 
-    if (!homepage || !meaningful(homepage)) {
-      try { homepage = await directFetch(normalized); if (accessBlocked(homepage)) { directError = "Direct retrieval returned an access-control page."; homepage = null; } }
-      catch (error) { directError = error instanceof Error ? error.message : "Direct retrieval failed."; }
-    }
-
-    if (!homepage || !meaningful(homepage)) {
-      try { homepage = await readerFetch(normalized); rendering = "reader-fallback"; }
-      catch (error) { readerError = error instanceof Error ? error.message : "Reader fallback failed."; }
-    }
+    // SEO infrastructure is supplementary and must never block a valid audit.
+    const seoInfrastructure = await fetchSeoInfrastructure(normalized).catch(() => null);
 
     // If the screenshot exists, it is usable visual evidence even when HTML is blocked.
-    // The downstream audit receives the screenshot and must treat it as the primary source.
     if (screenshot && (!homepage || !meaningful(homepage) || accessBlocked(homepage))) {
       const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, unblockError && `Browserless unblock: ${unblockError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
       return res.status(200).json({
         code: "AUDIT_VISUAL_EVIDENCE",
         evidenceStatus: "VISUAL_ONLY",
         rendering,
-        reason: "UXNest captured a complete rendered screenshot first. Text retrieval was blocked or unavailable, so the screenshot is the primary audit artifact.",
+        reason: "UXNest captured a rendered screenshot of the public page. Text retrieval was blocked or unavailable, so the screenshot is the primary audit artifact.",
         pages: [normalized],
         dossier: "",
         screenshot,
@@ -437,7 +454,7 @@ export default async function handler(req, res) {
 
     if (!homepage || !meaningful(homepage) || accessBlocked(homepage)) {
       const attempts = [directError && `Direct retrieval: ${directError}`, renderError && `Browser fallback: ${renderError}`, unblockError && `Browserless unblock: ${unblockError}`, readerError && `Reader fallback: ${readerError}`].filter(Boolean).join(" ");
-      return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website could not be retrieved and no trustworthy full-page screenshot was captured.", pages: [], diagnostics: [attempts, ...visualDiagnostics].filter(Boolean).join(" ") });
+      return res.status(422).json({ code: "AUDIT_ENVIRONMENT_BLOCKED", evidenceStatus: "BLOCKED", reason: "The website could not be retrieved and no trustworthy rendered screenshot was captured.", pages: [], diagnostics: [attempts, ...visualDiagnostics].filter(Boolean).join(" ") });
     }
 
     const pages = [homepage];
