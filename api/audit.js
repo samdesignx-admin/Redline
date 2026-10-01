@@ -73,7 +73,7 @@ export default async function handler(req, res) {
     return;
   }
   const body = {
-    model: typeof model === "string" ? model : "claude-sonnet-4-6",
+    model: typeof model === "string" ? model : "claude-sonnet-5-5",
     max_tokens: Math.min(Number(max_tokens) || 1000, 4096),
     messages,
   };
