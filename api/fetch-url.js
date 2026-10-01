@@ -224,15 +224,23 @@ async function captureBrowserQL(target) {
     if (!response.ok) throw new Error(`Browserless BrowserQL returned HTTP ${response.status}.`);
     let payload;
     try { payload = JSON.parse(raw); } catch { throw new Error("Browserless BrowserQL returned invalid JSON."); }
-    if (Array.isArray(payload?.errors) && payload.errors.length) {
-      throw new Error("Browserless BrowserQL error: " + String(payload.errors[0]?.message || "query failed").slice(0, 240));
-    }
+    // BrowserQL can return HTTP 200 with per-step GraphQL errors while later
+    // top-level fields still succeed. Prefer valid screenshot evidence over a
+    // failure reported by an earlier navigation/solve/wait step.
     const data = payload?.data || {};
     const b64 = typeof data?.screenshot?.base64 === "string" ? data.screenshot.base64.replace(/^data:image\/[^;]+;base64,/i, "") : "";
-    if (!b64) throw new Error("Browserless BrowserQL returned no screenshot.");
-    const bytes = Buffer.from(b64, "base64");
-    if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless BrowserQL screenshot was empty or too large.");
-    return `data:image/png;base64,${b64}`;
+    if (b64) {
+      const bytes = Buffer.from(b64, "base64");
+      if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless BrowserQL screenshot was empty or too large.");
+      return `data:image/png;base64,${b64}`;
+    }
+    if (Array.isArray(payload?.errors) && payload.errors.length) {
+      const first = payload.errors[0] || {};
+      const message = String(first?.message || "query failed").slice(0, 240);
+      const path = Array.isArray(first?.path) ? ` [${first.path.join(".")}]` : "";
+      throw new Error("Browserless BrowserQL error" + path + ": " + message);
+    }
+    throw new Error("Browserless BrowserQL returned no screenshot.");
   } finally {
     clearTimeout(timer);
   }
