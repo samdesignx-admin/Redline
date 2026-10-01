@@ -228,7 +228,7 @@ async function captureBrowserQL(target) {
       throw new Error("Browserless BrowserQL error: " + String(payload.errors[0]?.message || "query failed").slice(0, 240));
     }
     const data = payload?.data || {};
-    const b64 = typeof data?.screenshot?.base64 === "string" ? data.screenshot.base64.replace(/^data:image\\/[^;]+;base64,/i, "") : "";
+    const b64 = typeof data?.screenshot?.base64 === "string" ? data.screenshot.base64.replace(/^data:image\/[^;]+;base64,/i, "") : "";
     if (!b64) throw new Error("Browserless BrowserQL returned no screenshot.");
     const bytes = Buffer.from(b64, "base64");
     if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless BrowserQL screenshot was empty or too large.");
