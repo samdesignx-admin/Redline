@@ -4,11 +4,11 @@ import net from "node:net";
 export const maxDuration = 60;
 
 const MAX_HTML_BYTES = 1_500_000;
-const DIRECT_TIMEOUT_MS = 10_000;
-const RENDER_TIMEOUT_MS = 25_000;
-const READER_TIMEOUT_MS = 20_000;
-const SCREENSHOT_TIMEOUT_MS = 25_000;
-const UNBLOCK_TIMEOUT_MS = 55_000;
+const DIRECT_TIMEOUT_MS = 8_000;
+const RENDER_TIMEOUT_MS = 18_000;
+const READER_TIMEOUT_MS = 10_000;
+const SCREENSHOT_TIMEOUT_MS = 15_000;
+const UNBLOCK_TIMEOUT_MS = 28_000;
 const BLOCKED_PATTERNS = /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net|akamai reference|error reference number)/i;
 
 function isPrivateIp(address) {
