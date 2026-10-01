@@ -1,7 +1,7 @@
 import { lookup } from "node:dns/promises";
 import net from "node:net";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MAX_HTML_BYTES = 1_500_000;
 const DIRECT_TIMEOUT_MS = 8_000;
@@ -204,7 +204,7 @@ async function captureScreenshotOne(target) {
 async function capturePageSpeed(target) {
   const url = (await assertPublicUrl(target)).toString();
   const endpoint = new URL("https://www.googleapis.com/pagespeedonline/v5/runPagespeed"); endpoint.searchParams.set("url", url); endpoint.searchParams.set("strategy", "desktop"); endpoint.searchParams.set("category", "PERFORMANCE"); endpoint.searchParams.set("locale", "en");
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 55_000);
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch(endpoint, { headers: { accept: "application/json" }, signal: controller.signal }); if (!response.ok) throw new Error(`Google render fallback returned HTTP ${response.status}.`);
     const payload = await response.json(); const lighthouse = payload?.lighthouseResult || {}; const requests = lighthouse?.audits?.["network-requests"]?.details?.items || [];
@@ -241,9 +241,18 @@ async function captureVisualFallback(target) {
     ["microlink", () => captureMicrolink(target)],
     ["google-render-fallback", () => capturePageSpeed(target)],
   ];
-  for (const [name, fn] of providers) {
-    try { const screenshot = await fn(); if (screenshot) return { screenshot, provider: name, diagnostics }; }
-    catch (error) { diagnostics.push(`${name}: ${error instanceof Error ? error.message : "capture failed"}`); }
+  // Run independent providers concurrently. A sequential chain can consume
+  // the whole serverless execution window when one provider is slow/unavailable.
+  const results = await Promise.allSettled(providers.map(([, provider]) => provider()));
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (result.status === "fulfilled" && result.value) {
+      return { screenshot: result.value, provider: providers[i][0], diagnostics };
+    }
+    if (result.status === "rejected") {
+      const reason = result.reason;
+      diagnostics.push(providers[i][0] + ": " + (reason instanceof Error ? reason.message : "capture failed"));
+    }
   }
   return { screenshot: null, provider: null, diagnostics };
 }
@@ -434,7 +443,9 @@ export default async function handler(req, res) {
     }
 
     // SEO infrastructure is supplementary and must never block a valid audit.
-    const seoInfrastructure = await fetchSeoInfrastructure(normalized).catch(() => null);
+    // Start SEO infrastructure in parallel, but do not make a visual-only
+    // audit wait for robots/sitemap requests to finish.
+    const seoPromise = fetchSeoInfrastructure(normalized).catch(() => null);
 
     // If the screenshot exists, it is usable visual evidence even when HTML is blocked.
     if (screenshot && (!homepage || !meaningful(homepage) || accessBlocked(homepage))) {
@@ -466,6 +477,10 @@ export default async function handler(req, res) {
       return image ? { url: page.url, screenshot: image } : null;
     }));
     const screenshots = captured.filter(Boolean); const primaryScreenshot = screenshots[0]?.screenshot || screenshot || null;
+    const seoInfrastructure = await Promise.race([
+      seoPromise,
+      new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
     return res.status(200).json({ evidenceStatus: "SUFFICIENT", rendering, pages: pages.map((p) => p.url), dossier: dossier(pages, seoInfrastructure, targetKeywords), screenshot: primaryScreenshot, screenshots, seoInfrastructure });
   } catch (error) {
     return res.status(422).json({ code: "AUDIT_INSUFFICIENT_EVIDENCE", evidenceStatus: "INSUFFICIENT", reason: error instanceof Error ? error.message : "UXNest could not retrieve the website.", pages: [] });
