@@ -3351,6 +3351,44 @@ export default function UxnestApp() {
       const base64 = visionScreenshot.slice(comma + 1);
       const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
       const visualContent = [{ type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }];
+
+      // Evidence-integrity gate: a screenshot can exist even when the target
+      // site returned a WAF/access-denied page. Never score that error page as
+      // if it were the requested website.
+      const evidenceCheck = await runWithContinuation(
+        [{
+          role: "user",
+          content: [
+            ...visualContent,
+            {
+              type: "text",
+              text: `Determine whether this screenshot is trustworthy evidence of the requested public website: ${cleanUrl}.
+Output exactly one line:
+VISUAL EVIDENCE: VALID
+or
+VISUAL EVIDENCE: BLOCKED
+Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-detection, security challenge, CAPTCHA, generic server error, or other intermediary/error page rather than the requested site's actual content. Do not infer that an error page belongs to the requested website just because the URL was requested.`,
+            },
+          ],
+        }],
+        undefined,
+        undefined,
+        "visual-evidence-gate"
+      );
+
+      if (/VISUAL EVIDENCE:\s*BLOCKED/i.test(String(evidenceCheck || ""))) {
+        const err = new Error("UXNest's audit environment was blocked by this website.");
+        err.code = "AUDIT_ENVIRONMENT_BLOCKED";
+        err.evidenceReason = "The visual browser captured an access-control or intermediary error page instead of the requested website.";
+        throw err;
+      }
+      if (!/VISUAL EVIDENCE:\s*VALID/i.test(String(evidenceCheck || ""))) {
+        const err = new Error("UXNest could not verify that the captured screenshot represents the requested website.");
+        err.code = "AUDIT_INSUFFICIENT_EVIDENCE";
+        err.evidenceReason = "The visual capture could not be verified as trustworthy website evidence.";
+        throw err;
+      }
+
       return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1);
     }
 
