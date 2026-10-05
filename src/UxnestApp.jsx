@@ -242,15 +242,16 @@ Rank from highest impact to lowest. Output exactly 10 numbered entries in this s
 1. Recommendation: <max 18 words>
 Expected User Benefit: <max 12 words>
 Expected Business Benefit: <max 12 words>
-(continue 2 through 10 in the same shape)
+(continue 2 through 10 in the same shape)`,
 
-# Final Scorecard
-Usability: XX/100
-Accessibility: XX/100
-Visual Design: XX/100
-Trust: XX/100
-Conversion: XX/100
-Overall UX Score: XX/100
+  `# Final Scorecard
+Use the findings and evidence from the preceding audit sections to assign numeric scores. Do not leave placeholders.
+Usability: <0-100 integer>
+Accessibility: <0-100 integer>
+Visual Design: <0-100 integer>
+Trust: <0-100 integer>
+Conversion: <0-100 integer>
+Overall UX Score: <0-100 integer>
 Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
 ];
 
