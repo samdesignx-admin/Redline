@@ -2105,12 +2105,18 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
       <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Findings</div>
       <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>{title}</h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+      {data.intro && <div style={{ marginBottom: "4mm", padding: "3mm 4mm", borderRadius: `${Math.min(T.radius || 14, 16)}px`, background: T.soft, border: `0.3mm solid ${T.border}`, color: T.textDim, fontSize: "8.5pt", lineHeight: 1.4 }}>{data.intro}</div>}
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
         {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No material cognitive-load issues identified from the available evidence.</p>}
         {issues.map((iss, i) => (
           <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
-              <div style={{ fontWeight: 800, fontSize: `${12 * (T.titleScale || 1)}pt`, lineHeight: 1.25, color: T.text }}>{iss.title}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: `${12 * (T.titleScale || 1)}pt`, lineHeight: 1.25, color: T.text }}>{iss.title}</div>
+                {iss.evidenceBasis && <div style={{ marginTop: "1.5mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.4pt", letterSpacing: .5, color: T.primary }}>
+                  EVIDENCE: {iss.evidenceBasis}
+                </div>}
+              </div>
               <SevChip severity={iss.severity} />
             </div>
             <div>
