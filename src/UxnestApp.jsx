@@ -255,6 +255,68 @@ Overall UX Score: <0-100 integer>
 Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
 ];
 
+// Visual URL audits use fewer, denser batches because every request carries the
+// rendered screenshot. This keeps the full report inside the five-minute run
+// window and prevents late sections (Top 10 / Scorecard) from being dropped.
+const VISUAL_REPORT_BATCHES = [
+  `# Executive Summary
+2-3 sentence summary of overall UX quality (max 60 words).
+Overall UX Score: <0-100 integer>
+Overall Assessment: <Excellent|Good|Average|Poor>
+Top Strengths:
+1. <max 12 words>
+2. <max 12 words>
+3. <max 12 words>
+Top Concerns:
+1. <max 12 words>
+2. <max 12 words>
+3. <max 12 words>
+
+# Usability Analysis
+Evaluate only visible Navigation, Discoverability, Learnability, User Control, and Error Prevention. Output exactly 3 evidence-supported issues using the required issue format.
+
+# Visual Design Analysis
+Evaluate only visible Layout, Alignment, Spacing, Typography, Color Usage, and Consistency. Output exactly 3 evidence-supported issues using the required issue format.`,
+  `# Accessibility Review
+Evaluate only visibly assessable Contrast, Readability, Touch Targets, and visible text/image labeling. Do not claim hidden keyboard, ARIA, DOM, or screen-reader behavior. Output exactly 3 evidence-supported issues using the required issue format.
+
+# SEO & Search Visibility Review
+A screenshot cannot verify technical SEO. Output 0 issues and one brief verification limitation.
+
+# Trust & Credibility Review
+Evaluate visible Professional appearance, Transparency, Security signals, and User confidence. Output exactly 2 evidence-supported issues using the required issue format.`,
+  `# Conversion Optimization Review
+Evaluate visible Calls to Action, Friction Points, User Motivation, Form Complexity, and Decision Making. Output exactly 2 evidence-supported issues using the required issue format.
+
+# Cognitive Load Assessment
+Evaluate visible Information Density, Mental Effort, Decision Fatigue, and Content Clarity. Output exactly 2 evidence-supported issues using the required issue format.
+
+# AI Recommendations
+Write 4-5 sentences, max 110 words, synthesizing only the visible evidence.
+
+# Quick Wins
+Exactly 5 dash-bulleted improvements, max 15 words each.
+
+# Strategic Improvements
+Exactly 4 dash-bulleted improvements, max 15 words each.`,
+  `# Top 10 UX Improvements
+Rank the most important visible improvements. Output exactly 10 numbered entries:
+1. Recommendation: <max 18 words>
+Expected User Benefit: <max 12 words>
+Expected Business Benefit: <max 12 words>
+Continue through 10. Every recommendation must be supported by visible evidence.
+
+# Final Scorecard
+Score the captured page from visible evidence only. Do not leave placeholders.
+Usability: <0-100 integer>
+Accessibility: <0-100 integer>
+Visual Design: <0-100 integer>
+Trust: <0-100 integer>
+Conversion: <0-100 integer>
+Overall UX Score: <0-100 integer>
+Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
+];
+
 function buildFilesBatchPrompt(batchSections) {
   return `You are a Senior UX Design Director with 20 years of experience reviewing digital products across banking, fintech, healthcare, SaaS, ecommerce, and mobile applications.
 
@@ -3217,9 +3279,9 @@ export default function UxnestApp() {
      web-search tool) can overwhelm the artifact fetch bridge on mobile and
      fail at the network level before reaching the API. Still ~2x faster than
      sequential. */
-  async function runBatchedAudit(buildPromptForBatch, sharedContent, tools, progressOffset = 0) {
+  async function runBatchedAudit(buildPromptForBatch, sharedContent, tools, progressOffset = 0, batchList = REPORT_BATCHES) {
     let completed = 0;
-    setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: REPORT_BATCHES.length + progressOffset }));
+    setRunProgress((p) => ({ round: 0, status: "", done: progressOffset, total: batchList.length + progressOffset }));
 
     // Keep only two report requests in flight. Three concurrent long-lived
     // requests reproduce a mobile/browser connection failure where later
@@ -3227,17 +3289,17 @@ export default function UxnestApp() {
     // while keeping the transport stable.
     const CONCURRENCY = 2;
     const STAGGER_MS = 250;
-    const results = new Array(REPORT_BATCHES.length);
+    const results = new Array(batchList.length);
     let nextIndex = 0;
 
     async function worker(workerId) {
       // Stagger worker start so requests never launch in the same instant
       if (workerId > 0) await waitInterruptible(workerId * STAGGER_MS);
-      while (nextIndex < REPORT_BATCHES.length) {
+      while (nextIndex < batchList.length) {
         const i = nextIndex++;
         const content = [
           ...sharedContent,
-          { type: "text", text: buildPromptForBatch(REPORT_BATCHES[i]) },
+          { type: "text", text: buildPromptForBatch(batchList[i]) },
         ];
         try {
           const text = await runWithContinuation(
@@ -3279,7 +3341,7 @@ export default function UxnestApp() {
     }
     if (failures.length > 0) {
       // Partial success: show what we have, but tell the user.
-      setError(`${failures.length} of ${REPORT_BATCHES.length} report sections failed to generate — the rest are shown below. Re-run to fill the gaps.`);
+      setError(`${failures.length} of ${batchList.length} report sections failed to generate — the rest are shown below. Re-run to fill the gaps.`);
     }
     return combined;
   }
@@ -3396,7 +3458,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         throw err;
       }
 
-      return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1);
+      return runBatchedAudit((batch) => buildVisualUrlBatchPrompt(cleanUrl, batch), visualContent, undefined, 1, VISUAL_REPORT_BATCHES);
     }
 
     // Screenshot capture is best-effort. If all visual providers are temporarily
