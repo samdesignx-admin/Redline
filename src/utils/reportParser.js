@@ -24,11 +24,16 @@ function parseIssues(block) {
   const issues = [];
   let m;
   while ((m = re.exec(content)) !== null) {
+    const whyRaw = m[3].trim();
+    const evidenceM = whyRaw.match(/^Evidence basis:\s*(VERIFIED HTML|VERIFIED INFRASTRUCTURE|VISUAL OBSERVATION|UNVERIFIED)\s*[—-]\s*/i);
+    const evidenceBasis = evidenceM ? evidenceM[1].toUpperCase() : null;
+    const why = evidenceM ? whyRaw.slice(evidenceM[0].length).trim() : whyRaw;
     issues.push({
       title: m[1].trim().replace(/^\*+|\*+$/g, ""),
       severity: severityFor(m[2]),
-      why: m[3].trim(),
+      why,
       recommendation: m[4].trim(),
+      evidenceBasis,
     });
   }
   const introEnd = content.search(/Issue:/);
