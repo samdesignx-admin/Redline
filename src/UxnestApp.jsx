@@ -226,7 +226,10 @@ Use the issue block format, exactly 2 issues.
 
 # Cognitive Load Assessment
 Evaluate Information Density, Mental Effort, Decision Fatigue, Content Clarity.
-Use the issue block format, exactly 2 issues.`,
+Use the issue block format, exactly 2 issues when material evidence exists.
+If the available evidence does not support two material cognitive-load problems, output exactly:
+No material cognitive-load issues identified from the available evidence.
+Do not leave the section empty.`,
 
   `# AI Recommendations
 Strategic narrative synthesizing the most important patterns into prioritized direction for a product/design leader (4-5 sentences, max 110 words).
@@ -289,7 +292,10 @@ Evaluate visible Professional appearance, Transparency, Security signals, and Us
 Evaluate visible Calls to Action, Friction Points, User Motivation, Form Complexity, and Decision Making. Output exactly 2 evidence-supported issues using the required issue format.
 
 # Cognitive Load Assessment
-Evaluate visible Information Density, Mental Effort, Decision Fatigue, and Content Clarity. Output exactly 2 evidence-supported issues using the required issue format.
+Evaluate visible Information Density, Mental Effort, Decision Fatigue, and Content Clarity. Output exactly 2 evidence-supported issues when material evidence exists.
+If the screenshot does not support two material cognitive-load problems, output exactly:
+No material cognitive-load issues identified from the available evidence.
+Never leave this section empty.
 
 # AI Recommendations
 Write 4-5 sentences, max 110 words, synthesizing only the visible evidence.
@@ -454,9 +460,15 @@ Return JSON only. Do not use markdown or commentary. Use this exact schema:
     "targetY": 0,
     "targetRadius": 0,
     "target": "the exact visible UI element being marked",
-    "explanation": "What is visible at this exact point and why it supports Finding 1, max 28 words"
+    "explanation": "What is visible at this exact point and why it supports Finding 1, max 28 words",
+    "status": "observed",
+    "confidence": "high"
   }
 ]
+
+status must be one of: observed, inferred, unverified, visual-only, blocked, insufficient.
+confidence must be one of: high, medium, low.
+Use "observed" + "high" only when the exact target is directly visible. Use "inferred" + "medium" only when the visible target supports the finding but requires a modest interpretation. Use "unverified" + "low" when the screenshot cannot establish the claim; normally omit such findings.
 
 Coordinates are percentages of the full screenshot. targetX/targetY identify the center of one exact UI element; targetRadius is a small ring radius as a percentage of screenshot width. Mark the button, label, price, nav item, input, card title, or other exact visible element described by the finding — never the surrounding image, entire card, section, page, or whitespace. Use targetRadius 1.5–3.5 (maximum 4.5). Keep all values between 0 and 100. If the finding has no unambiguous visible target, omit it. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
 
@@ -517,6 +529,14 @@ function parseVisualEvidence(raw, issues) {
 
     const explanation = String(item.explanation || "").trim().slice(0, 220);
     if (!explanation) return null;
+    const allowedStatus = new Set(["observed", "inferred", "unverified", "visual-only", "blocked", "insufficient"]);
+    const allowedConfidence = new Set(["high", "medium", "low"]);
+    const statusRaw = String(item.status || "observed").trim().toLowerCase();
+    const confidenceRaw = String(item.confidence || "").trim().toLowerCase();
+    const status = allowedStatus.has(statusRaw) ? statusRaw : "observed";
+    const confidence = allowedConfidence.has(confidenceRaw)
+      ? confidenceRaw
+      : status === "observed" || status === "visual-only" ? "high" : status === "inferred" ? "medium" : "low";
     return {
       id: `F-${findingIndex}-${index}`,
       findingIndex,
@@ -524,6 +544,8 @@ function parseVisualEvidence(raw, issues) {
       cx, cy, radius,
       target: String(item.target || "").trim().slice(0, 100),
       explanation,
+      status,
+      confidence,
     };
   }).filter(Boolean).slice(0, 6);
 }
@@ -1903,7 +1925,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
         <div class="fix"><div class="fixlabel">Recommendation</div>${esc(iss.recommendation)}</div>
       </div>`).join("");
     return `<section class="slide"><div class="kicker">Findings</div><h2>${esc(title)}</h2><div class="rule"></div>
-      <div class="cards">${cards || '<p class="empty">No structured findings for this area.</p>'}</div>${footer()}</section>`;
+      <div class="cards">${cards || '<p class="empty">No material cognitive-load issues identified from the available evidence.</p>'}</div>${footer()}</section>`;
   };
 
   const bars = [["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]]
@@ -2073,7 +2095,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
       <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>{title}</h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
-        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No structured findings for this area.</p>}
+        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No material cognitive-load issues identified from the available evidence.</p>}
         {issues.map((iss, i) => (
           <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
@@ -2099,6 +2121,65 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
   );
 }
 
+function EvidenceCrop({ screenshot, cx, cy, radius, alt, onReady }) {
+  const [crop, setCrop] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!screenshot || typeof Image === "undefined") {
+      setCrop(null);
+      return undefined;
+    }
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        if (!width || !height) return;
+
+        // radius is the evidence ring radius in screenshot percentage points.
+        // Expand around the target enough to preserve context while keeping
+        // the actual target legible.
+        const span = Math.max(8, Math.min(22, Number(radius || 2.5) * 4.2));
+        const cropW = Math.max(240, Math.round(width * span / 100));
+        const cropH = Math.max(180, Math.round(height * span / 100));
+        const centerX = width * Number(cx || 50) / 100;
+        const centerY = height * Number(cy || 50) / 100;
+        const sx = Math.max(0, Math.min(width - cropW, Math.round(centerX - cropW / 2)));
+        const sy = Math.max(0, Math.min(height - cropH, Math.round(centerY - cropH / 2)));
+        const canvas = document.createElement("canvas");
+        const outW = 1100;
+        const outH = Math.max(700, Math.round(outW * cropH / cropW));
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(image, sx, sy, cropW, cropH, 0, 0, outW, outH);
+        const result = canvas.toDataURL("image/jpeg", 0.9);
+        if (!cancelled) {
+          setCrop(result);
+          onReady?.();
+        }
+      } catch {
+        if (!cancelled) setCrop(null);
+      }
+    };
+    image.onerror = () => { if (!cancelled) setCrop(null); };
+    image.src = screenshot;
+    return () => { cancelled = true; };
+  }, [screenshot, cx, cy, radius, onReady]);
+
+  return (
+    <img
+      src={crop || screenshot}
+      alt={alt}
+      style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block", background: "#F4F5F3" }}
+    />
+  );
+}
+
 function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, issue, theme = REPORT_THEME_FALLBACK }) {
   const T = theme || REPORT_THEME_FALLBACK;
   const severity = issue?.severity || "Medium";
@@ -2119,20 +2200,12 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
 
       <div style={{ display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: "7mm", flex: 1, minHeight: 0 }}>
         <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow, minWidth: 0 }}>
-          <img
-            src={screenshot}
+          <EvidenceCrop
+            screenshot={screenshot}
+            cx={cx}
+            cy={cy}
+            radius={tight}
             alt={`Focused evidence for finding ${index + 1}`}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: `${cx}% ${cy}%`,
-              transform: `scale(${Math.max(1.8, Math.min(4.2, 6 / tight))})`,
-              transformOrigin: `${cx}% ${cy}%`,
-              display: "block",
-            }}
           />
           <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(8, tight * 3)}mm`, height: `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
@@ -2146,9 +2219,14 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
 
         <div style={{ display: "flex", flexDirection: "column", gap: "4mm", minHeight: 0 }}>
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
-              <SevChip severity={severity} />
+              <div style={{ display: "flex", gap: "2mm", alignItems: "center" }}>
+                <SevChip severity={severity} />
+                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.8pt", letterSpacing: .7, color: T.primary, background: T.soft, border: `0.3mm solid ${T.border}`, borderRadius: 99, padding: "1mm 2.5mm", whiteSpace: "nowrap" }}>
+                  {String(item.status || "observed").toUpperCase()} · {String(item.confidence || "high").toUpperCase()} CONFIDENCE
+                </span>
+              </div>
             </div>
             <div style={{ fontSize: "12.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.28, color: T.text, overflowWrap: "anywhere" }}>{item.issueTitle}</div>
           </div>
