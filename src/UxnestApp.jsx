@@ -266,6 +266,12 @@ For SEO, distinguish what UXNest directly verified in the page HTML from what wo
 
 ${SHARED_RULES}
 
+VISUAL-ONLY EVIDENCE OVERRIDES:
+- SEO & Search Visibility Review: output exactly 0 issues and a brief verification limitation. A screenshot cannot verify H1 markup, meta descriptions, canonical tags, robots directives, Open Graph metadata, structured data, sitemap, or other technical SEO implementation.
+- Accessibility Review: discuss only concerns directly visible in the screenshot. Do not claim missing ARIA, keyboard behavior, screen-reader behavior, JavaScript dependency, semantic HTML, or numeric contrast ratios unless the screenshot itself makes the issue unambiguous. If fewer than 3 visible accessibility issues can be supported, output only the supported issues.
+- Never treat absence from the screenshot as proof that an element does not exist elsewhere on the page or in the DOM.
+- Final Scorecard must reflect screenshot evidence only and must not use unverified technical SEO or accessibility implementation assumptions.
+
 Sections to write:
 
 ${batchSections}
