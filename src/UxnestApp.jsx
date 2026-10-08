@@ -203,7 +203,8 @@ Use the issue block format, exactly 3 issues.
 
 # Visual Design Analysis
 Evaluate Layout, Alignment, Spacing, Typography, Color Usage, Consistency.
-Use the issue block format, exactly 3 issues.`,
+Use the issue block format, exactly 3 issues when 3 material issues exist.
+If fewer than 3 material issues are supported, state that explicitly and do not invent a finding.`,
 
   `# Accessibility Review
 Evaluate Contrast, Readability, Touch Targets, Screen Reader Friendliness, Keyboard Accessibility.
@@ -214,6 +215,12 @@ For URL audits, evaluate technical and on-page SEO using only the SEO evidence i
 If target keywords are provided, assess natural alignment across title, H1, headings, URL/content evidence; never recommend keyword stuffing.
 Google Search Console ownership, indexing coverage, rankings, traffic, backlinks, and search performance cannot be verified from the public page alone; explicitly label these as unverified when relevant.
 Use the issue block format, exactly 3 issues only when technical/on-page SEO evidence is available.
+For every SEO issue, begin the Why it matters text with one of:
+Evidence basis: VERIFIED HTML —
+Evidence basis: VERIFIED INFRASTRUCTURE —
+Evidence basis: VISUAL OBSERVATION —
+Evidence basis: UNVERIFIED —
+Never convert an unverified condition into a factual claim.
 For uploaded screenshots/documents where technical SEO cannot be verified, output the SEO section with 0 issues and a brief verification limitation.
 
 # Trust & Credibility Review
@@ -279,7 +286,11 @@ Top Concerns:
 Evaluate only visible Navigation, Discoverability, Learnability, User Control, and Error Prevention. Output exactly 3 evidence-supported issues using the required issue format.
 
 # Visual Design Analysis
-Evaluate only visible Layout, Alignment, Spacing, Typography, Color Usage, and Consistency. Output exactly 3 evidence-supported issues using the required issue format.`,
+Evaluate only visible Layout, Alignment, Spacing, Typography, Color Usage, and Consistency.
+Output exactly 3 evidence-supported issues when 3 material issues exist.
+If fewer than 3 material visual-design issues are supported, output:
+No additional material visual-design issues identified from the available evidence.
+Do not invent a third issue.`,
   `# Accessibility Review
 Evaluate only visibly assessable Contrast, Readability, Touch Targets, and visible text/image labeling. Do not claim hidden keyboard, ARIA, DOM, or screen-reader behavior. Output exactly 3 evidence-supported issues using the required issue format.
 
@@ -2121,7 +2132,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
   );
 }
 
-function EvidenceCrop({ screenshot, cx, cy, radius, alt, onReady }) {
+function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
   const [crop, setCrop] = useState(null);
 
   useEffect(() => {
@@ -2136,20 +2147,16 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt, onReady }) {
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
         if (!width || !height) return;
-
-        // radius is the evidence ring radius in screenshot percentage points.
-        // Expand around the target enough to preserve context while keeping
-        // the actual target legible.
-        const span = Math.max(8, Math.min(22, Number(radius || 2.5) * 4.2));
-        const cropW = Math.max(240, Math.round(width * span / 100));
-        const cropH = Math.max(180, Math.round(height * span / 100));
+        const span = Math.max(10, Math.min(20, Number(radius || 2.5) * 4.8));
+        const cropW = Math.max(320, Math.round(width * span / 100));
+        const cropH = Math.max(220, Math.round(height * span / 100));
         const centerX = width * Number(cx || 50) / 100;
         const centerY = height * Number(cy || 50) / 100;
         const sx = Math.max(0, Math.min(width - cropW, Math.round(centerX - cropW / 2)));
         const sy = Math.max(0, Math.min(height - cropH, Math.round(centerY - cropH / 2)));
         const canvas = document.createElement("canvas");
-        const outW = 1100;
-        const outH = Math.max(700, Math.round(outW * cropH / cropW));
+        const outW = 1200;
+        const outH = Math.max(620, Math.round(outW * cropH / cropW));
         canvas.width = outW;
         canvas.height = outH;
         const ctx = canvas.getContext("2d");
@@ -2157,11 +2164,8 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt, onReady }) {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(image, sx, sy, cropW, cropH, 0, 0, outW, outH);
-        const result = canvas.toDataURL("image/jpeg", 0.9);
-        if (!cancelled) {
-          setCrop(result);
-          onReady?.();
-        }
+        const result = canvas.toDataURL("image/jpeg", 0.92);
+        if (!cancelled) setCrop(result);
       } catch {
         if (!cancelled) setCrop(null);
       }
@@ -2169,14 +2173,33 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt, onReady }) {
     image.onerror = () => { if (!cancelled) setCrop(null); };
     image.src = screenshot;
     return () => { cancelled = true; };
-  }, [screenshot, cx, cy, radius, onReady]);
+  }, [screenshot, cx, cy, radius]);
 
+  const marker = Math.max(1.5, Math.min(4.5, Number(radius) || 2.5));
   return (
-    <img
-      src={crop || screenshot}
-      alt={alt}
-      style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", display: "block", background: "#F4F5F3" }}
-    />
+    <div style={{ display: "grid", gridTemplateRows: "minmax(0, 7fr) minmax(0, 3fr)", height: "100%", width: "100%", background: "#F4F5F3" }}>
+      <div style={{ minHeight: 0, overflow: "hidden", background: "#F4F5F3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={crop || screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+      </div>
+      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderTop: "0.35mm solid #D9E2DF", background: "#E9EFEC" }}>
+        <img src={screenshot} alt="" aria-hidden="true" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+        <div style={{
+          position: "absolute",
+          left: `${Math.max(2, Math.min(98, Number(cx || 50)))}%`,
+          top: `${Math.max(2, Math.min(98, Number(cy || 50)))}%`,
+          width: `${Math.max(4, Math.min(18, marker * 3))}%`,
+          height: `${Math.max(8, Math.min(70, marker * 7))}%`,
+          transform: "translate(-50%, -50%)",
+          border: "0.55mm solid #D58A16",
+          borderRadius: "1.5mm",
+          boxShadow: "0 0 0 0.35mm rgba(255,255,255,.95)",
+          pointerEvents: "none",
+        }} />
+        <div style={{ position: "absolute", left: "4mm", bottom: "2.5mm", background: "rgba(15,22,20,.78)", color: "#fff", padding: "1.5mm 2.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.5pt", letterSpacing: .6 }}>
+          CONTEXT · FULL PAGE
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2213,7 +2236,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
             </span>
           </div>
           <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
-            ZOOMED EVIDENCE · PRECISE TARGET
+            TARGET DETAIL · CONTEXT BELOW
           </div>
         </div>
 
