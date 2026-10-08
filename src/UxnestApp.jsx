@@ -2227,7 +2227,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
       </h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.25fr 1fr", gap: "7mm", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.08fr 1.12fr", gap: "6mm", flex: 1, minHeight: 0 }}>
         <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow, minWidth: 0 }}>
           <EvidenceCrop
             screenshot={screenshot}
@@ -2246,7 +2246,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "4mm", minHeight: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "3mm", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
@@ -2257,30 +2257,33 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
                 </span>
               </div>
             </div>
-            <div style={{ fontSize: "12.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.28, color: T.text, overflowWrap: "anywhere" }}>{item.issueTitle}</div>
+            <div style={{ fontSize: "11.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.3, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{item.issueTitle}</div>
           </div>
 
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINTS</div>
-            <div style={{ fontSize: "9.5pt", lineHeight: 1.48, color: T.text, overflowWrap: "anywhere" }}>{item.explanation}</div>
+            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINT SHOWS</div>
+            <div style={{ fontSize: "8.8pt", lineHeight: 1.5, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{item.explanation}</div>
           </div>
 
           {issue?.why && (
             <div style={{ padding: "0 1mm" }}>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.muted, marginBottom: "2mm" }}>WHY IT MATTERS</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.48, color: T.textDim, overflowWrap: "anywhere" }}>{issue.why}</div>
+              <div style={{ fontSize: "8.5pt", lineHeight: 1.5, color: T.textDim, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{issue.why}</div>
             </div>
           )}
 
           {issue?.recommendation && (
             <div style={{ marginTop: "auto", padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>RECOMMENDED IMPROVEMENT</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.48, color: T.text, overflowWrap: "anywhere" }}>{issue.recommendation}</div>
+              <div style={{ fontSize: "8.5pt", lineHeight: 1.5, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{issue.recommendation}</div>
             </div>
           )}
         </div>
       </div>
 
+      <div style={{ position: "absolute", right: "10mm", bottom: "7mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.2pt", color: T.muted, letterSpacing: .35, background: T.background, padding: "1.2mm 2mm", borderRadius: "2mm", border: "0.25mm solid " + T.border }}>
+        Evidence confidence: <b>OBSERVED</b> = directly visible · <b>INFERRED</b> = supported interpretation · <b>UNVERIFIED</b> = not established
+      </div>
       <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
   );
