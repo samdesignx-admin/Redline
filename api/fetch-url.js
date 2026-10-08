@@ -108,7 +108,17 @@ function extractPage(html, url, rendered = false) {
   };
 }
 function meaningful(page) {
-  return !!page && (page.text.length >= 250 || page.headings.length >= 2 || page.description.length >= 40 || page.buttons.length >= 3);
+  if (!page) return false;
+  // A SPA shell can have a perfectly good meta description while exposing
+  // almost no rendered page content to the audit crawler. Do not treat SEO
+  // metadata alone as sufficient evidence. Require substantive visible text,
+  // multiple headings/CTAs, or at least one H1 plus supporting body text.
+  return (
+    page.text.length >= 250 ||
+    page.headings.length >= 2 ||
+    page.buttons.length >= 3 ||
+    (page.seo?.h1Count >= 1 && page.text.length >= 80)
+  );
 }
 
 function accessBlocked(page) {
