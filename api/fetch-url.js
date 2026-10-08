@@ -269,15 +269,23 @@ async function captureSmartScrape(target) {
       method: "POST",
       signal: controller.signal,
       headers: { "content-type": "application/json", "cache-control": "no-cache" },
-      body: JSON.stringify({ url, formats: ["screenshot", "rawText"] }),
+      body: JSON.stringify({ url, formats: ["html", "rawText", "links", "screenshot"], waitFor: 2500 }),
     });
     if (!response.ok) throw new Error(`Browserless Smart Scrape returned HTTP ${response.status}.`);
     const payload = await response.json();
+    if (payload?.ok === false) throw new Error(String(payload?.message || "Browserless Smart Scrape failed."));
     const b64 = typeof payload?.screenshot === "string" ? payload.screenshot.replace(/^data:image\/[^;]+;base64,/i, "") : "";
-    if (!b64) throw new Error("Browserless Smart Scrape returned no screenshot.");
-    const bytes = Buffer.from(b64, "base64");
-    if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless Smart Scrape screenshot was empty or too large.");
-    return `data:image/png;base64,${b64}`;
+    let screenshot = null;
+    if (b64) {
+      const bytes = Buffer.from(b64, "base64");
+      if (!bytes.length || bytes.length > 5_500_000) throw new Error("Browserless Smart Scrape screenshot was empty or too large.");
+      screenshot = `data:image/png;base64,${b64}`;
+    }
+    const html = typeof payload?.content === "string" ? payload.content.slice(0, MAX_HTML_BYTES) : "";
+    const rawText = typeof payload?.rawText === "string" ? payload.rawText.slice(0, 10000) : "";
+    const links = Array.isArray(payload?.links) ? payload.links.slice(0, 30) : [];
+    if (!screenshot && !html && !rawText) throw new Error("Browserless Smart Scrape returned no usable page evidence.");
+    return { screenshot, html, rawText, links, statusCode: Number(payload?.statusCode) || null, strategy: payload?.strategy || null };
   } finally { clearTimeout(timer); }
 }
 
@@ -342,14 +350,23 @@ async function captureVisualFallback(target) {
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status === "fulfilled" && result.value) {
-      return { screenshot: result.value, provider: providers[i][0], diagnostics };
+      const value = result.value;
+      if (typeof value === "string") {
+        return { screenshot: value, page: null, provider: providers[i][0], diagnostics };
+      }
+      return {
+        screenshot: value.screenshot || null,
+        page: value.html ? { html: value.html, rawText: value.rawText || "", links: value.links || [], statusCode: value.statusCode, strategy: value.strategy } : null,
+        provider: providers[i][0],
+        diagnostics,
+      };
     }
     if (result.status === "rejected") {
       const reason = result.reason;
       diagnostics.push(providers[i][0] + ": " + (reason instanceof Error ? reason.message : "capture failed"));
     }
   }
-  return { screenshot: null, provider: null, diagnostics };
+  return { screenshot: null, page: null, provider: null, diagnostics };
 }
 
 async function renderPage(target, wantScreenshot = true) {
@@ -520,6 +537,32 @@ export default async function handler(req, res) {
       if (visual.screenshot) {
         screenshot = visual.screenshot;
         rendering = visual.provider || rendering;
+      }
+      if (!homepage && visual.page?.html) {
+        try {
+          const renderedPage = extractPage(visual.page.html, normalized, true);
+          if (meaningful(renderedPage) && !accessBlocked(renderedPage)) {
+            homepage = renderedPage;
+            rendering = visual.provider ? `${visual.provider}-html` : "browser-rendered";
+          }
+        } catch {}
+      }
+      if (!homepage && visual.page?.rawText && meaningful({ text: visual.page.rawText, headings: [], buttons: [], seo: {} })) {
+        homepage = {
+          url: normalized,
+          title: "",
+          description: "",
+          headings: [],
+          buttons: [],
+          text: cleanText(visual.page.rawText).slice(0, 10000),
+          links: (visual.page.links || []).map((url) => ({ url, label: "" })),
+          rendered: true,
+          seo: {
+            titleLength: 0, descriptionLength: 0, canonical: "", robots: "", ogTitle: "", ogDescription: "",
+            ogImage: false, lang: "", viewport: false, h1Count: 0, h1s: [], structuredDataTypes: [], imageCount: 0, imagesMissingAlt: 0,
+          },
+        };
+        rendering = visual.provider ? `${visual.provider}-text` : "browser-rendered";
       }
       visualDiagnostics.push(...visual.diagnostics);
     }
