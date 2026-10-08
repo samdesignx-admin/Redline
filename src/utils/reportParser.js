@@ -95,12 +95,20 @@ function parseSummary(block) {
 }
 
 function parseTop10(block) {
-  const content = stripDashLines(block);
-  const re =
-    /(\d+)[\.\)]\s*(?:\*+)?Recommendation:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected User Benefit:?(?:\*+)?\s*([\s\S]+?)\n+(?:\*+)?Expected Business Benefit:?(?:\*+)?\s*([\s\S]+?)(?=\n+\d+[\.\)]|\s*$)/g;
+  const content = stripDashLines(block)
+    .replace(/\*{1,2}/g, "")
+    .replace(/[“”]/g, '"')
+    .trim();
+  if (!content) return [];
+
+  // Preferred format: numbered item + three labeled fields. Keep this strict
+  // enough to avoid accidentally consuming unrelated prose, but allow bold
+  // markers, optional colons, and whitespace variations from the model.
+  const labeledRe =
+    /(?:^|\n)\s*(\d+)[\.\)]\s*Recommendation\s*:?[ \t]*([\s\S]*?)\n\s*Expected User Benefit\s*:?[ \t]*([\s\S]*?)\n\s*Expected Business Benefit\s*:?[ \t]*([\s\S]*?)(?=\n\s*\d+[\.\)]\s*(?:Recommendation\s*:?)?|$)/gi;
   const items = [];
   let m;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = labeledRe.exec(content)) !== null) {
     items.push({
       rank: Number(m[1]),
       recommendation: m[2].trim(),
@@ -108,7 +116,37 @@ function parseTop10(block) {
       businessBenefit: m[4].trim(),
     });
   }
-  return items;
+  if (items.length) return items.sort((a, b) => a.rank - b.rank).slice(0, 10);
+
+  // Fallback: accept a numbered recommendation even when the model omitted
+  // one or both benefit labels. This prevents a valid Top 10 batch from
+  // rendering as an empty page.
+  const lines = content.split("\n").map((line) => line.trim()).filter(Boolean);
+  const fallback = [];
+  for (let i = 0; i < lines.length; i++) {
+    const start = lines[i].match(/^(\d+)[\.\)]\s*(.*)$/);
+    if (!start) continue;
+    const rank = Number(start[1]);
+    let recommendation = start[2].trim();
+    if (/^Recommendation\s*:/i.test(recommendation)) {
+      recommendation = recommendation.replace(/^Recommendation\s*:\s*/i, "").trim();
+    }
+    if (!recommendation) continue;
+
+    let userBenefit = "";
+    let businessBenefit = "";
+    let j = i + 1;
+    while (j < lines.length && !/^\d+[\.\)]\s*/.test(lines[j])) {
+      const ub = lines[j].match(/^Expected User Benefit\s*:\s*(.*)$/i);
+      const bb = lines[j].match(/^Expected Business Benefit\s*:\s*(.*)$/i);
+      if (ub) userBenefit = ub[1].trim();
+      else if (bb) businessBenefit = bb[1].trim();
+      j++;
+    }
+    fallback.push({ rank, recommendation, userBenefit, businessBenefit });
+    i = j - 1;
+  }
+  return fallback.sort((a, b) => a.rank - b.rank).slice(0, 10);
 }
 
 function parseScorecard(block) {
@@ -158,19 +196,49 @@ function parseReport(rawText) {
   const find = (key) =>
     sections[Object.keys(sections).find((k) => k.toLowerCase().includes(key))] || "";
 
+  const usability = parseIssues(find("usability analysis"));
+  const visual = parseIssues(find("visual design analysis"));
+  const accessibility = parseIssues(find("accessibility review"));
+  const seo = parseIssues(find("seo"));
+  const trust = parseIssues(find("trust"));
+  const conversion = parseIssues(find("conversion optimization"));
+  const cognitive = parseIssues(find("cognitive load"));
+  const parsedTop10 = parseTop10(find("top 10"));
+
+  // If the dedicated Top 10 batch is malformed or omitted, preserve the
+  // report's actual finding recommendations rather than showing an empty
+  // section. No new claims are invented here; each fallback item comes
+  // directly from an already-audited finding.
+  const fallbackTop10 = [
+    ...usability.issues, ...visual.issues, ...accessibility.issues,
+    ...seo.issues, ...trust.issues, ...conversion.issues, ...cognitive.issues,
+  ]
+    .filter((issue) => issue && issue.recommendation)
+    .sort((a, b) => {
+      const severityRank = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      return (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9);
+    })
+    .slice(0, 10)
+    .map((issue, index) => ({
+      rank: index + 1,
+      recommendation: issue.recommendation,
+      userBenefit: issue.why || "",
+      businessBenefit: "",
+    }));
+
   return normalizeReportModel({
     raw: clean,
     hasContent: matches.length > 0,
     summary: parseSummary(find("executive summary")),
-    usability: parseIssues(find("usability analysis")),
-    visual: parseIssues(find("visual design analysis")),
-    accessibility: parseIssues(find("accessibility review")),
-    seo: parseIssues(find("seo")),
-    trust: parseIssues(find("trust")),
-    conversion: parseIssues(find("conversion optimization")),
-    cognitive: parseIssues(find("cognitive load")),
+    usability,
+    visual,
+    accessibility,
+    seo,
+    trust,
+    conversion,
+    cognitive,
     aiRecommendations: stripDashLines(find("ai recommendations")),
-    top10: parseTop10(find("top 10")),
+    top10: parsedTop10.length ? parsedTop10 : fallbackTop10,
     quickWins: parseFlexibleList(find("quick wins")),
     strategic: parseFlexibleList(find("strategic improvements")),
     scorecard: parseScorecard(find("final scorecard")),
