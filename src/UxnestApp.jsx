@@ -1936,7 +1936,7 @@ function buildDeckHtml(report, source, auditedPages = []) {
         <div class="fix"><div class="fixlabel">Recommendation</div>${esc(iss.recommendation)}</div>
       </div>`).join("");
     return `<section class="slide"><div class="kicker">Findings</div><h2>${esc(title)}</h2><div class="rule"></div>
-      <div class="cards">${cards || '<p class="empty">No material cognitive-load issues identified from the available evidence.</p>'}</div>${footer()}</section>`;
+      <div class="cards">${cards || `<p class="empty">${title === "Cognitive Load" ? "No material cognitive-load issues identified from the available evidence." : `No ${title.toLowerCase()} findings were generated for this audit. Treat this section as incomplete, not as evidence that no issues exist.`}</p>`}</div>${footer()}</section>`;
   };
 
   const bars = [["Usability", scorecard.usability], ["Accessibility", scorecard.accessibility], ["Visual Design", scorecard.visual], ["Trust", scorecard.trust], ["Conversion", scorecard.conversion], ["Overall", scorecard.overall]]
@@ -2107,7 +2107,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
       {data.intro && <div style={{ marginBottom: "4mm", padding: "3mm 4mm", borderRadius: `${Math.min(T.radius || 14, 16)}px`, background: T.soft, border: `0.3mm solid ${T.border}`, color: T.textDim, fontSize: "8.5pt", lineHeight: 1.4 }}>{data.intro}</div>}
       <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
-        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>No material cognitive-load issues identified from the available evidence.</p>}
+        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>{title === "Cognitive Load" ? "No material cognitive-load issues identified from the available evidence." : `No ${title.toLowerCase()} findings were generated for this audit. Treat this section as incomplete, not as evidence that no issues exist.`}</p>}
         {issues.map((iss, i) => (
           <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
@@ -3665,7 +3665,23 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
-      const mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
+      let mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
+      if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
+        const candidates = [
+          ...(parsed.usability?.issues || []), ...(parsed.visual?.issues || []),
+          ...(parsed.accessibility?.issues || []), ...(parsed.trust?.issues || []),
+          ...(parsed.conversion?.issues || []), ...(parsed.cognitive?.issues || []),
+        ].filter((issue) => issue?.title);
+        mappedEvidence = candidates.slice(0, 6).map((issue, index) => ({
+          id: `fallback-evidence-${index + 1}`,
+          findingIndex: index + 1,
+          issueTitle: issue.title,
+          cx: 50, cy: 50, radius: 4.5,
+          target: "General page context; precise pinpoint unavailable",
+          explanation: "A screenshot is available, but the audit could not verify an exact target location. This image is contextual evidence only.",
+          status: "insufficient", confidence: "low",
+        }));
+      }
       setVisualEvidence(mappedEvidence);
       const themeImage = which === "url" ? auditScreenshotRef.current : (images[0]?.dataUrl || images[0]?.url || null);
       const adaptiveTheme = await extractBrandTheme(themeImage);
