@@ -11,7 +11,11 @@
     "test:evidence-gate": "node scripts/verify-evidence-gate.mjs",
     "test:traceability": "node scripts/verify-traceability.mjs",
     "test:report-model": "node scripts/verify-report-model.mjs",
-    "test:evidence-render": "node scripts/verify-evidence-render.mjs"
+    "test:evidence-render": "node scripts/verify-evidence-render.mjs",
+    "test:net": "node scripts/verify-net-guard.mjs && node scripts/verify-net-http.mjs",
+    "test:api": "node --experimental-test-module-mocks scripts/verify-api-flows.mjs",
+    "test:sql": "node scripts/verify-migrations.mjs",
+    "test": "npm run test:evidence && npm run test:evidence-gate && npm run test:traceability && npm run test:report-model && npm run test:evidence-render && npm run test:net && npm run test:api && npm run test:sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
@@ -23,6 +27,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.0"
   }
