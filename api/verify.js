@@ -11,28 +11,20 @@
 //   VERIFY_FROM     - verified sender, e.g. "UXNest <noreply@yourdomain.com>"
 //                     (during testing Resend allows onboarding@resend.dev)
 
-import crypto from "crypto";
-import { requireDb, hashPassword, cleanEmail, isEmail } from "./_lib.js";
+import {
+  requireDb, hashPassword, cleanEmail as normalizeEmail, isEmail, rateLimit, clientIp,
+  issueVerification, checkVerification, verificationConfigured, passwordFingerprint,
+  MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH,
+} from "./_lib.js";
 
 export const maxDuration = 20;
 
-const CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const sendHits = new Map();
-
-function sign(payload, secret) {
-  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
-}
-
-function rateLimited(key, max, windowMs) {
-  const now = Date.now();
-  const entry = sendHits.get(key) || { count: 0, start: now };
-  if (now - entry.start > windowMs) {
-    entry.count = 0;
-    entry.start = now;
-  }
-  entry.count++;
-  sendHits.set(key, entry);
-  return entry.count > max;
+// Reset codes are bound to the account's current password hash, so a code is
+// single-use: once the password changes it no longer verifies. Unknown emails
+// get a binding that no code can ever satisfy.
+async function resetBinding(db, email) {
+  const { data } = await db.from("accounts").select("id, password_hash").eq("email", email).maybeSingle();
+  return { account: data || null, binding: data ? passwordFingerprint(data.password_hash) : "no-account" };
 }
 
 export default async function handler(req, res) {
@@ -41,18 +33,21 @@ export default async function handler(req, res) {
     return;
   }
 
-  const secret = process.env.VERIFY_SECRET;
-  if (!secret) {
+  if (!verificationConfigured()) {
     res.status(500).json({ error: "Server misconfigured: VERIFY_SECRET is not set" });
     return;
   }
 
   const { action, email, code, token, purpose: requestedPurpose, newPassword } = req.body || {};
-  const cleanEmail = String(email || "").trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+  const cleanEmail = normalizeEmail(email);
+  if (!isEmail(cleanEmail)) {
     res.status(400).json({ error: "A valid email address is required" });
     return;
   }
+
+  const db = requireDb(res);
+  if (!db) return;
+  const ip = clientIp(req);
 
   // ---------- Send a code ----------
   if (action === "send") {
@@ -60,17 +55,27 @@ export default async function handler(req, res) {
       res.status(500).json({ error: "Server misconfigured: RESEND_API_KEY is not set" });
       return;
     }
-    const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
-    if (rateLimited(`ip:${ip}`, 10, 60 * 60 * 1000) || rateLimited(`em:${cleanEmail}`, 5, 60 * 60 * 1000)) {
+    if (!(await rateLimit(db, `send:ip:${ip}`, 10, 3600)) || !(await rateLimit(db, `send:email:${cleanEmail}`, 5, 3600))) {
       res.status(429).json({ error: "Too many verification requests. Please try again later." });
       return;
     }
 
     const purpose = requestedPurpose === "reset" ? "reset" : "signup";
-    const generated = String(crypto.randomInt(100000, 1000000)); // 6 digits
-    const expires = Date.now() + CODE_TTL_MS;
-    const issued = `${cleanEmail}.${purpose}.${generated}.${expires}`;
-    const signature = sign(issued, secret);
+    let binding = "";
+    let deliver = true;
+    if (purpose === "reset") {
+      const found = await resetBinding(db, cleanEmail);
+      binding = found.binding;
+      // Respond identically for unknown addresses, but don't email them: this
+      // avoids both account enumeration and using us to spam arbitrary inboxes.
+      deliver = !!found.account;
+    }
+    const { code: generated, expires, token: issuedToken } = issueVerification(cleanEmail, purpose, binding);
+
+    if (!deliver) {
+      res.status(200).json({ token: issuedToken, expires, purpose });
+      return;
+    }
 
     try {
       const r = await fetch("https://api.resend.com/emails", {
@@ -133,8 +138,8 @@ export default async function handler(req, res) {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="email-shell" style="width:100%;max-width:520px;">
           <tr>
             <td align="center" style="padding:0 0 18px;">
-              <img class="email-logo-light" src="https://uxnest.ai/uxnest-mark.svg" width="42" height="42" alt="UXNest" style="display:block;width:42px;height:42px;border:0;">
-              <img class="email-logo-dark" src="https://uxnest.ai/uxnest-mark.svg" width="42" height="42" alt="UXNest" style="display:none;width:42px;height:42px;border:0;">
+              <img class="email-logo-light" src="https://uxnest.ai/uxnest-icon.png" width="42" height="42" alt="UXNest" style="display:block;width:42px;height:42px;border:0;">
+              <img class="email-logo-dark" src="https://uxnest.ai/uxnest-icon.png" width="42" height="42" alt="UXNest" style="display:none;width:42px;height:42px;border:0;">
             </td>
           </tr>
           <tr>
@@ -169,29 +174,26 @@ export default async function handler(req, res) {
     }
 
     // The code itself is never returned — only the signed envelope.
-    res.status(200).json({ token: `${purpose}.${expires}.${signature}`, expires, purpose });
+    res.status(200).json({ token: issuedToken, expires, purpose });
     return;
+  }
+
+  // Both remaining actions accept guesses at a 6-digit code, so they share a
+  // tight attempt budget per address (and a looser one per IP).
+  if (action === "verify" || action === "reset") {
+    if (!(await rateLimit(db, `verify:email:${cleanEmail}`, 8, 600)) || !(await rateLimit(db, `verify:ip:${ip}`, 40, 600))) {
+      res.status(429).json({ error: "Too many attempts. Request a new code and try again later." });
+      return;
+    }
   }
 
   // ---------- Check a code ----------
   if (action === "verify") {
-    const parts = String(token || "").split(".");
-    if (parts.length !== 3) {
-      res.status(400).json({ error: "Invalid verification token" });
-      return;
-    }
-    const [purpose, expiresStr, signature] = parts;
-    const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
-      res.status(400).json({ error: "That code has expired. Request a new one." });
-      return;
-    }
-    const expected = sign(`${cleanEmail}.${purpose}.${String(code || "").trim()}.${expires}`, secret);
-    const a = Buffer.from(expected);
-    const b = Buffer.from(String(signature));
-    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-    if (!ok) {
-      res.status(400).json({ error: "That code isn't right. Check the email and try again." });
+    const purpose = String(token || "").split(".")[0] === "reset" ? "reset" : "signup";
+    const binding = purpose === "reset" ? (await resetBinding(db, cleanEmail)).binding : "";
+    const result = checkVerification({ email: cleanEmail, purpose, code, token, binding });
+    if (!result.ok) {
+      res.status(400).json({ error: result.error });
       return;
     }
     res.status(200).json({ verified: true, purpose });
@@ -200,46 +202,41 @@ export default async function handler(req, res) {
 
   // ---------- Reset an existing password ----------
   if (action === "reset") {
-    if (!isEmail(cleanEmail)) {
-      res.status(400).json({ error: "A valid email address is required" });
-      return;
-    }
-    if (!newPassword || String(newPassword).length < 6) {
+    const password = String(newPassword || "");
+    if (password.length < MIN_PASSWORD_LENGTH) {
       res.status(400).json({ error: "Password must be at least 6 characters." });
       return;
     }
-    const parts = String(token || "").split(".");
-    if (parts.length !== 3 || parts[0] !== "reset") {
-      res.status(400).json({ error: "Invalid password reset token" });
+    if (password.length > MAX_PASSWORD_LENGTH) {
+      res.status(400).json({ error: "Password is too long." });
       return;
     }
-    const [, expiresStr, signature] = parts;
-    const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
-      res.status(400).json({ error: "That reset code has expired. Request a new one." });
-      return;
+    try {
+      const { account, binding } = await resetBinding(db, cleanEmail);
+      const result = checkVerification({ email: cleanEmail, purpose: "reset", code, token, binding });
+      // Same message whether the code is wrong or the account doesn't exist.
+      if (!result.ok || !account) {
+        res.status(400).json({ error: result.ok ? "That code isn't right. Check the email and try again." : result.error });
+        return;
+      }
+      const { data: current } = await db.from("accounts").select("session_epoch").eq("id", account.id).maybeSingle();
+      const update = {
+        password_hash: await hashPassword(password),
+        last_login_at: new Date().toISOString(),
+        // Revoke every session issued before the reset.
+        session_epoch: ((current && current.session_epoch) || 0) + 1,
+      };
+      let { error } = await db.from("accounts").update(update).eq("id", account.id);
+      if (error && /session_epoch/i.test(error.message || "")) {
+        delete update.session_epoch; // migration not applied yet
+        ({ error } = await db.from("accounts").update(update).eq("id", account.id));
+      }
+      if (error) throw error;
+      res.status(200).json({ reset: true });
+    } catch (e) {
+      console.error("[UXNest reset]", e);
+      res.status(500).json({ error: "Password reset failed. Please try again." });
     }
-    const expected = sign(`${cleanEmail}.reset.${String(code || "").trim()}.${expires}`, secret);
-    const a = Buffer.from(expected);
-    const b = Buffer.from(String(signature));
-    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-    if (!ok) {
-      res.status(400).json({ error: "That code isn't right. Check the email and try again." });
-      return;
-    }
-    const db = requireDb(res);
-    if (!db) return;
-    const { data: account } = await db.from("accounts").select("id").eq("email", cleanEmail).maybeSingle();
-    if (!account) {
-      res.status(404).json({ error: "No account exists with that email address." });
-      return;
-    }
-    const { error } = await db.from("accounts").update({
-      password_hash: hashPassword(newPassword),
-      last_login_at: new Date().toISOString(),
-    }).eq("id", account.id);
-    if (error) throw error;
-    res.status(200).json({ reset: true });
     return;
   }
 

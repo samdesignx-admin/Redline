@@ -1,5 +1,5 @@
-import { lookup } from "node:dns/promises";
-import net from "node:net";
+import { assertPublicUrl, safeFetchText } from "./_net.js";
+import { requireDb, authenticate, rateLimit, clientIp } from "./_lib.js";
 
 export const maxDuration = 120;
 
@@ -11,29 +11,14 @@ const SCREENSHOT_TIMEOUT_MS = 15_000;
 const UNBLOCK_TIMEOUT_MS = 28_000;
 const BLOCKED_PATTERNS = /(access denied|you don't have permission|forbidden|request blocked|bot detection|unusual traffic|security check|temporarily blocked|reference #\d+.*errors?\.|errors?\.edgesuite\.net|akamai reference|error reference number)/i;
 
-function isPrivateIp(address) {
-  if (net.isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a >= 224;
-  }
-  const v = String(address).toLowerCase();
-  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
-}
-
-async function assertPublicUrl(value) {
-  const url = new URL(value);
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only public http and https URLs are supported.");
-  if (url.username || url.password) throw new Error("URLs with embedded credentials are not supported.");
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".localhost")) throw new Error("Local addresses are not supported.");
-  if (net.isIP(host)) {
-    if (isPrivateIp(host)) throw new Error("Private network addresses are not supported.");
-    return url;
-  }
-  const addresses = await lookup(host, { all: true });
-  if (!addresses.length || addresses.some((entry) => isPrivateIp(entry.address))) throw new Error("This address does not resolve to a public website.");
-  return url;
-}
+// Per-account limits for this (paid-provider-backed) endpoint.
+const FETCH_PER_ACCOUNT_HOUR = 20;
+const FETCH_PER_ACCOUNT_DAY = 60;
+const FETCH_PER_IP_HOUR = 40;
+// Total time allowed for the screenshot-provider cascade of one page.
+const VISUAL_BUDGET_MS = 45_000;
+const EXTRA_PAGE_VISUAL_BUDGET_MS = 25_000;
+const AUDIT_QUOTA = 1;
 
 function cleanText(value) {
   return String(value || "")
@@ -130,20 +115,21 @@ function isAccessBlockError(message) {
   return /http (401|403|429|451)\b|access denied|forbidden|permission|request blocked|bot|security check|edgesuite|akamai/i.test(String(message || ""));
 }
 
+// Every connection (including each redirect hop) is validated at connect time
+// by safeFetchText, so redirects to internal addresses and DNS rebinding are
+// both refused.
 async function directFetch(target) {
-  let current = (await assertPublicUrl(target)).toString();
-  for (let i = 0; i < 5; i++) {
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), DIRECT_TIMEOUT_MS);
-    let response;
-    try { response = await fetch(current, { redirect: "manual", signal: controller.signal, headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept: "text/html,application/xhtml+xml" } }); }
-    finally { clearTimeout(timer); }
-    if ([301,302,303,307,308].includes(response.status)) { const location = response.headers.get("location"); if (!location) throw new Error("The website redirected without a destination."); current = new URL(location, current).toString(); continue; }
-    if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}.`);
-    const type = response.headers.get("content-type") || "";
-    if (!/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("The URL did not return an HTML page.");
-    return extractPage((await response.text()).slice(0, MAX_HTML_BYTES), current, false);
-  }
-  throw new Error("Too many redirects.");
+  const start = (await assertPublicUrl(target)).toString();
+  const response = await safeFetchText(start, {
+    maxRedirects: 5,
+    timeoutMs: DIRECT_TIMEOUT_MS,
+    maxBytes: MAX_HTML_BYTES,
+    headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept: "text/html,application/xhtml+xml" },
+  });
+  if (!response.ok) throw new Error(`Direct retrieval returned HTTP ${response.status}.`);
+  const type = String(response.headers["content-type"] || "");
+  if (!/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("The URL did not return an HTML page.");
+  return extractPage(response.body.slice(0, MAX_HTML_BYTES), response.url, false);
 }
 
 async function readerFetch(target) {
@@ -327,6 +313,7 @@ async function captureMicrolink(target) {
     const payload = await response.json(); const meta = payload?.data || {};
     if (Number(meta.statusCode) >= 400 || BLOCKED_PATTERNS.test(`${meta.title || ""} ${meta.description || ""} ${meta.url || ""}`)) throw new Error("Microlink rendered an access-control page.");
     const assetUrl = meta?.screenshot?.url; if (!assetUrl || !/^https:\/\//i.test(assetUrl)) throw new Error("Microlink returned no screenshot asset.");
+    await assertPublicUrl(assetUrl);
     const imageResponse = await fetch(assetUrl, { signal: controller.signal }); if (!imageResponse.ok) throw new Error(`Microlink screenshot asset returned HTTP ${imageResponse.status}.`);
     const bytes = Buffer.from(await imageResponse.arrayBuffer()); if (!bytes.length || bytes.length > 4_500_000) throw new Error("Microlink screenshot was empty or too large.");
     const type = /image\/(png|webp|jpeg)/i.test(imageResponse.headers.get("content-type") || "") ? imageResponse.headers.get("content-type").split(";")[0] : "image/jpeg";
@@ -334,7 +321,7 @@ async function captureMicrolink(target) {
   } finally { clearTimeout(timer); }
 }
 
-async function captureVisualFallback(target) {
+async function captureVisualFallback(target, { budgetMs = VISUAL_BUDGET_MS } = {}) {
   const diagnostics = [];
   const providers = [
     ["browserless-browserql-stealth", () => captureBrowserQL(target)],
@@ -344,26 +331,26 @@ async function captureVisualFallback(target) {
     ["microlink", () => captureMicrolink(target)],
     ["google-render-fallback", () => capturePageSpeed(target)],
   ];
-  // Run independent providers concurrently. A sequential chain can consume
-  // the whole serverless execution window when one provider is slow/unavailable.
-  const results = await Promise.allSettled(providers.map(([, provider]) => provider()));
-  for (let i = 0; i < results.length; i++) {
-    const result = results[i];
-    if (result.status === "fulfilled" && result.value) {
-      const value = result.value;
-      if (typeof value === "string") {
-        return { screenshot: value, page: null, provider: providers[i][0], diagnostics };
-      }
+  // Providers are paid third-party services, so try them one at a time in
+  // priority order and stop at the first that returns evidence (the previous
+  // version fired all six on every request and paid for every one). The
+  // overall time budget keeps the cascade inside the function's time limit:
+  // once it is spent, the remaining providers are skipped.
+  const deadline = Date.now() + budgetMs;
+  for (const [name, provider] of providers) {
+    if (Date.now() >= deadline) { diagnostics.push(`${name}: skipped (time budget used)`); continue; }
+    try {
+      const value = await provider();
+      if (!value) continue;
+      if (typeof value === "string") return { screenshot: value, page: null, provider: name, diagnostics };
       return {
         screenshot: value.screenshot || null,
         page: value.html ? { html: value.html, rawText: value.rawText || "", links: value.links || [], statusCode: value.statusCode, strategy: value.strategy } : null,
-        provider: providers[i][0],
+        provider: name,
         diagnostics,
       };
-    }
-    if (result.status === "rejected") {
-      const reason = result.reason;
-      diagnostics.push(providers[i][0] + ": " + (reason instanceof Error ? reason.message : "capture failed"));
+    } catch (reason) {
+      diagnostics.push(name + ": " + (reason instanceof Error ? reason.message : "capture failed"));
     }
   }
   return { screenshot: null, page: null, provider: null, diagnostics };
@@ -413,19 +400,16 @@ async function fetchSeoInfrastructure(baseUrl) {
     robots: { status: null, exists: false, sitemapUrls: [], content: "" },
     sitemap: { status: null, exists: false, validXml: false, urls: [], location: null },
   };
+  // robots.txt can name any Sitemap URL, so these requests are as untrusted as
+  // the page itself and go through the same connect-time guard.
   async function fetchResource(url, accept) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(url, {
-        redirect: "follow",
-        signal: controller.signal,
-        headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept },
-      });
-      return { status: response.status, ok: response.ok, text: (await response.text()).slice(0, 500_000) };
-    } finally {
-      clearTimeout(timer);
-    }
+    const response = await safeFetchText(url, {
+      maxRedirects: 3,
+      timeoutMs: 8000,
+      maxBytes: 500_000,
+      headers: { "user-agent": "UXNest-AuditBot/1.0 (+https://uxnest.ai)", accept },
+    });
+    return { status: response.status, ok: response.ok, text: response.body };
   }
   try {
     const response = await fetchResource(new URL("/robots.txt", origin).toString(), "text/plain,*/*;q=0.8");
@@ -483,6 +467,22 @@ function dossier(pages, infrastructure = null, targetKeywords = []) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const rawUrl = String(req.body?.url || "").trim(); if (!rawUrl) return res.status(400).json({ error: "A URL is required." });
+  if (rawUrl.length > 2048) return res.status(400).json({ error: "That URL is too long." });
+
+  // This endpoint fans out to paid third-party services, so it is only for
+  // signed-in accounts that still have an audit available, and it is rate
+  // limited per account and per IP.
+  const db = requireDb(res); if (!db) return;
+  const sess = await authenticate(db, req.body?.token);
+  if (!sess) return res.status(401).json({ error: "Please log in again." });
+  if (!(await rateLimit(db, `fetchurl:ip:${clientIp(req)}`, FETCH_PER_IP_HOUR, 3600))) return res.status(429).json({ error: "Too many requests. Please try again later." });
+  if (!(await rateLimit(db, `fetchurl:acct:h:${sess.accountId}`, FETCH_PER_ACCOUNT_HOUR, 3600)) || !(await rateLimit(db, `fetchurl:acct:d:${sess.accountId}`, FETCH_PER_ACCOUNT_DAY, 86400))) {
+    return res.status(429).json({ error: "You've reached the hourly limit for website audits. Please try again later." });
+  }
+  const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
+  if (!acct || ((acct.audits_used || 0) >= AUDIT_QUOTA && (acct.paid_audits || 0) <= 0)) {
+    return res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
+  }
   try {
     const normalized = (await assertPublicUrl(rawUrl)).toString();
     const targetKeywords = String(req.body?.targetKeywords || "")
@@ -613,7 +613,7 @@ export default async function handler(req, res) {
       try { const page = await directFetch(link.url); if (meaningful(page) && !accessBlocked(page) && !pages.some((p) => p.url === page.url)) pages.push(page); } catch {}
     }
     const captured = await Promise.all(pages.slice(0, 3).map(async (page, index) => {
-      const image = index === 0 && screenshot ? screenshot : await captureVisualFallback(page.url).then((v) => v.screenshot).catch(() => null);
+      const image = index === 0 && screenshot ? screenshot : await captureVisualFallback(page.url, { budgetMs: EXTRA_PAGE_VISUAL_BUDGET_MS }).then((v) => v.screenshot).catch(() => null);
       return image ? { url: page.url, screenshot: image } : null;
     }));
     const screenshots = captured.filter(Boolean); const primaryScreenshot = screenshots[0]?.screenshot || screenshot || null;

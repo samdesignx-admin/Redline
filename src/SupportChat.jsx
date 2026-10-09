@@ -15,12 +15,13 @@ WHAT THE PRODUCT DOES
 ACCOUNTS AND LIMITS
 - A free instant preview runs on the landing page with no account: score plus top three issues.
 - Full audits require a free account. Signup asks for name, company, email and password; mobile number is optional. Email verification by 6-digit code is required.
-- Each account includes 5 full audits. Up to 5 screens or 5 pages per audit.
+- Each account includes 1 complete audit free. Up to 5 screens or 5 pages per audit.
+- Additional audits are $5 each during beta (normally $10), bought as 1-20 audit credits per purchase. There is no subscription. Payment is handled by Creem on a secure checkout page; after paying, the credits are added to the account.
 - Audits are saved to My Audits and sync across devices.
-- Everything is free during early access. There is no paid plan and no card required.
+- For billing problems (a payment that did not add credits, a refund, an invoice), tell the user you will pass it to the team.
 
 KNOWN LIMITATIONS — be honest about these
-- There is no password reset yet. If someone is locked out, escalate to support.
+- Forgotten passwords can be reset: on the log-in form choose "Forgot password?", then enter the 6-digit code emailed to the account address and pick a new password. If that does not work for someone, escalate to support.
 - Some sites block automated access (large retailers especially); if a URL audit fails that way, suggest uploading screenshots instead.
 - Audits take roughly 1-3 minutes; the preview takes about 15 seconds.
 - Reports cannot yet be shared by public link — users can download the PDF and send that.
@@ -127,6 +128,7 @@ export default function SupportChat({ C, user, report, source }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          purpose: "support",
           max_tokens: 900,
           messages: [
             { role: "user", content: [{ type: "text", text: `${SUPPORT_CONTEXT}\n\n${buildReportBrief(report, source)}\n\nConversation so far:\n${next.map((m) => `${m.role === "user" ? "User" : "Agent"}: ${m.content}`).join("\n")}\n\nReply as the agent to the last user message.` }] },

@@ -1,34 +1,42 @@
-// Vercel serverless function: proxies audit requests to the Anthropic API.
+// Vercel serverless function: proxies requests to the Anthropic API.
 //
 // IMPORTANT: model calls routinely take 20-60s. Vercel's default function
 // timeout is 10s, which kills the request mid-flight and surfaces to the
 // browser as a network failure. maxDuration raises this (60s is the Hobby
 // timeout ceiling on Vercel's free tier).
 // The API key lives in the ANTHROPIC_API_KEY environment variable — never in
-// frontend code. Includes a simple in-memory per-IP rate limit as a first
-// line of defense (note: in-memory state resets per serverless instance, so
-// for real protection add Upstash Redis or similar before going public).
+// frontend code.
+//
+// This endpoint spends real money, so it is locked down:
+//   * the model is fixed server-side (clients cannot pick a pricier one)
+//   * only one tool is allowed, with a bounded number of uses
+//   * three kinds of caller, each with its own rules:
+//       purpose "preview"  landing-page preview: no account, tiny, tight IP limit
+//       purpose "support"  support chat: no account, tiny, IP limit
+//       purpose "audit"    full audit (the default): needs a signed-in account
+//                          that still has an audit available, plus per-account limits
+//   * limits live in the database, so they hold across serverless instances
+
+import crypto from "crypto";
+import { requireDb, authenticate, rateLimit, clientIp } from "./_lib.js";
 
 export const maxDuration = 60;
 
-const WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour
-// The landing-page preview is unauthenticated, so it gets a tighter cap of
-// its own: single short call, low token ceiling, few per hour per IP.
-const MAX_PREVIEWS_PER_WINDOW = 30; // covers landing previews and support chat turns
-const previewHits = new Map();
-const hits = new Map();
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const AUDIT_QUOTA = 1;
 
-function rateLimited(ip) {
-  const now = Date.now();
-  const entry = hits.get(ip) || { count: 0, start: now };
-  if (now - entry.start > WINDOW_MS) {
-    entry.count = 0;
-    entry.start = now;
-  }
-  entry.count++;
-  hits.set(ip, entry);
-  return entry.count > MAX_REQUESTS_PER_WINDOW;
+const PROFILES = {
+  preview: { maxTokens: 700, maxBytes: 30_000, maxMessages: 2, tools: true, ipPerHour: 10 },
+  support: { maxTokens: 900, maxBytes: 60_000, maxMessages: 2, tools: false, ipPerHour: 40 },
+  audit: { maxTokens: 4096, maxBytes: 4_400_000, maxMessages: 40, tools: true, ipPerHour: 120, acctPerHour: 120, acctPerDay: 300 },
+};
+
+// The only tool the product uses is web search; never forward client-defined
+// tool definitions (server tools are billed per use).
+function safeTools(tools) {
+  if (!Array.isArray(tools)) return undefined;
+  const allowed = tools.some((t) => t && t.type === "web_search_20250305" && t.name === "web_search");
+  return allowed ? [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }] : undefined;
 }
 
 export default async function handler(req, res) {
@@ -41,50 +49,71 @@ export default async function handler(req, res) {
     return;
   }
 
-  const ip =
-    (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
-    req.socket?.remoteAddress ||
-    "unknown";
-  if (rateLimited(ip)) {
-    res.status(429).json({ error: "Rate limit exceeded. Try again later." });
+  const input = req.body || {};
+  const purpose = input.purpose === "preview" || input.purpose === "support" ? input.purpose : "audit";
+  const profile = PROFILES[purpose];
+
+  const { max_tokens, messages, tools } = input;
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > profile.maxMessages) {
+    res.status(400).json({ error: "Bad request: invalid messages" });
+    return;
+  }
+  let size = 0;
+  try { size = JSON.stringify(messages).length; } catch { size = Infinity; }
+  if (size > profile.maxBytes) {
+    res.status(413).json({ error: "Request is too large." });
     return;
   }
 
-  // Preview and support-chat calls are small and unauthenticated. Identify
-  // them by their low token ceiling and rate limit them separately.
-  const isPreview = Number((req.body || {}).max_tokens) <= 700;
-  if (isPreview) {
-    const now = Date.now();
-    const entry = previewHits.get(ip) || { count: 0, start: now };
-    if (now - entry.start > WINDOW_MS) { entry.count = 0; entry.start = now; }
-    entry.count++;
-    previewHits.set(ip, entry);
-    if (entry.count > MAX_PREVIEWS_PER_WINDOW) {
-      res.status(429).json({ error: "You've used the free previews for now. Sign up for full audits, or try again later." });
+  const db = requireDb(res);
+  if (!db) return;
+  const ip = clientIp(req);
+
+  if (!(await rateLimit(db, `ai:${purpose}:ip:${ip}`, profile.ipPerHour, 3600))) {
+    res.status(429).json({
+      error: purpose === "preview"
+        ? "You've used the free previews for now. Sign up for full audits, or try again later."
+        : "Rate limit exceeded. Try again later.",
+    });
+    return;
+  }
+
+  if (purpose === "audit") {
+    const sess = await authenticate(db, input.token);
+    if (!sess) {
+      res.status(401).json({ error: "Please log in again." });
+      return;
+    }
+    if (!(await rateLimit(db, `ai:audit:acct:h:${sess.accountId}`, profile.acctPerHour, 3600)) ||
+        !(await rateLimit(db, `ai:audit:acct:d:${sess.accountId}`, profile.acctPerDay, 86400))) {
+      res.status(429).json({ error: "You've reached the audit limit for now. Please try again later." });
+      return;
+    }
+    const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
+    if (!acct || ((acct.audits_used || 0) >= AUDIT_QUOTA && (acct.paid_audits || 0) <= 0)) {
+      res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
       return;
     }
   }
 
   // Allowlist of fields forwarded to the API — prevents clients from
   // injecting arbitrary parameters through the proxy.
-  const { model, max_tokens, messages, tools } = req.body || {};
-  if (!Array.isArray(messages) || messages.length === 0) {
-    res.status(400).json({ error: "Bad request: messages required" });
-    return;
-  }
   const body = {
-    model: typeof model === "string" ? model : "claude-sonnet-5-5",
-    max_tokens: Math.min(Number(max_tokens) || 1000, 4096),
+    model: MODEL,
+    max_tokens: Math.min(Number(max_tokens) || 1000, profile.maxTokens),
     messages,
   };
-  if (Array.isArray(tools)) body.tools = tools;
+  const allowedTools = profile.tools ? safeTools(tools) : undefined;
+  if (allowedTools) body.tools = allowedTools;
 
   // Keep a safety margin below Vercel's 60s function ceiling. Without an
   // explicit timeout, Vercel can terminate the function at the platform
   // boundary and the browser only sees a generic network/fetch failure.
   const REQUEST_TIMEOUT_MS = 45_000;
-  const requestId = req.headers["x-uxnest-request-id"] || crypto.randomUUID();
-  const stage = String(req.headers["x-uxnest-stage"] || "audit").slice(0, 80);
+  // The request id is echoed in a response header, so only accept a safe shape.
+  const suppliedId = String(req.headers["x-uxnest-request-id"] || "");
+  const requestId = /^[A-Za-z0-9_-]{8,64}$/.test(suppliedId) ? suppliedId : crypto.randomUUID();
+  const stage = String(req.headers["x-uxnest-stage"] || "audit").replace(/[^\w.-]/g, "").slice(0, 80) || "audit";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const startedAt = Date.now();
@@ -119,6 +148,7 @@ export default async function handler(req, res) {
         event: "audit_upstream_error",
         requestId,
         stage,
+        purpose,
         status: upstream.status,
         durationMs: Date.now() - startedAt,
       }));
@@ -131,6 +161,7 @@ export default async function handler(req, res) {
       event: timedOut ? "audit_upstream_timeout" : "audit_upstream_network_error",
       requestId,
       stage,
+      purpose,
       durationMs: Date.now() - startedAt,
       message: err instanceof Error ? err.message : String(err),
     }));

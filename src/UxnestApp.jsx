@@ -694,6 +694,7 @@ async function kvSet(key, value) {
 /* Server API (Postgres via serverless functions)                     */
 /* ---------------------------------------------------------------- */
 const SESSION_KEY = "uxnest:token";
+const PENDING_CHECKOUT_KEY = "uxnest:pending-checkout";
 
 function getToken() {
   try { return window.localStorage.getItem(SESSION_KEY) || ""; } catch { return ""; }
@@ -722,7 +723,7 @@ const api = {
   listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
   quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
   checkoutAudit: (quantity) => apiPost("/api/payment", { action: "checkout", token: getToken(), quantity }),
-  verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
+  verifyAuditPayment: (checkoutId) => apiPost("/api/payment", { action: "verify", token: getToken(), checkoutId }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
 };
@@ -760,7 +761,7 @@ function DisclaimerModal({ onAccept, onCancel }) {
         <button
           disabled={!checked}
           onClick={onAccept}
-          style={{ flex: 1, padding: "11px 0", borderRadius: 9, border: "none", background: checked ? C.now : C.surfaceAlt, color: checked ? C.dark : C.muted, borderRadius: 999, fontWeight: 600, fontSize: 13.5, cursor: checked ? "pointer" : "not-allowed" }}
+          style={{ flex: 1, padding: "11px 0", border: "none", background: checked ? C.now : C.surfaceAlt, color: checked ? C.dark : C.muted, borderRadius: 999, fontWeight: 600, fontSize: 13.5, cursor: checked ? "pointer" : "not-allowed" }}
         >
           Agree & continue
         </button>
@@ -969,7 +970,10 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         name: name.trim(),
         company: company.trim(),
         mobile: mobile.trim(),
-        emailVerified: true,
+        // The server re-checks the emailed code itself; it never trusts a
+        // client-side "verified" flag.
+        code: code.trim(),
+        verifyToken,
       });
       setToken(token);
       onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
@@ -1375,7 +1379,7 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
         disabled={images.length === 0}
         onClick={onRun}
         style={{
-          width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 10, border: "none",
+          width: "100%", marginTop: 14, padding: "14px 0", border: "none",
           background: images.length ? C.now : C.surfaceAlt, color: images.length ? C.dark : C.muted, borderRadius: 999,
           fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 15, cursor: images.length ? "pointer" : "not-allowed",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -1425,7 +1429,7 @@ function UrlScreen({ url, setUrl, targetKeywords, setTargetKeywords, onRun, erro
           disabled={!url.trim()}
           onClick={onRun}
           style={{
-            width: "100%", marginTop: 16, padding: "14px 0", borderRadius: 10, border: "none",
+            width: "100%", marginTop: 16, padding: "14px 0", border: "none",
             background: url.trim() ? C.now : C.surfaceAlt, color: url.trim() ? C.dark : C.muted, borderRadius: 999,
             fontWeight: 600, fontSize: 15, cursor: url.trim() ? "pointer" : "not-allowed",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -2521,7 +2525,7 @@ function DeckViewer({ report, source, auditedPages = [], auditScreenshot = null,
       <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: theme.coverStart, backdropFilter: "blur(4px)" }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 1, color: "#E8F0ED" }}>BRAND-ADAPTIVE · {theme.personality || "corporate"} · {theme.confidence === "image" ? "STYLE EXTRACTED FROM AUDITED SCREEN" : "UXNEST FALLBACK"} · PINCH OR ROTATE TO ZOOM</span>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={onTryPrint} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             Print / Save PDF
           </button>
           <button onClick={onClose} style={{ background: "transparent", color: "#D8CBB6", border: "1px solid #6B5D4D", borderRadius: 8, padding: "7px 12px", fontSize: 12, cursor: "pointer" }}>
@@ -2649,6 +2653,7 @@ function InstantPreview({ onSignup, isLoggedIn }) {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          purpose: "preview",
           max_tokens: 700,
           messages: [{ role: "user", content: [{ type: "text", text: buildPreviewPrompt(v) }] }],
           tools: [{ type: "web_search_20250305", name: "web_search" }],
@@ -2871,7 +2876,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       <div style={{ ...sect, position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "52px 18px", marginBottom: 0 }}>
         <h2 style={{ ...h2, color: "#FFFFFF" }}>Ready to Transform Your UX?</h2>
         <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Your first audit is free; additional audits are $5 during beta (normally $10). Buy 1–20 audit credits per purchase.</p>
-        <button onClick={onStart} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+        <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
           Start Your Free Audit <ArrowRight size={15} />
         </button>
       </div>
@@ -2900,7 +2905,7 @@ function DashboardPage({ onStartAudit }) {
           {["Screenshot analysis", "PDF upload support", "URL exploration", "Slide-deck reports"].map((t) => (
             <div key={t} style={{ display: "flex", gap: 6, fontSize: 12, color: C.text, marginBottom: 4 }}><Check size={13} color={C.low} style={{ marginTop: 2, flexShrink: 0 }} />{t}</div>
           ))}
-          <button onClick={onStartAudit} style={{ width: "100%", marginTop: 10, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          <button onClick={onStartAudit} style={{ width: "100%", marginTop: 10, background: C.now, color: C.dark, border: "none", borderRadius: 9, padding: "10px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             Start Audit <ArrowRight size={14} />
           </button>
         </div>
@@ -2968,7 +2973,7 @@ function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
         <HistoryIcon size={26} color={C.muted} style={{ marginBottom: 12 }} />
         <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 20, color: C.text, margin: "0 0 8px" }}>My Audits</h2>
         <p style={{ color: C.textDim, fontSize: 13.5, margin: "0 0 18px" }}>Log in to see your saved audits.</p>
-        <button onClick={() => onRequireLogin("save")} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Log in</button>
+        <button onClick={() => onRequireLogin("save")} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 9, padding: "11px 20px", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>Log in</button>
       </div>
     );
   }
@@ -2993,7 +2998,7 @@ function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
           <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 26, color: C.text, margin: "0 0 2px" }}>My Audits</h1>
           <div style={{ fontSize: 12.5, color: C.muted }}>{entries.length} audit{entries.length === 1 ? "" : "s"} saved</div>
         </div>
-        <button onClick={onNewAudit} style={{ display: "flex", alignItems: "center", gap: 6, background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+        <button onClick={onNewAudit} style={{ display: "flex", alignItems: "center", gap: 6, background: C.now, color: C.dark, border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
           <Plus size={14} /> New Audit
         </button>
       </div>
@@ -3121,13 +3126,22 @@ export default function UxnestApp() {
   // Verify a successful Creem Checkout return as a fallback.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("payment"), checkoutId = params.get("checkout_id");
-    if (status !== "success" || !checkoutId || !getToken()) return;
+    const status = params.get("payment");
+    if (status !== "success" || !getToken()) return;
+    // Creem adds checkout_id to the return URL; fall back to the id we stored
+    // when the checkout was created, in case the param is missing or mangled.
+    const fromUrl = params.getAll("checkout_id").find((v) => /^ch_[A-Za-z0-9_-]+$/.test(v));
+    let stored = "";
+    try { stored = window.sessionStorage.getItem(PENDING_CHECKOUT_KEY) || ""; } catch { /* ignore */ }
+    const checkoutId = fromUrl || (/^ch_[A-Za-z0-9_-]+$/.test(stored) ? stored : "");
+    if (!checkoutId) return;
     (async () => {
       try {
         const result = await api.verifyAuditPayment(checkoutId);
         if (typeof result.paid === "number") setPaidAudits(result.paid);
+        if (typeof result.used === "number") setAuditsUsed(result.used);
         setError(null);
+        try { window.sessionStorage.removeItem(PENDING_CHECKOUT_KEY); } catch { /* ignore */ }
       } catch (e) {
         setError(e.message || "Payment was received, but we couldn't confirm the audit credit yet. Please refresh.");
       } finally {
@@ -3144,6 +3158,7 @@ export default function UxnestApp() {
     try {
       const result = await api.checkoutAudit(count);
       if (!result.checkout_url || !result.checkout_id) throw new Error("Creem did not return a checkout URL.");
+      try { window.sessionStorage.setItem(PENDING_CHECKOUT_KEY, result.checkout_id); } catch { /* ignore */ }
       window.location.href = result.checkout_url;
     } catch (e) {
       setError(e.message || "Couldn't start payment. Please try again.");
@@ -3289,7 +3304,8 @@ export default function UxnestApp() {
 
   async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
-    const body = { model: "claude-sonnet-5-5", max_tokens: 1000, messages };
+    // The server fixes the model and checks the account; the token proves who is asking.
+    const body = { purpose: "audit", token: getToken(), max_tokens: 1000, messages };
     if (tools) body.tools = tools;
 
     const requestId = typeof crypto !== "undefined" && crypto.randomUUID
@@ -3492,9 +3508,12 @@ export default function UxnestApp() {
     const response = await fetch("/api/fetch-url", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: cleanUrl, navLimit, targetKeywords }),
+      body: JSON.stringify({ url: cleanUrl, navLimit, targetKeywords, token: getToken() }),
     });
     const evidence = await response.json().catch(() => ({}));
+    if (response.status === 401) throw new Error("Your session has expired. Please log in again.");
+    if (response.status === 402) throw new Error(QUOTA_MESSAGE);
+    if (response.status === 429) throw new Error(evidence.error || "Too many requests. Please try again later.");
 
     const visualOnly = response.ok && evidence.evidenceStatus === "VISUAL_ONLY";
     if (!response.ok || (evidence.evidenceStatus !== "SUFFICIENT" && !visualOnly)) {
