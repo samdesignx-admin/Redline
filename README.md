@@ -6,124 +6,108 @@ load) styled as feedback from a senior UX design director — including a
 12-slide presentation deck.
 
 ## Stack
-- React + Vite frontend (single-component app: `src/UxnestApp.jsx`)
-- Vercel serverless proxy (`api/audit.js`) that holds the Anthropic API key
-
-## Deploy (Vercel)
-1. Import this repo at vercel.com
-2. In Project Settings → Environment Variables, add `ANTHROPIC_API_KEY`
-   (create one at console.anthropic.com)
-3. Deploy. Vercel auto-detects Vite and the `api/` function.
+- React + Vite frontend (`src/UxnestApp.jsx`)
+- Vercel serverless functions in `api/` (accounts, audits, AI proxy, payments)
+- Supabase (Postgres) for accounts, audits, purchases and rate limits
+- Anthropic API for the audit model, Creem for payments, Resend for email
 
 ## Local development
 ```bash
 npm install
 npm run dev            # frontend only
-# For the proxy locally: npx vercel dev (with ANTHROPIC_API_KEY in .env)
+npx vercel dev         # frontend + api/ functions (needs the env vars below)
+npm test               # all checks (see "Testing")
 ```
 
-## Known prototype limitations (backend work pending)
-- Auth/history use in-browser fallbacks — replace with Supabase or similar
-- Email report opens a mailto: draft — real delivery needs Resend/SendGrid
-- Legal pages are placeholder templates — get lawyer review before charging
-- Rate limiting in `api/audit.js` is in-memory per instance — add Redis
-  (e.g. Upstash) before public launch
+## Deploying
+1. **Database** — in the Supabase SQL editor run `db/schema.sql`, then every file
+   in `supabase/migrations/` in filename order. Always apply new migrations
+   **before** deploying the code that uses them.
+2. Import the repo at vercel.com and set the environment variables below.
+3. Deploy. Vercel auto-detects Vite and the `api/` functions.
+4. In Creem, point the webhook at `https://<your-domain>/api/creem-webhook`.
 
-## Version
-v1.0 benchmark — see git tags.
+### Environment variables
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | yes | Audit model. Create at console.anthropic.com |
+| `ANTHROPIC_MODEL` | no | Overrides the model (default `claude-sonnet-5-5`). The model is fixed server-side; clients cannot choose it |
+| `SUPABASE_URL` | yes | Project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | **Server-only.** Never expose to the browser |
+| `SESSION_SECRET` | yes | Long random string that signs session tokens. Use a different value from `VERIFY_SECRET` |
+| `VERIFY_SECRET` | yes | Long random string that signs emailed codes |
+| `RESEND_API_KEY` | yes | Verification, password-reset and support email |
+| `VERIFY_FROM` | recommended | Verified sender, e.g. `UXNest <noreply@yourdomain.com>` (`onboarding@resend.dev` only delivers to your own Resend account) |
+| `SUPPORT_EMAIL` | yes | Where support tickets are sent |
+| `ADMIN_KEY` | yes | Key typed at `/#admin` |
+| `GOOGLE_CLIENT_ID` | for Google sign-in | Server checks every Google token was issued for this client. If unset, Google sign-in is refused |
+| `VITE_GOOGLE_CLIENT_ID` | for Google sign-in | Same client id, for the browser button |
+| `CREEM_API_KEY`, `CREEM_PRODUCT_ID`, `CREEM_WEBHOOK_SECRET` | for payments | Creem checkout + webhook. `CREEM_API_BASE_URL` optionally overrides the API host |
+| `SITE_URL` | recommended | Canonical origin for checkout return URLs (default `https://uxnest.ai`) |
+| `BROWSERLESS_TOKEN` | optional | Rendering/screenshot providers for URL audits. Also `BROWSERLESS_BASE_URL`, `BROWSERLESS_PROXY`, `BROWSERLESS_PROXY_COUNTRY` |
+| `SCREENSHOTONE_API_KEY`, `MICROLINK_API_KEY` | optional | Additional screenshot providers |
 
-## Google sign-in (optional)
+## How it works
 
-Set `VITE_GOOGLE_CLIENT_ID` in Vercel's Environment Variables to a Google OAuth
-Web client ID (console.cloud.google.com → APIs & Services → Credentials), with
-your deployed origin listed under "Authorised JavaScript origins". The Google
-button only renders when this variable is present; otherwise the email/password
-form is used on its own.
+### Accounts and sessions
+- Passwords are hashed server-side with scrypt; the browser never sees a hash.
+- **Signup requires the emailed 6-digit code, and the server checks it itself.**
+  A client-side "verified" flag is never trusted.
+- Sessions are HMAC-signed tokens valid for 30 days. Each carries the account's
+  `session_epoch`, so a password reset revokes every earlier session.
+- Password-reset codes are single-use (bound to the current password hash).
+  Unknown addresses get an identical response and no email.
+- Google sign-in verifies the ID token with Google **and** its audience/issuer.
 
-Note: the ID token returned by Google is currently decoded client-side for the
-user's email and name. It is NOT signature-verified, which requires a server.
-Treat Google sign-in as sign-in convenience, not identity proof, until the
-backend verifies tokens.
+### Rate limiting
+Limits (login, code guessing, signup, previews, AI calls, URL fetches, admin key
+guesses) are stored in Postgres via `hit_rate_limit()`, so they hold across
+serverless instances. If the database or function is unavailable the code falls
+back to per-instance memory, which is much weaker — apply the migration.
 
-## Email verification
+### Audit quota and payments
+- Each account includes one free audit; more cost $5 each during beta (1–20 per purchase).
+- `create_audit_with_credit()` spends a credit and saves the audit in one
+  transaction, so concurrent requests cannot double-spend.
+- The AI proxy (`/api/audit`) and URL fetcher (`/api/fetch-url`) require a
+  signed-in account that still has an audit available, plus per-account hourly
+  and daily caps. Known limitation: the credit is consumed when the finished
+  audit is *saved*, so a user can run a limited number of AI calls without
+  saving; the caps bound that cost.
+- The landing-page preview and the support chat are unauthenticated but tiny,
+  tool-restricted and limited per IP.
+- Credits are granted by the Creem webhook and, as a fallback, when the customer
+  returns from checkout. Both go through `grant_creem_audit_purchase()`, which
+  is idempotent per checkout. The webhook verifies the signature over the
+  **raw** request body.
 
-Signup sends a 6-digit code before the account is created. Requires these
-environment variables in Vercel:
+### URL audits and SSRF
+`api/_net.js` fetches user-supplied URLs. Every connection — including each
+redirect hop and every robots.txt/sitemap request — is validated at connect
+time against loopback, private, link-local, CGNAT, multicast and IPv6 special
+ranges (including IPv4-mapped IPv6), which also defeats DNS rebinding.
 
-| Variable | Where from |
-|---|---|
-| `RESEND_API_KEY` | resend.com → API Keys (free tier: 3,000 emails/month) |
-| `VERIFY_SECRET` | any long random string you generate |
-| `VERIFY_FROM` | a verified sender, e.g. `UXNest <noreply@yourdomain.com>`. Resend allows `onboarding@resend.dev` for testing, which only delivers to your own account email. |
+### Database privileges
+Functions are `security definer` and callable only by `service_role`. Postgres
+grants EXECUTE to PUBLIC by default and Supabase exposes `public` functions over
+its REST API, so the migration explicitly revokes access from `anon` and
+`authenticated`. Keep doing that for any function you add.
 
-Codes are never stored server-side: `api/verify.js` issues an HMAC-signed token
-carrying the expiry, and validates the submitted code by recomputing the
-signature (10 minute TTL, rate limited per IP and per address).
-
-Known limit: the `emailVerified` flag is stored in browser storage along with
-the rest of the account, so a determined user could set it locally. The code
-exchange genuinely proves control of the address at signup; making that
-tamper-proof requires the account database.
-
-## Usage limits
-
-Each account includes `AUDIT_QUOTA` (currently 1) completed audit, with up to
-5 screens or 5 crawled pages per audit. The counter lives on the account record
-in browser storage and increments only when a report is successfully returned.
-
-Known limit: because accounts are browser-side, the quota is not tamper-proof —
-clearing site data or registering another address resets it. Enforcing it
-properly requires the account database, where the counter would live server-side
-and be checked before the audit runs.
+## Testing
+`npm test` runs, in order: the evidence/report model checks, the SSRF guard and
+HTTP client, end-to-end API flows against an in-memory fake Supabase
+(`--experimental-test-module-mocks`, Node 22+), and the SQL migrations against a
+real Postgres engine (PGlite). CI runs the same on every push and PR.
 
 ## Admin analytics
-
-Visit `/#admin` for the analytics dashboard: signups, audits over time, score
-distribution, average score per dimension, findings by severity, most-audited
-domains, companies and an account table with CSV export.
-
-Set `VITE_ADMIN_KEY` in Vercel to require a key before the page opens. If the
-variable is unset the page is open to anyone who knows the URL, so set it
-before sharing the site.
-
-Scope: because accounts live in browser storage, the dashboard reports activity
-on the device it is opened from, not across all users. It becomes a true
-dashboard once accounts move to a database — only the loader function at the
-top of `src/AdminPage.jsx` needs to change. For site-wide traffic today, enable
-Vercel Analytics in the project dashboard.
+Visit `/#admin` and enter `ADMIN_KEY`. Shows signups, audits over time, score
+distribution, findings by severity, most-audited domains and an account table
+with CSV export. Reads up to the latest 1000 accounts and audits; the response
+includes true totals so truncation is visible. Guesses are rate limited.
 
 ## Vercel Analytics
-
 `@vercel/analytics` is wired into `src/main.jsx`. Enable it in the Vercel
-dashboard (project → Analytics → Enable) for real site-wide traffic data:
-page views, visitors, referrers and top pages. This is independent of the
-`/#admin` dashboard, which reads browser-local account data.
-
-## Database setup (Supabase)
-
-1. Create a free project at supabase.com
-2. SQL Editor → paste `db/schema.sql` → Run
-3. Project Settings → API → copy the URL and the **service_role** key
-4. Add these environment variables in Vercel, then redeploy:
-
-| Variable | Value |
-|---|---|
-| `SUPABASE_URL` | your project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | service_role key — server-only, never expose to the browser |
-| `SESSION_SECRET` | any long random string |
-| `ADMIN_KEY` | the key you'll type at `/#admin` |
-| `AUDIT_QUOTA` | optional, defaults to 1 |
-| `GOOGLE_CLIENT_ID` | optional; if set, Google ID tokens are checked against it |
-
-### What moved server-side
-- **Accounts** — passwords hashed with scrypt on the server; the browser never
-  handles a hash. Sessions are HMAC-signed tokens with a 30-day expiry.
-- **Audits** — stored in Postgres, so history follows users across devices.
-- **Quota** — enforced in `api/audits.js` before an audit is saved, so clearing
-  browser storage no longer resets it.
-- **Google sign-in** — the ID token is now verified with Google server-side
-  rather than decoded in the browser.
-- **Admin** — `/#admin` reads aggregate data for every account and audit.
+dashboard (project → Analytics) for site-wide traffic data.
 
 ## Naming convention
 
@@ -148,17 +132,11 @@ A chat widget appears on every page. It answers from a fixed knowledge base in
 `src/SupportChat.jsx` — deliberately explicit so the agent can't invent
 features, prices or policies. When it can't resolve something it emits an
 `[ESCALATE]` token, the widget asks for the user's email, and `api/support.js`
-emails the full conversation to you via Resend.
-
-Requires `SUPPORT_EMAIL` in Vercel (where tickets are sent). Replies go to the
-user directly because the email sets reply-to to their address.
+emails the full conversation to you via Resend. Requires `SUPPORT_EMAIL`.
 
 When a report is open it is passed to the assistant as a compact brief
-(`buildReportBrief`) containing scores, every finding with its severity and
-recommendation, and the ranked improvements — so users can ask "what should I
-fix first?" or "why is my accessibility score low?" and get answers grounded in
-their own audit rather than generic advice.
+(`buildReportBrief`) so users can ask "what should I fix first?" and get
+answers grounded in their own audit.
 
-Keep the knowledge base in `SUPPORT_CONTEXT` current — it lists known
-limitations (no password reset, no shareable links) so the agent is honest
-about them rather than guessing.
+**Keep `SUPPORT_CONTEXT` in sync with pricing, limits and policies** — it is
+what the agent tells customers about billing.
