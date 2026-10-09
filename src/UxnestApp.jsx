@@ -2022,7 +2022,7 @@ ${issueSlide("Cognitive Load", cognitive)}
 
 <section class="slide">
   <div class="kicker">Priorities</div><h2>Top 10 Improvements</h2><div class="rule"></div>
-  <div class="grid10">${top10.slice(0, 10).map((t) => `<div class="t10"><span class="rank">${String(t.rank).padStart(2, "0")}</span><span>${esc(t.recommendation)}</span></div>`).join("")}</div>
+  <div class="grid10">${top10.slice(0, 10).map((t) => `<div class="t10"><span class="rank">${String(t.rank).padStart(2, "0")}</span><span>${esc(t.recommendation)}</span></div>`).join("")}</div>${top10.length < 10 ? `<p class="empty">Only ${top10.length} recommendations were validated. The Top 10 section is incomplete.</p>` : ""}
   ${footer()}
 </section>
 
@@ -2227,7 +2227,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
       </h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.08fr 1.12fr", gap: "6mm", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5mm", flex: 1, minHeight: 0 }}>
         <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow, minWidth: 0 }}>
           <EvidenceCrop
             screenshot={screenshot}
@@ -2246,7 +2246,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "3mm", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2.5mm", minHeight: 0, minWidth: 0, overflow: "visible", overflowWrap: "break-word", wordBreak: "normal" }}>
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
@@ -2257,18 +2257,18 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
                 </span>
               </div>
             </div>
-            <div style={{ fontSize: "11.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.3, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{item.issueTitle}</div>
+            <div style={{ fontSize: "10.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.3, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.issueTitle}</div>
           </div>
 
           <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINT SHOWS</div>
-            <div style={{ fontSize: "8.8pt", lineHeight: 1.5, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{item.explanation}</div>
+            <div style={{ fontSize: "8pt", lineHeight: 1.42, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.explanation}</div>
           </div>
 
           {issue?.why && (
             <div style={{ padding: "0 1mm" }}>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.muted, marginBottom: "2mm" }}>WHY IT MATTERS</div>
-              <div style={{ fontSize: "8.5pt", lineHeight: 1.5, color: T.textDim, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{issue.why}</div>
+              <div style={{ fontSize: "7.8pt", lineHeight: 1.42, color: T.textDim, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{issue.why}</div>
             </div>
           )}
 
