@@ -2242,7 +2242,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
           />
           <div style={{ position: "absolute", left: "50%", top: "50%", width: item.status === "insufficient" ? 0 : `${Math.max(8, tight * 3)}mm`, height: item.status === "insufficient" ? 0 : `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: item.status === "insufficient" ? "none" : `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
-              {index + 1}
+              {item.status !== "insufficient" ? index + 1 : null}
             </span>
           </div>
           <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
