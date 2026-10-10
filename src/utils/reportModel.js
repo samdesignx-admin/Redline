@@ -47,8 +47,13 @@ function normalizeReportModel(report) {
   const scorecard = normalized.scorecard || {};
   normalized.dimensions = DIMENSION_KEYS.map((key) => ({ ...DIMENSION_META[key], score: scorecard[key] ?? null }));
   normalized.findings = FINDING_SECTION_ORDER.flatMap((section) => normalized[section]?.issues || []);
-  const dimensionScores = normalized.dimensions.map((dimension) => Number(dimension.score)).filter((score) => Number.isFinite(score));
-  normalized.overallScore = dimensionScores.length ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length) : null;
+  const dimensionScores = normalized.dimensions.map((dimension) => dimension.score);
+  const allDimensionsScored = dimensionScores.length === DIMENSION_KEYS.length &&
+    dimensionScores.every((score) => score !== null && score !== undefined && Number.isFinite(Number(score)));
+  // Never convert missing scores to zero or publish a misleading partial overall.
+  normalized.overallScore = allDimensionsScored
+    ? Math.round(dimensionScores.reduce((sum, score) => sum + Number(score), 0) / DIMENSION_KEYS.length)
+    : null;
   normalized.summary = { ...(normalized.summary || {}), score: normalized.overallScore };
   normalized.scorecard = { ...scorecard, overall: normalized.overallScore };
 
