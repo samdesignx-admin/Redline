@@ -2231,7 +2231,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
       </h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5mm", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "0.88fr 1.12fr", gap: "4mm", flex: 1, minHeight: 0 }}>
         <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow, minWidth: 0 }}>
           <EvidenceCrop
             screenshot={screenshot}
@@ -2251,7 +2251,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "2.5mm", minHeight: 0, minWidth: 0, overflow: "visible", overflowWrap: "break-word", wordBreak: "normal" }}>
-          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
+          <div style={{ padding: "3mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm", flexWrap: "wrap" }}>
               <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
               <div style={{ display: "flex", gap: "2mm", alignItems: "center" }}>
@@ -2264,7 +2264,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
             <div style={{ fontSize: "10.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.3, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.issueTitle}</div>
           </div>
 
-          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
+          <div style={{ padding: "3mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
             <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINT SHOWS</div>
             <div style={{ fontSize: "8pt", lineHeight: 1.42, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.explanation}</div>
           </div>
@@ -2277,7 +2277,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
           )}
 
           {issue?.recommendation && (
-            <div style={{ marginTop: "auto", padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
+            <div style={{ marginTop: "auto", padding: "3mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
               <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>RECOMMENDED IMPROVEMENT</div>
               <div style={{ fontSize: "8.5pt", lineHeight: 1.5, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{issue.recommendation}</div>
             </div>
@@ -3689,7 +3689,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
         const candidates = [
           ...(parsed.usability?.issues || []), ...(parsed.visual?.issues || []),
-          ...(parsed.accessibility?.issues || []), ...(parsed.trust?.issues || []),
+          ...(parsed.accessibility?.issues || []), ...(parsed.seo?.issues || []), ...(parsed.trust?.issues || []),
           ...(parsed.conversion?.issues || []), ...(parsed.cognitive?.issues || []),
         ].filter((issue) => issue?.title);
         mappedEvidence = candidates.slice(0, 6).map((issue, index) => ({
