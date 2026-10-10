@@ -494,7 +494,7 @@ function parseVisualEvidence(raw, issues) {
   // Claude may wrap JSON in a code fence or add a short sentence around it.
   // Extract the first balanced JSON array instead of relying on a greedy regex.
   const candidates = [];
-  const fenced = text.match(/\`\`\`(?:json)?\\s*([\\s\\S]*?)\`\`\`/i);
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) candidates.push(fenced[1].trim());
   const first = text.indexOf("[");
   const last = text.lastIndexOf("]");
