@@ -34,7 +34,7 @@ function parseIssues(block) {
     const field = (name, nextNames) => {
       const next = nextNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
       const boundary = nextNames.length ? "(?=\\n\\s*(?:[-*]\\s*)?(?:" + next + ")\\s*:|$)" : "$";
-      const re = new RegExp("(?:^|\\n)\\s*(?:[-*]\\s*)?" + name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") + "\\s*:\\s*([\\s\\S]*?)" + boundary, "i");
+      const re = new RegExp("(?:^|\\n)\\s*(?:[-*]\\s*)?" + name + "\\s*:\\s*([\\s\\S]*?)" + boundary, "i");
       return re.exec(chunk)?.[1]?.trim() || "";
     };
     const title = chunk.split("\n")[0].trim();
