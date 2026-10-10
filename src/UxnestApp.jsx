@@ -2240,13 +2240,13 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
             radius={tight}
             alt={`Focused evidence for finding ${index + 1}`}
           />
-          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(8, tight * 3)}mm`, height: `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
+          <div style={{ position: "absolute", left: "50%", top: "50%", width: item.status === "insufficient" ? 0 : `${Math.max(8, tight * 3)}mm`, height: item.status === "insufficient" ? 0 : `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: item.status === "insufficient" ? "none" : `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
             <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
               {index + 1}
             </span>
           </div>
           <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
-            TARGET DETAIL · CONTEXT BELOW
+            {item.status === "insufficient" ? "CONTEXT ONLY · NO VERIFIED PIN" : "TARGET DETAIL · CONTEXT BELOW"}
           </div>
         </div>
 
@@ -2460,9 +2460,10 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           ...(cognitive?.issues || []),
         ];
         return visualEvidence.map((item, index) => {
-          const issue = item.findingIndex
-            ? allIssues[item.findingIndex - 1]
-            : allIssues.find((candidate) => candidate.title === item.issueTitle);
+          // Prefer stable title matching; positional indices can diverge when
+          // sections are omitted or parser recovery changes the issue list.
+          const issue = allIssues.find((candidate) => candidate.title === item.issueTitle)
+            || (item.findingIndex ? allIssues[item.findingIndex - 1] : null);
           return (
             <EvidenceFocusSlide
               key={item.id || index}
