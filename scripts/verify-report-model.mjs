@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { buildEvidenceIndex, normalizeReportModel } from "../src/utils/reportModel.js";
+import { parseIssues } from "../src/utils/reportParser.js";
 
 const report = normalizeReportModel({
   usability: {
@@ -31,4 +32,34 @@ assert.equal(report.scoringEvidence.length, 2);
 
 const index = buildEvidenceIndex(report.evidence, report.findings);
 assert.deepEqual(index.valid.map((item) => item.findingId), ["F-001", "F-002"]);
-console.log("Canonical report-model evidence checks passed.");
+
+const incomplete = normalizeReportModel({
+  usability: { issues: [] }, visual: { issues: [] }, accessibility: { issues: [] },
+  trust: { issues: [] }, conversion: { issues: [] },
+  scorecard: { usability: 70, accessibility: 80, visual: null, trust: 72, conversion: 68 },
+});
+assert.equal(incomplete.dimensions[2].score, null);
+assert.equal(incomplete.overallScore, null);
+assert.equal(incomplete.summary.score, null);
+
+const driftedIssues = parseIssues(`Context intro must remain visible.
+Issue: First finding
+Severity: High
+Why it matters: First rationale.
+Recommendation: First fix.
+
+Issue: Second finding
+Severity: Medium
+Why it matters: Second rationale with a colon: still text.
+Recommendation: Second fix.
+
+Issue: Third finding
+Severity: Low
+Why it matters: Third rationale.
+Recommendation: Third fix.`);
+assert.match(driftedIssues.intro, /Context intro/);
+assert.equal(driftedIssues.issues.length, 3);
+assert.equal(driftedIssues.issues[1].title, "Second finding");
+assert.equal(driftedIssues.issues[2].recommendation, "Third fix");
+
+console.log("Canonical report-model, null-score, and tolerant-parser checks passed.");
