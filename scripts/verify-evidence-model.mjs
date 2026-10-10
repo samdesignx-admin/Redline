@@ -32,16 +32,22 @@ assert.equal(normalizeEvidenceTarget({
 }), null);
 
 const collection = normalizeEvidenceCollection([
-  { findingIndex: 1, targetX: 10, targetY: 20, target: "A", explanation: "A" },
-  { findingIndex: 1, targetX: 10, targetY: 20, target: "A", explanation: "A" },
+  { findingIndex: 1, targetX: 10, targetY: 20, target: "Primary navigation menu", explanation: "Navigation is visible at the marked point." },
+  { findingIndex: 1, targetX: 10, targetY: 20, target: "Primary navigation menu", explanation: "Navigation is visible at the marked point." },
   ...Array.from({ length: MAX_ITEMS + 2 }, (_, i) => ({
     findingIndex: i + 2,
     targetX: i + 1,
     targetY: i + 2,
-    target: `Target ${i + 2}`,
+    target: `Pricing table column ${i + 2}`,
     explanation: `Evidence ${i + 2}`,
   })),
 ]);
+
+// Vague or too-short targets must be rejected: the renderer can only place
+// evidence on a specific, visible element.
+assert.equal(normalizeEvidenceTarget({ findingIndex: 1, targetX: 10, targetY: 20, target: "A", explanation: "A" }), null);
+assert.equal(normalizeEvidenceTarget({ findingIndex: 1, targetX: 10, targetY: 20, target: "navigation", explanation: "Too vague." }), null);
+assert.equal(normalizeEvidenceTarget({ findingIndex: 1, targetX: 10, targetY: 20, target: "Target 2", explanation: "Two words only." }), null);
 
 assert.equal(collection.length, MAX_ITEMS);
 assert.equal(collection[0].findingId, "F-001");

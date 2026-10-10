@@ -1,5 +1,5 @@
 // Creem one-time checkout for UXNest audit credits.
-import { requireDb, readSession } from "./_lib.js";
+import { requireDb, authenticate, rateLimit } from "./_lib.js";
 export const maxDuration = 20;
 const BETA_PRICE_CENTS = 500;
 const MAX_PURCHASE_QUANTITY = 20;
@@ -56,25 +56,40 @@ async function validateCompletedCheckout(checkout, accountId) {
   if (product?.price != null && Number(product.price) !== BETA_PRICE_CENTS) { const e = new Error("Unexpected payment price."); e.status = 400; throw e; }
   return { checkoutId: checkout.id, quantity, amountCents: product?.price ? Number(product.price) * quantity : BETA_PRICE_CENTS * quantity, currency: product?.currency || "USD" };
 }
+// Only send customers back to our own site. The Origin header is client
+// controlled, so it is honoured only when it matches a known deployment.
+function trustedOrigin(req) {
+  const site = String(process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
+  const allowed = new Set([site]);
+  if (process.env.VERCEL_URL) allowed.add(`https://${process.env.VERCEL_URL}`);
+  if (process.env.VERCEL_BRANCH_URL) allowed.add(`https://${process.env.VERCEL_BRANCH_URL}`);
+  const origin = String(req.headers.origin || "").replace(/\/$/, "");
+  if (allowed.has(origin) || /^http:\/\/localhost:\d{2,5}$/.test(origin)) return origin;
+  return site;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   const db = requireDb(res); if (!db) return;
-  const sess = readSession((req.body || {}).token);
+  const sess = await authenticate(db, (req.body || {}).token);
   if (!sess) { res.status(401).json({ error: "Please log in again." }); return; }
   try {
     if (req.body.action === "checkout") {
       const quantity = parseQuantity(req.body.quantity);
       if (!quantity) { res.status(400).json({ error: "Choose between 1 and 20 audits." }); return; }
+      if (!(await rateLimit(db, `checkout:${sess.accountId}`, 10, 3600))) { res.status(429).json({ error: "Too many checkout attempts. Please try again later." }); return; }
       const { productId } = creemConfig();
       const { data: account } = await db.from("accounts").select("email").eq("id", sess.accountId).maybeSingle();
       if (!account?.email) throw new Error("Your account email could not be loaded.");
-      const origin = String(req.headers.origin || process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
+      const origin = trustedOrigin(req);
       const requestId = `uxnest_${sess.accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const checkout = await creemRequest("/v1/checkouts", {
         method: "POST",
         body: JSON.stringify({
           product_id: productId, request_id: requestId, units: quantity, customer: { email: account.email },
-          success_url: `${origin}/?payment=success&checkout_id={checkout_id}`,
+          // Creem appends checkout_id to the success URL itself. The client also
+          // remembers the id it was given, so a missing/odd param can't strand a payment.
+          success_url: `${origin}/?payment=success`,
           metadata: { account_id: sess.accountId, quantity: String(quantity), source: "uxnest_web" },
         }),
       });
@@ -83,8 +98,9 @@ export default async function handler(req, res) {
       return;
     }
     if (req.body.action === "verify") {
-      const checkoutId = String(req.body.checkoutId || "").trim();
+      const checkoutId = String(req.body.checkoutId || req.body.sessionId || "").trim();
       if (!checkoutId || !/^ch_[A-Za-z0-9_-]+$/.test(checkoutId)) { res.status(400).json({ error: "Invalid payment checkout." }); return; }
+      if (!(await rateLimit(db, `verify-payment:${sess.accountId}`, 30, 3600))) { res.status(429).json({ error: "Too many attempts. Please try again later." }); return; }
       const checkout = await getCheckout(checkoutId);
       const verified = await validateCompletedCheckout(checkout, sess.accountId);
       await grantPurchase(db, { accountId: sess.accountId, checkoutId: verified.checkoutId, quantity: verified.quantity, amountCents: verified.amountCents, currency: verified.currency });

@@ -40,11 +40,15 @@ create index if not exists accounts_created_idx on accounts(created_at desc);
 alter table accounts enable row level security;
 alter table audits enable row level security;
 
--- One-time audit purchases. Each Stripe session can contain 1–20 audit credits.
+-- One-time audit purchases. Each checkout can contain 1–20 audit credits.
+-- stripe_session_id is a legacy column and must stay nullable: purchases are
+-- now made through Creem and identified by creem_checkout_id (see
+-- supabase/migrations). After this file, run every file in supabase/migrations
+-- in order.
 create table if not exists audit_purchases (
   id                 uuid primary key default gen_random_uuid(),
   account_id         uuid not null references accounts(id) on delete cascade,
-  stripe_session_id  text unique not null,
+  stripe_session_id  text unique,
   amount_cents       integer not null default 500,
   quantity           integer not null default 1,
   created_at         timestamptz not null default now()

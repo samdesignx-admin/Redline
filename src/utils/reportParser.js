@@ -19,25 +19,38 @@ function stripDashLines(s) {
 
 function parseIssues(block) {
   const content = stripDashLines(block);
-  const re =
-    /Issue:\s*([\s\S]+?)\nSeverity:\s*([\s\S]+?)\nWhy it matters:\s*([\s\S]+?)\nRecommendation:\s*([\s\S]+?)(?=\n+Issue:|\s*$)/g;
+  // Split first, then parse each finding independently. This prevents a
+  // malformed middle finding from consuming the next finding or dropping the last.
+  const issueMarker = /^\s*(?:[-*]\s*)?Issue\s*:\s*/gim;
+  const markers = [...content.matchAll(issueMarker)];
+  const intro = (markers.length ? content.slice(0, markers[0].index) : content).trim();
+  const chunks = markers.map((marker, index) => {
+    const start = marker.index + marker[0].length;
+    const end = index + 1 < markers.length ? markers[index + 1].index : content.length;
+    return content.slice(start, end).trim();
+  });
   const issues = [];
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    const whyRaw = m[3].trim();
-    const evidenceM = whyRaw.match(/^Evidence basis:\s*(VERIFIED HTML|VERIFIED INFRASTRUCTURE|VISUAL OBSERVATION|UNVERIFIED)\s*[—-]\s*/i);
-    const evidenceBasis = evidenceM ? evidenceM[1].toUpperCase() : null;
-    const why = evidenceM ? whyRaw.slice(evidenceM[0].length).trim() : whyRaw;
+  for (const chunk of chunks) {
+    const field = (name, nextNames) => {
+      const next = nextNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      const boundary = nextNames.length ? "(?=\\n\\s*(?:[-*]\\s*)?(?:" + next + ")\\s*:|$)" : "$";
+      const re = new RegExp("(?:^|\\n)\\s*(?:[-*]\\s*)?" + name + "\\s*:\\s*([\\s\\S]*?)" + boundary, "i");
+      return re.exec(chunk)?.[1]?.trim() || "";
+    };
+    const title = chunk.split("\n")[0].trim();
+    const severityRaw = field("Severity", ["Why it matters", "Recommendation"]);
+    const whyRaw = field("Why it matters", ["Recommendation"]);
+    const recommendation = field("Recommendation", []);
+    if (!title || !recommendation || !whyRaw) continue;
+    const evidenceM = whyRaw.match(/^Evidence basis:\\s*(VERIFIED HTML|VERIFIED INFRASTRUCTURE|VISUAL OBSERVATION|UNVERIFIED)\\s*[—-]\\s*/i);
     issues.push({
-      title: m[1].trim().replace(/^\*+|\*+$/g, ""),
-      severity: severityFor(m[2]),
-      why,
-      recommendation: m[4].trim(),
-      evidenceBasis,
+      title: title.replace(/^\*+|\*+$/g, "").trim(),
+      severity: severityFor(severityRaw || "Medium"),
+      why: evidenceM ? whyRaw.slice(evidenceM[0].length).trim() : whyRaw,
+      recommendation,
+      evidenceBasis: evidenceM ? evidenceM[1].toUpperCase() : null,
     });
   }
-  const introEnd = content.search(/Issue:/);
-  const intro = introEnd > 0 ? content.slice(0, introEnd).trim() : "";
   return { intro, issues };
 }
 
