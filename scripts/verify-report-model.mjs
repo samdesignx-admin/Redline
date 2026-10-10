@@ -60,6 +60,6 @@ Recommendation: Third fix.`);
 assert.match(driftedIssues.intro, /Context intro/);
 assert.equal(driftedIssues.issues.length, 3);
 assert.equal(driftedIssues.issues[1].title, "Second finding");
-assert.equal(driftedIssues.issues[2].recommendation, "Third fix");
+assert.equal(driftedIssues.issues[2].recommendation, "Third fix.");
 
 console.log("Canonical report-model, null-score, and tolerant-parser checks passed.");
