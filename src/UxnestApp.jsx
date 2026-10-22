@@ -3652,7 +3652,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
           const mapped = parseVisualEvidence(raw, allIssues);
           for (const item of mapped) {
-            const key = item.issueTitle;
+            const key = item.findingIndex;
             const existing = mappedByFinding.get(key);
             const rank = (value) => value?.confidence === "high" ? 3 : value?.confidence === "medium" ? 2 : value?.confidence === "low" ? 1 : 0;
             if (!existing || rank(item) > rank(existing)) {
