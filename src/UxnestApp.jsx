@@ -2154,15 +2154,16 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
         const height = image.naturalHeight || image.height;
         if (!width || !height) return;
         const span = Math.max(10, Math.min(20, Number(radius || 2.5) * 4.8));
-        const cropW = Math.max(320, Math.round(width * span / 100));
-        const cropH = Math.max(220, Math.round(height * span / 100));
+        const cropW = Math.min(width, Math.max(320, Math.round(width * span / 100)));
+        const cropH = Math.min(height, Math.max(220, Math.round(height * span / 100)));
         const centerX = width * Number(cx || 50) / 100;
         const centerY = height * Number(cy || 50) / 100;
         const sx = Math.max(0, Math.min(width - cropW, Math.round(centerX - cropW / 2)));
         const sy = Math.max(0, Math.min(height - cropH, Math.round(centerY - cropH / 2)));
         const canvas = document.createElement("canvas");
-        const outW = 1200;
-        const outH = Math.max(620, Math.round(outW * cropH / cropW));
+        // Avoid enlarging small screenshot crops more than 2x; interpolation softens UI text.
+        const outW = Math.min(1600, Math.max(cropW, Math.round(cropW * 2)));
+        const outH = Math.max(1, Math.round(outW * cropH / cropW));
         canvas.width = outW;
         canvas.height = outH;
         const ctx = canvas.getContext("2d");
@@ -2462,7 +2463,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           return (
             <EvidenceFocusSlide
               key={item.id || index}
-              screenshot={auditScreenshot}
+              screenshot={item.screenshot || auditScreenshot}
               item={item}
               index={index}
               n={next()}
@@ -3083,6 +3084,7 @@ export default function UxnestApp() {
   const [auditedPages, setAuditedPages] = useState([]);
   const [auditScreenshot, setAuditScreenshot] = useState(null);
   const [auditScreenshots, setAuditScreenshots] = useState([]);
+  const auditScreenshotsRef = useRef([]);
   const auditScreenshotRef = useRef(null);
   const [visualEvidence, setVisualEvidence] = useState([]);
   const [reportTheme, setReportTheme] = useState(REPORT_THEME_FALLBACK);
@@ -3521,6 +3523,7 @@ export default function UxnestApp() {
       ? evidence.screenshots.filter((item) => item && /^https?:\/\//i.test(String(item.url || "")) && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
       : [];
     const primaryScreenshot = capturedScreenshots[0]?.screenshot || evidence.screenshot || null;
+    auditScreenshotsRef.current = capturedScreenshots;
     auditScreenshotRef.current = primaryScreenshot;
     setAuditScreenshot(primaryScreenshot);
     setAuditScreenshots(capturedScreenshots);
@@ -3602,8 +3605,11 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
 
-  const generateVisualEvidence = async (parsed, screenshot) => {
-    if (!screenshot || typeof screenshot !== "string" || !screenshot.startsWith("data:image/")) return [];
+  const generateVisualEvidence = async (parsed, screenshots) => {
+    const screenshotItems = (Array.isArray(screenshots) ? screenshots : [{ url: "", screenshot: screenshots }])
+      .filter((item) => item && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
+      .slice(0, 3);
+    if (!screenshotItems.length) return [];
 
     const allIssues = [
       ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
@@ -3613,34 +3619,54 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       .slice(0, 8);
     if (!allIssues.length) return [];
 
-    const visionScreenshot = await compressScreenshotForVision(screenshot);
-    const comma = visionScreenshot.indexOf(",");
-    if (comma < 0) return [];
-    const header = visionScreenshot.slice(0, comma);
-    const base64 = visionScreenshot.slice(comma + 1);
-    const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+    const mappedByFinding = new Map();
+    for (let screenIndex = 0; screenIndex < screenshotItems.length; screenIndex++) {
+      const screen = screenshotItems[screenIndex];
+      const visionScreenshot = await compressScreenshotForVision(screen.screenshot);
+      const comma = visionScreenshot.indexOf(",");
+      if (comma < 0) continue;
+      const header = visionScreenshot.slice(0, comma);
+      const base64 = visionScreenshot.slice(comma + 1);
+      const mediaType = /data:(image\/[a-zA-Z0-9.+-]+);base64/.exec(header)?.[1] || "image/jpeg";
+      const pageContext = screen.url
+        ? "This screenshot was captured from: " + screen.url + ". Only map findings visibly supported by this specific page. If a finding describes another page or an element not visible here, omit it.\n\n"
+        : "";
+      const attempts = [
+        pageContext + buildVisualEvidencePrompt(allIssues),
+        pageContext + "Map only the visible UX problems supported by this screenshot to exact UI targets. Return JSON only as an array of objects using this schema: [{\"findingIndex\":1,\"targetX\":50,\"targetY\":30,\"targetRadius\":2.5,\"explanation\":\"Exact visible element and why it is the target.\"}]. Omit findings that are not visibly supported on this page. Maximum 6 pins. FINDINGS:\n" +
+          allIssues.map((issue, i) => "Finding " + (i + 1) + ": [" + issue.section + "] " + issue.title + " — " + issue.why).join("\n"),
+      ];
 
-    const attempts = [
-      buildVisualEvidencePrompt(allIssues),
-      `Map the visible UX problems in this screenshot to exact UI targets. Return JSON only as an array of objects using this schema: [{"findingIndex":1,"targetX":50,"targetY":30,"targetRadius":2.5,"explanation":"Exact visible element and why it is the target."}]. Use only findings that are clearly visible. Maximum 6 pins. FINDINGS:\n${allIssues.map((issue, i) => `Finding ${i + 1}: [${issue.section}] ${issue.title} — ${issue.why}`).join("\n")}`,
-    ];
-
-    for (let attempt = 0; attempt < attempts.length; attempt++) {
-      try {
-        setRunProgress((p) => ({ ...p, status: attempt === 0 ? "Mapping visible findings to the live screenshot…" : "Retrying pinpoint mapping…" }));
-        const data = await callClaude([{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text: attempts[attempt] },
-        ] }], undefined, 0, "visual-evidence");
-        const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
-        const mapped = parseVisualEvidence(raw, allIssues);
-        if (mapped.length) return mapped;
-      } catch (err) {
-        console.warn("Visual evidence mapping attempt failed", err);
+      for (let attempt = 0; attempt < attempts.length; attempt++) {
+        try {
+          setRunProgress((p) => ({
+            ...p,
+            status: screenshotItems.length > 1
+              ? "Mapping findings to page " + (screenIndex + 1) + " of " + screenshotItems.length + "…"
+              : attempt === 0 ? "Mapping visible findings to the live screenshot…" : "Retrying pinpoint mapping…",
+          }));
+          const data = await callClaude([{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+            { type: "text", text: attempts[attempt] },
+          ] }], undefined, 0, "visual-evidence");
+          const raw = (data.content || []).filter((item) => item.type === "text").map((item) => item.text).join("");
+          const mapped = parseVisualEvidence(raw, allIssues);
+          for (const item of mapped) {
+            const key = item.findingIndex;
+            const existing = mappedByFinding.get(key);
+            const rank = (value) => value?.confidence === "high" ? 3 : value?.confidence === "medium" ? 2 : value?.confidence === "low" ? 1 : 0;
+            if (!existing || rank(item) > rank(existing)) {
+              mappedByFinding.set(key, { ...item, screenshot: screen.screenshot, screenshotUrl: screen.url || "" });
+            }
+          }
+          if (mapped.length) break;
+        } catch (err) {
+          console.warn("Visual evidence mapping attempt failed", err);
+        }
       }
     }
 
-    return [];
+    return Array.from(mappedByFinding.values()).slice(0, 6);
   };
 
   const startRun = (which) => {
@@ -3665,7 +3691,10 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
-      let mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
+      const evidenceScreenshots = auditScreenshotsRef.current.length
+        ? auditScreenshotsRef.current
+        : (auditScreenshotRef.current ? [{ url: urlInput.trim(), screenshot: auditScreenshotRef.current }] : []);
+      let mappedEvidence = which === "url" && evidenceScreenshots.length ? await generateVisualEvidence(parsed, evidenceScreenshots) : [];
       if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
         const candidates = [
           ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
@@ -3682,6 +3711,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           cx: 50, cy: 50, radius: 4.5,
           target: "General page context; precise pinpoint unavailable",
           explanation: "A screenshot is available, but the audit could not verify an exact target location. This image is contextual evidence only.",
+          screenshot: evidenceScreenshots[0]?.screenshot || auditScreenshotRef.current,
+          screenshotUrl: evidenceScreenshots[0]?.url || "",
           status: "insufficient", confidence: "low",
         }));
       }
@@ -3783,6 +3814,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
     setAuditedPages([]);
     setAuditScreenshot(null);
     setAuditScreenshots([]);
+    auditScreenshotsRef.current = [];
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
     setReportTheme(REPORT_THEME_FALLBACK);
@@ -3915,6 +3947,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
     auditedPagesRef.current = savedPages;
     setAuditedPages(savedPages);
     setAuditScreenshot(null);
+    setAuditScreenshots([]);
+    auditScreenshotsRef.current = [];
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
     setReportTheme(REPORT_THEME_FALLBACK);
