@@ -2154,15 +2154,16 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
         const height = image.naturalHeight || image.height;
         if (!width || !height) return;
         const span = Math.max(10, Math.min(20, Number(radius || 2.5) * 4.8));
-        const cropW = Math.max(320, Math.round(width * span / 100));
-        const cropH = Math.max(220, Math.round(height * span / 100));
+        const cropW = Math.min(width, Math.max(320, Math.round(width * span / 100)));
+        const cropH = Math.min(height, Math.max(220, Math.round(height * span / 100)));
         const centerX = width * Number(cx || 50) / 100;
         const centerY = height * Number(cy || 50) / 100;
         const sx = Math.max(0, Math.min(width - cropW, Math.round(centerX - cropW / 2)));
         const sy = Math.max(0, Math.min(height - cropH, Math.round(centerY - cropH / 2)));
         const canvas = document.createElement("canvas");
-        const outW = 1200;
-        const outH = Math.max(620, Math.round(outW * cropH / cropW));
+        // Avoid enlarging small screenshot crops more than 2x; interpolation softens UI text.
+        const outW = Math.min(1600, Math.max(cropW, Math.round(cropW * 2)));
+        const outH = Math.max(1, Math.round(outW * cropH / cropW));
         canvas.width = outW;
         canvas.height = outH;
         const ctx = canvas.getContext("2d");
@@ -2462,7 +2463,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           return (
             <EvidenceFocusSlide
               key={item.id || index}
-              screenshot={auditScreenshot}
+              screenshot={item.screenshot || auditScreenshot}
               item={item}
               index={index}
               n={next()}
@@ -3083,6 +3084,7 @@ export default function UxnestApp() {
   const [auditedPages, setAuditedPages] = useState([]);
   const [auditScreenshot, setAuditScreenshot] = useState(null);
   const [auditScreenshots, setAuditScreenshots] = useState([]);
+  const auditScreenshotsRef = useRef([]);
   const auditScreenshotRef = useRef(null);
   const [visualEvidence, setVisualEvidence] = useState([]);
   const [reportTheme, setReportTheme] = useState(REPORT_THEME_FALLBACK);
@@ -3521,6 +3523,7 @@ export default function UxnestApp() {
       ? evidence.screenshots.filter((item) => item && /^https?:\/\//i.test(String(item.url || "")) && typeof item.screenshot === "string" && item.screenshot.startsWith("data:image/"))
       : [];
     const primaryScreenshot = capturedScreenshots[0]?.screenshot || evidence.screenshot || null;
+    auditScreenshotsRef.current = capturedScreenshots;
     auditScreenshotRef.current = primaryScreenshot;
     setAuditScreenshot(primaryScreenshot);
     setAuditScreenshots(capturedScreenshots);
@@ -3783,6 +3786,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
     setAuditedPages([]);
     setAuditScreenshot(null);
     setAuditScreenshots([]);
+    auditScreenshotsRef.current = [];
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
     setReportTheme(REPORT_THEME_FALLBACK);
@@ -3915,6 +3919,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
     auditedPagesRef.current = savedPages;
     setAuditedPages(savedPages);
     setAuditScreenshot(null);
+    setAuditScreenshots([]);
+    auditScreenshotsRef.current = [];
     auditScreenshotRef.current = null;
     setVisualEvidence([]);
     setReportTheme(REPORT_THEME_FALLBACK);
