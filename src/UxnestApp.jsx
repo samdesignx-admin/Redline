@@ -2448,16 +2448,16 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       {/* Focused visual evidence — one finding per slide so the UI is readable at presentation size */}
       {auditScreenshot && visualEvidence.length > 0 && (() => {
         const allIssues = [
-          ...(usability?.issues || []),
-          ...(visual?.issues || []),
-          ...(accessibility?.issues || []),
-          ...(trust?.issues || []),
-          ...(conversion?.issues || []),
-          ...(cognitive?.issues || []),
-        ];
+          ["Usability", usability], ["Visual Design", visual], ["Accessibility", accessibility],
+          ["SEO & Search Visibility", seo], ["Trust & Credibility", trust],
+          ["Conversion", conversion], ["Cognitive Load", cognitive],
+        ].flatMap(([section, data]) => (data?.issues || []).map((candidate) => ({ ...candidate, section })))
+          .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
+          .slice(0, 8);
         return visualEvidence.map((item, index) => {
-          const issue = item.findingIndex
-            ? allIssues[item.findingIndex - 1]
+          const indexedIssue = item.findingIndex ? allIssues[item.findingIndex - 1] : null;
+          const issue = indexedIssue && (!item.issueTitle || indexedIssue.title === item.issueTitle)
+            ? indexedIssue
             : allIssues.find((candidate) => candidate.title === item.issueTitle);
           return (
             <EvidenceFocusSlide
@@ -3668,10 +3668,13 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       let mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
       if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
         const candidates = [
-          ...(parsed.usability?.issues || []), ...(parsed.visual?.issues || []),
-          ...(parsed.accessibility?.issues || []), ...(parsed.trust?.issues || []),
-          ...(parsed.conversion?.issues || []), ...(parsed.cognitive?.issues || []),
-        ].filter((issue) => issue?.title);
+          ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
+          ["SEO & Search Visibility", parsed.seo], ["Trust & Credibility", parsed.trust],
+          ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
+        ].flatMap(([section, data]) => (data?.issues || []).map((issue) => ({ ...issue, section })))
+          .filter((issue) => issue?.title)
+          .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
+          .slice(0, 8);
         mappedEvidence = candidates.slice(0, 6).map((issue, index) => ({
           id: `fallback-evidence-${index + 1}`,
           findingIndex: index + 1,
