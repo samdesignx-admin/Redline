@@ -3691,7 +3691,10 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
-      let mappedEvidence = which === "url" && auditScreenshotRef.current ? await generateVisualEvidence(parsed, auditScreenshotRef.current) : [];
+      const evidenceScreenshots = auditScreenshotsRef.current.length
+        ? auditScreenshotsRef.current
+        : (auditScreenshotRef.current ? [{ url: urlInput.trim(), screenshot: auditScreenshotRef.current }] : []);
+      let mappedEvidence = which === "url" && evidenceScreenshots.length ? await generateVisualEvidence(parsed, evidenceScreenshots) : [];
       if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
         const candidates = [
           ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
@@ -3708,6 +3711,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           cx: 50, cy: 50, radius: 4.5,
           target: "General page context; precise pinpoint unavailable",
           explanation: "A screenshot is available, but the audit could not verify an exact target location. This image is contextual evidence only.",
+          screenshot: evidenceScreenshots[0]?.screenshot || auditScreenshotRef.current,
+          screenshotUrl: evidenceScreenshots[0]?.url || "",
           status: "insufficient", confidence: "low",
         }));
       }
