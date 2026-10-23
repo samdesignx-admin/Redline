@@ -2153,7 +2153,9 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
         if (!width || !height) return;
-        const span = Math.max(10, Math.min(20, Number(radius || 2.5) * 4.8));
+        // Use a broad contextual crop rather than magnifying a tiny region.
+        // The full page remains visible above; this crop is supplemental detail.
+        const span = Math.max(24, Math.min(38, Number(radius || 2.5) * 8));
         const cropW = Math.min(width, Math.max(320, Math.round(width * span / 100)));
         const cropH = Math.min(height, Math.max(220, Math.round(height * span / 100)));
         const centerX = width * Number(cx || 50) / 100;
@@ -2185,17 +2187,14 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
   const marker = Math.max(1.5, Math.min(4.5, Number(radius) || 2.5));
   return (
     <div style={{ display: "grid", gridTemplateRows: "minmax(0, 7fr) minmax(0, 3fr)", height: "100%", width: "100%", background: "#F4F5F3" }}>
-      <div style={{ minHeight: 0, overflow: "hidden", background: "#F4F5F3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <img src={crop || screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
-      </div>
-      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderTop: "0.35mm solid #D9E2DF", background: "#E9EFEC" }}>
-        <img src={screenshot} alt="" aria-hidden="true" style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", background: "#F4F5F3", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
         <div style={{
           position: "absolute",
           left: `${Math.max(2, Math.min(98, Number(cx || 50)))}%`,
           top: `${Math.max(2, Math.min(98, Number(cy || 50)))}%`,
-          width: `${Math.max(4, Math.min(18, marker * 3))}%`,
-          height: `${Math.max(8, Math.min(70, marker * 7))}%`,
+          width: `${Math.max(3, Math.min(12, marker * 2))}%`,
+          height: `${Math.max(5, Math.min(24, marker * 3))}%`,
           transform: "translate(-50%, -50%)",
           border: "0.55mm solid #D58A16",
           borderRadius: "1.5mm",
@@ -2205,6 +2204,9 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
         <div style={{ position: "absolute", left: "4mm", bottom: "2.5mm", background: "rgba(15,22,20,.78)", color: "#fff", padding: "1.5mm 2.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.5pt", letterSpacing: .6 }}>
           CONTEXT · FULL PAGE
         </div>
+      </div>
+      <div style={{ minHeight: 0, overflow: "hidden", borderTop: "0.35mm solid #D9E2DF", background: "#E9EFEC", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={crop || screenshot} alt={alt ? `Target detail: ${alt}` : "Target detail"} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
       </div>
     </div>
   );
@@ -2237,11 +2239,6 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
             radius={tight}
             alt={`Focused evidence for finding ${index + 1}`}
           />
-          <div style={{ position: "absolute", left: "50%", top: "50%", width: `${Math.max(8, tight * 3)}mm`, height: `${Math.max(8, tight * 3)}mm`, transform: "translate(-50%, -50%)", border: `0.65mm solid ${sev.color}`, borderRadius: "50%", boxShadow: "0 0 0 0.4mm rgba(255,255,255,.96), 0 1mm 3mm rgba(0,0,0,.2)", pointerEvents: "none" }}>
-            <span style={{ position: "absolute", left: "-1mm", top: "-1mm", width: "6mm", height: "6mm", transform: "translate(-28%, -28%)", borderRadius: "50%", background: sev.color, color: "#fff", border: "0.45mm solid #fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "6.5pt", fontWeight: 800 }}>
-              {index + 1}
-            </span>
-          </div>
           <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
             TARGET DETAIL · CONTEXT BELOW
           </div>
