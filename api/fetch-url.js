@@ -293,7 +293,18 @@ async function captureScreenshotOne(target) {
   const token = process.env.SCREENSHOTONE_API_KEY; if (!token) throw new Error("ScreenshotOne is not configured.");
   const url = (await assertPublicUrl(target)).toString();
   const endpoint = new URL("https://api.screenshotone.com/take");
-  endpoint.searchParams.set("access_key", token); endpoint.searchParams.set("url", url); endpoint.searchParams.set("full_page", "true"); endpoint.searchParams.set("format", "jpg"); endpoint.searchParams.set("image_quality", "70");
+  endpoint.searchParams.set("access_key", token);
+  endpoint.searchParams.set("url", url);
+  // Use a stable viewport, not a stitched full-page image. Long-page stitching
+  // can capture lazy-loaded or incompletely hydrated sections as black strips.
+  endpoint.searchParams.set("full_page", "false");
+  endpoint.searchParams.set("viewport_width", "1440");
+  endpoint.searchParams.set("viewport_height", "1000");
+  endpoint.searchParams.set("wait_until", "networkidle2");
+  endpoint.searchParams.set("delay", "3");
+  endpoint.searchParams.set("timeout", "15");
+  endpoint.searchParams.set("format", "jpg");
+  endpoint.searchParams.set("image_quality", "80");
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
     const response = await fetch(endpoint, { signal: controller.signal }); if (!response.ok) throw new Error(`ScreenshotOne returned HTTP ${response.status}.`);
@@ -319,7 +330,18 @@ async function capturePageSpeed(target) {
 
 async function captureMicrolink(target) {
   const url = (await assertPublicUrl(target)).toString(); const endpoint = new URL("https://api.microlink.io/");
-  endpoint.searchParams.set("url", url); endpoint.searchParams.set("screenshot", "true"); endpoint.searchParams.set("screenshot.fullPage", "true"); endpoint.searchParams.set("screenshot.type", "jpeg"); endpoint.searchParams.set("meta", "true");
+  endpoint.searchParams.set("url", url);
+  endpoint.searchParams.set("screenshot", "true");
+  // Keep a consistent desktop viewport across providers. Full-page captures
+  // of complex product pages may contain stitched, blank or lazy-loaded bands.
+  endpoint.searchParams.set("screenshot.fullPage", "false");
+  endpoint.searchParams.set("screenshot.type", "jpeg");
+  endpoint.searchParams.set("viewport.width", "1440");
+  endpoint.searchParams.set("viewport.height", "1000");
+  endpoint.searchParams.set("viewport.deviceScaleFactor", "1");
+  endpoint.searchParams.set("waitUntil", "networkidle2");
+  endpoint.searchParams.set("waitForTimeout", "3000");
+  endpoint.searchParams.set("meta", "true");
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), SCREENSHOT_TIMEOUT_MS);
   try {
     const headers = { accept: "application/json" }; if (process.env.MICROLINK_API_KEY) headers["x-api-key"] = process.env.MICROLINK_API_KEY;
