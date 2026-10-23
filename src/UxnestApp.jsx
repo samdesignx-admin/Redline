@@ -4026,6 +4026,44 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
+        .audit-credit-widget {
+          width: 100%; margin: 0 0 18px; padding: 18px;
+          background: linear-gradient(135deg, #E9F8F3 0%, #F7FCFA 100%);
+          border: 1px solid #A8DCCF; border-radius: 18px;
+          box-shadow: 0 8px 22px rgba(20, 103, 82, .07);
+          text-align: left; color: ${C.text};
+        }
+        .audit-credit-widget__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .audit-credit-widget__identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .audit-credit-widget__icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; background: #D5F0E8; color: #137A63; }
+        .audit-credit-widget__eyebrow { font: 700 10px 'IBM Plex Mono', monospace; letter-spacing: 1.5px; color: #348674; margin-bottom: 4px; }
+        .audit-credit-widget__balance { font-size: 15px; line-height: 1.35; font-weight: 700; color: ${C.text}; overflow-wrap: anywhere; }
+        .audit-credit-widget__badge { font-size: 10px; font-weight: 650; color: #2F7869; border: 1px solid #B8E0D6; background: rgba(255,255,255,.65); padding: 6px 9px; border-radius: 999px; white-space: nowrap; }
+        .audit-credit-widget__buy { margin-top: 16px; padding-top: 15px; border-top: 1px solid #CBE9E1; display: grid; grid-template-columns: 92px minmax(110px, 1fr); align-items: center; gap: 12px; }
+        .audit-credit-widget__quantity { display: flex; flex-direction: column; gap: 5px; }
+        .audit-credit-widget__quantity label { font-size: 11px; color: #4C7169; font-weight: 650; }
+        .audit-credit-widget__quantity select { width: 100%; min-height: 42px; border: 1px solid #B5D8CF; background: #fff; color: ${C.text}; border-radius: 10px; padding: 8px 10px; font-size: 14px; cursor: pointer; }
+        .audit-credit-widget__price { display: flex; flex-direction: column; gap: 3px; min-width: 0; color: #386D62; font-size: 13px; line-height: 1.3; }
+        .audit-credit-widget__price > span { font-weight: 600; }
+        .audit-credit-widget__price strong { color: #145F50; font-size: 19px; line-height: 1.2; }
+        .audit-credit-widget__price small { font-size: 11px; font-weight: 500; }
+        .audit-credit-widget__button { grid-column: 1 / -1; min-height: 48px; width: 100%; border: none; border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 9px; background: ${C.now}; color: ${C.dark}; font-size: 14px; font-weight: 750; cursor: pointer; box-shadow: 0 4px 12px rgba(15,110,84,.15); }
+        .audit-credit-widget__button:disabled { opacity: .65; cursor: wait; }
+        .audit-credit-widget__note { grid-column: 1 / -1; text-align: center; color: #63877F; font-size: 11px; margin-top: -3px; }
+        .audit-credit-widget__spinner { animation: spin 1s linear infinite; }
+        @media (min-width: 520px) {
+          .audit-credit-widget { padding: 20px 22px; }
+          .audit-credit-widget__buy { grid-template-columns: 100px minmax(120px, 1fr) auto; }
+          .audit-credit-widget__button { grid-column: auto; width: auto; min-width: 170px; }
+          .audit-credit-widget__note { grid-column: 1 / -1; }
+        }
+        @media (max-width: 370px) {
+          .audit-credit-widget { padding: 14px; }
+          .audit-credit-widget__badge { display: none; }
+          .audit-credit-widget__buy { grid-template-columns: 76px minmax(0,1fr); gap: 9px; }
+          .audit-credit-widget__price strong { font-size: 17px; }
+          .audit-credit-widget__button { font-size: 13px; }
+        }
         .nav-desktop { display: none !important; }
         .nav-mobile { display: flex !important; }
         @media (min-width: 640px) {
@@ -4160,39 +4198,54 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                 </div>
 
                 {user && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, background: (auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.highSoft : C.goldSoft, border: `1px solid ${(auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.high : C.gold}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <FileText size={15} color={(auditsUsed >= AUDIT_QUOTA && paidAudits <= 0) ? C.high : C.gold} style={{ flexShrink: 0 }} />
-                      <span style={{ fontSize: 12.5, color: C.text }}>
-                        {auditsUsed < AUDIT_QUOTA
-                          ? "1 free audit included"
-                          : paidAudits > 0
-                            ? `${paidAudits} paid audit${paidAudits === 1 ? "" : "s"} available`
-                            : QUOTA_MESSAGE}
-                      </span>
+                  <section className="audit-credit-widget" aria-label="Audit credit purchase">
+                    <div className="audit-credit-widget__top">
+                      <div className="audit-credit-widget__identity">
+                        <div className="audit-credit-widget__icon">
+                          <FileText size={20} />
+                        </div>
+                        <div>
+                          <div className="audit-credit-widget__eyebrow">AUDIT CREDITS</div>
+                          <div className="audit-credit-widget__balance">
+                            {auditsUsed < AUDIT_QUOTA
+                              ? "1 free audit included"
+                              : paidAudits > 0
+                                ? `${paidAudits} paid audit${paidAudits === 1 ? "" : "s"} available`
+                                : QUOTA_MESSAGE}
+                          </div>
+                        </div>
+                      </div>
+                      {auditsUsed >= AUDIT_QUOTA && (
+                        <span className="audit-credit-widget__badge">No subscription</span>
+                      )}
                     </div>
                     {auditsUsed >= AUDIT_QUOTA && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <select
-                          value={purchaseQuantity}
-                          onChange={(e) => setPurchaseQuantity(Number(e.target.value))}
-                          disabled={paymentLoading}
-                          aria-label="Number of audits to purchase"
-                          style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 999, padding: "7px 9px", fontSize: 12, cursor: paymentLoading ? "wait" : "pointer" }}
-                        >
-                          {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>{n}</option>
-                          ))}
-                        </select>
-                        <span style={{ fontSize: 11.5, color: C.textDim, whiteSpace: "nowrap", fontWeight: 600 }}>
-                          $5 each · ${(purchaseQuantity * BETA_AUDIT_PRICE_USD).toFixed(2)} total
-                        </span>
-                        <button onClick={() => buyAudit(purchaseQuantity)} disabled={paymentLoading} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: paymentLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
-                          {paymentLoading ? "Opening…" : "Buy audits"}
+                      <div className="audit-credit-widget__buy">
+                        <div className="audit-credit-widget__quantity">
+                          <label htmlFor="audit-credit-quantity">Quantity</label>
+                          <select
+                            id="audit-credit-quantity"
+                            value={purchaseQuantity}
+                            onChange={(e) => setPurchaseQuantity(Number(e.target.value))}
+                            disabled={paymentLoading}
+                            aria-label="Number of audits to purchase"
+                          >
+                            {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>{n}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="audit-credit-widget__price">
+                          <span>$5.00 <small>/ credit</small></span>
+                          <strong>${(purchaseQuantity * BETA_AUDIT_PRICE_USD).toFixed(2)} <small>total</small></strong>
+                        </div>
+                        <button className="audit-credit-widget__button" onClick={() => buyAudit(purchaseQuantity)} disabled={paymentLoading}>
+                          {paymentLoading ? <><Loader2 size={16} className="audit-credit-widget__spinner" /> Opening checkout…</> : <>Buy {purchaseQuantity} audit credit{purchaseQuantity === 1 ? "" : "s"} <ArrowRight size={16} /></>}
                         </button>
+                        <div className="audit-credit-widget__note">Beta pricing · Pay once, use anytime</div>
                       </div>
                     )}
-                  </div>
+                  </section>
                 )}
 
                 <div style={{ marginBottom: 16 }}>
