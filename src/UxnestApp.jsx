@@ -3039,6 +3039,40 @@ function MyAuditsPage({ user, onOpenEntry, onNewAudit, onRequireLogin }) {
   );
 }
 
+function PaymentResultScreen({ status, quantity = 1, message, onRetry, onContinue }) {
+  const success = status === "success";
+  const verifying = status === "verifying";
+  const signin = status === "signin";
+  const accent = success ? "#16835D" : (verifying ? C.gold : "#C34B42");
+  const title = success ? "Payment successful" : verifying ? "Confirming your payment" : signin ? "Sign in to confirm your payment" : "We couldn't confirm the payment";
+  const description = success
+    ? `${quantity} audit credit${quantity === 1 ? "" : "s"} ${quantity === 1 ? "is" : "are"} ready in your UXNest account.`
+    : verifying ? "We're checking the checkout securely with Creem. This usually takes just a moment."
+    : signin ? (message || "Sign in to the same account you used at checkout.")
+    : (message || "Your payment may still be processing. Check your account before trying another payment.");
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Inter', sans-serif", padding: "24px 16px", display: "grid", placeItems: "center" }}>
+      <style>{`${FONT_IMPORT} * { box-sizing: border-box; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <section style={{ width: "100%", maxWidth: 520, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 22, padding: "36px 28px", textAlign: "center", boxShadow: "0 18px 55px rgba(20,40,32,.08)" }}>
+        <div style={{ display: "inline-grid", placeItems: "center", width: 66, height: 66, borderRadius: 22, background: `${accent}15`, color: accent, marginBottom: 20 }}>
+          {success ? <Check size={32} strokeWidth={2.5} /> : verifying ? <Loader2 size={30} style={{ animation: "spin 1s linear infinite" }} /> : <AlertCircle size={32} />}
+        </div>
+        <div style={{ color: C.gold, fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: 2, marginBottom: 12 }}>UXNEST · AUDIT CREDITS</div>
+        <h1 style={{ color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 28, letterSpacing: "-.8px", margin: "0 0 12px", lineHeight: 1.2 }}>{title}</h1>
+        <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.7, margin: "0 auto 24px", maxWidth: 390 }}>{description}</p>
+        {success && <div style={{ background: "#EEF6F3", border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 22, color: C.text, fontSize: 13, textAlign: "left" }}><strong>You're all set.</strong><br />You can continue your audit now. Your available credits will refresh in your account.</div>}
+        {!success && !verifying && !signin && <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: "-8px 0 22px" }}>Please don't pay again until you've checked your available audit credits. If you were charged, contact care@uxnest.ai.</p>}
+        <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
+          {(!success && !verifying && !signin) && <button onClick={onRetry} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 999, padding: "12px 18px", fontSize: 13, fontWeight: 650, cursor: "pointer" }}>Try verification again</button>}
+          <button onClick={onContinue} style={{ border: "none", background: C.now, color: C.dark, borderRadius: 999, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+            {success ? "Continue to UXNest" : signin ? "Go to sign in" : "Back to UXNest"} <ArrowRight size={15} />
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function UxnestApp() {
   const [mode, setMode] = useState("files");
   const [images, setImages] = useState([]);
@@ -3064,7 +3098,7 @@ export default function UxnestApp() {
     if (typeof window === "undefined") return;
     const target = page === "landing" ? "" : `#${page}`;
     if (window.location.hash !== target) {
-      window.history.replaceState(null, "", target || window.location.pathname);
+      window.history.replaceState(null, "", (target || window.location.pathname) + window.location.search);
     }
   }, [page]);
 
@@ -3117,23 +3151,42 @@ export default function UxnestApp() {
     })();
   }, []);
 
-  // Verify a successful Creem Checkout return as a fallback.
-  useEffect(() => {
+  // Payment return screen: verify server-side before showing a completed purchase.
+  const [paymentResult, setPaymentResult] = useState(() => {
+    if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("payment"), checkoutId = params.get("checkout_id");
-    if (status !== "success" || !checkoutId || !getToken()) return;
+    const status = params.get("payment");
+    return status === "success" ? { status: "verifying", checkoutId: params.get("checkout_id") || "" }
+      : status === "failed" ? { status: "failed", checkoutId: "" } : null;
+  });
+  const [paymentAttempt, setPaymentAttempt] = useState(0);
+  useEffect(() => {
+    if (!paymentResult || paymentResult.status !== "verifying") return;
+    if (!paymentResult.checkoutId) {
+      setPaymentResult((current) => ({ ...current, status: "failed", message: "We couldn't find the checkout reference. Please check your account before trying again." }));
+      return;
+    }
+    if (!getToken()) {
+      setPaymentResult((current) => ({ ...current, status: "signin", message: "Sign in with the same UXNest account you used before checkout so we can confirm your purchase." }));
+      return;
+    }
+    let cancelled = false;
     (async () => {
       try {
-        const result = await api.verifyAuditPayment(checkoutId);
+        const result = await api.verifyAuditPayment(paymentResult.checkoutId);
+        if (cancelled) return;
         if (typeof result.paid === "number") setPaidAudits(result.paid);
+        setPaymentResult((current) => ({ ...current, status: "success", quantity: result.quantity || 1 }));
         setError(null);
       } catch (e) {
-        setError(e.message || "Payment was received, but we couldn't confirm the audit credit yet. Please refresh.");
+        if (cancelled) return;
+        setPaymentResult((current) => ({ ...current, status: "failed", message: e.message || "We couldn't confirm this payment yet. If your bank was charged, contact support before retrying." }));
       } finally {
-        window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+        if (!cancelled) window.history.replaceState({}, "", window.location.pathname + window.location.hash);
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [paymentResult?.status, paymentResult?.checkoutId, paymentAttempt]);
 
   const buyAudit = useCallback(async (quantity = 1) => {
     if (!user || paymentLoading) return;
@@ -3957,6 +4010,16 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   const mailtoHref = report
     ? `mailto:?subject=${encodeURIComponent(`Nest Audit — Score ${report.summary.score ?? "—"}/100`)}&body=${encodeURIComponent(buildPlainTextSummary(report, source, !!user && historySaved))}`
     : "#";
+
+  if (paymentResult) {
+    return <PaymentResultScreen
+      status={paymentResult.status}
+      quantity={paymentResult.quantity}
+      message={paymentResult.message}
+      onRetry={() => { setPaymentResult((current) => ({ ...current, status: "verifying" })); setPaymentAttempt((n) => n + 1); }}
+      onContinue={() => { setPaymentResult(null); setPage("audit"); window.location.hash = "audit"; }}
+    />;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Inter', sans-serif", padding: "20px 14px 40px" }}>
