@@ -4184,6 +4184,9 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                             <option key={n} value={n}>{n}</option>
                           ))}
                         </select>
+                        <span style={{ fontSize: 11.5, color: C.textDim, whiteSpace: "nowrap", fontWeight: 600 }}>
+                          $5 each · ${(purchaseQuantity * BETA_AUDIT_PRICE_USD).toFixed(2)} total
+                        </span>
                         <button onClick={() => buyAudit(purchaseQuantity)} disabled={paymentLoading} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: paymentLoading ? "wait" : "pointer", whiteSpace: "nowrap" }}>
                           {paymentLoading ? "Opening…" : "Buy audits"}
                         </button>
