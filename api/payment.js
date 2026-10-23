@@ -37,7 +37,7 @@ async function creemRequest(path, options = {}) {
   return data;
 }
 async function getCheckout(checkoutId) {
-  return creemRequest(`/v1/checkouts/${encodeURIComponent(checkoutId)}`, { method: "GET" });
+  return creemRequest(`/v1/checkouts?checkout_id=${encodeURIComponent(checkoutId)}`, { method: "GET" });
 }
 async function grantPurchase(db, { accountId, checkoutId, eventId = null, quantity, amountCents = null, currency = "USD" }) {
   const { data, error } = await db.rpc("grant_creem_audit_purchase", {
