@@ -337,11 +337,13 @@ async function captureMicrolink(target) {
 async function captureVisualFallback(target) {
   const diagnostics = [];
   const providers = [
-    ["browserless-browserql-stealth", () => captureBrowserQL(target)],
-    ["browserless-smart-scrape", () => captureSmartScrape(target)],
-    ["browserless", () => captureScreenshot(target)],
+    // Prefer independent screenshot services first. BrowserQL can return a
+    // syntactically valid image even when the page has not hydrated correctly.
     ["screenshotone", () => captureScreenshotOne(target)],
     ["microlink", () => captureMicrolink(target)],
+    ["browserless", () => captureScreenshot(target)],
+    ["browserless-browserql-stealth", () => captureBrowserQL(target)],
+    ["browserless-smart-scrape", () => captureSmartScrape(target)],
     ["google-render-fallback", () => capturePageSpeed(target)],
   ];
   // Run independent providers concurrently. A sequential chain can consume
@@ -530,9 +532,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // 4) If Browserless returned content but no screenshot, or if it was
-    // unavailable, try independent visual providers.
-    if (!screenshot) {
+    // 4) Prefer an independent screenshot when Browserless Unblock supplied
+    // the page. Its screenshot can be valid image data but still be a black or
+    // incompletely hydrated frame. Keep it only as a fallback if alternatives fail.
+    if (!screenshot || rendering === "browserless-unblock") {
       const visual = await captureVisualFallback(normalized);
       if (visual.screenshot) {
         screenshot = visual.screenshot;
