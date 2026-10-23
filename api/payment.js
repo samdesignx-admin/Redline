@@ -84,7 +84,7 @@ export default async function handler(req, res) {
         method: "POST",
         body: JSON.stringify({
           product_id: productId, request_id: requestId, units: quantity, customer: { email: account.email },
-          success_url: `${origin}/?payment=success&checkout_id={checkout_id}`,
+          success_url: `${origin}/payment/success?payment=success&checkout_id={checkout_id}`,
           metadata: { account_id: sess.accountId, quantity: String(quantity), source: "uxnest_web" },
         }),
       });
