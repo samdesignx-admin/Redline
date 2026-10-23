@@ -722,7 +722,7 @@ const api = {
   listAudits: () => apiPost("/api/audits", { action: "list", token: getToken() }),
   quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
   checkoutAudit: (quantity) => apiPost("/api/payment", { action: "checkout", token: getToken(), quantity }),
-  verifyAuditPayment: (sessionId) => apiPost("/api/payment", { action: "verify", token: getToken(), sessionId }),
+  verifyAuditPayment: (checkoutId) => apiPost("/api/payment", { action: "verify", token: getToken(), checkoutId }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
 };

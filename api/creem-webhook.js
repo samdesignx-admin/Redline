@@ -2,6 +2,13 @@
 import crypto from "crypto";
 import { requireDb } from "./_lib.js";
 export const maxDuration = 20;
+export const config = { api: { bodyParser: false } };
+
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
 function verifySignature(rawBody, signature, secret) {
   if (!signature || !secret) return false;
   const computed = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
@@ -15,7 +22,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
   if (!process.env.CREEM_WEBHOOK_SECRET) { res.status(503).send("Creem webhook is not configured."); return; }
   const db = requireDb(res); if (!db) return;
-  const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body || {});
+  const rawBody = await readRawBody(req);
   if (!verifySignature(rawBody, req.headers["creem-signature"], process.env.CREEM_WEBHOOK_SECRET)) { res.status(401).send("Invalid signature"); return; }
   let event; try { event = JSON.parse(rawBody); } catch { res.status(400).send("Invalid JSON"); return; }
   try {
@@ -24,6 +31,8 @@ export default async function handler(req, res) {
     const accountId = String(metadata.account_id || ""), quantity = parseQuantity(checkout.units || metadata.quantity);
     const product = typeof checkout.product === "object" ? checkout.product : null;
     const actualProductId = product?.id || checkout.product;
+    const expectedMode = process.env.CREEM_MODE || "test";
+    if (checkout.mode && checkout.mode !== expectedMode) throw new Error("Creem event came from the wrong payment mode.");
     if (checkout.status !== "completed" || !accountId || !quantity || !checkout.id) throw new Error("Incomplete checkout.completed event.");
     if (!process.env.CREEM_PRODUCT_ID || actualProductId !== process.env.CREEM_PRODUCT_ID) throw new Error("Unexpected Creem product.");
     if (product?.billing_type && product.billing_type !== "onetime") throw new Error("Unexpected Creem billing type.");
