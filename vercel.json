@@ -3,5 +3,11 @@
     "api/audit.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/payment/:path*",
+      "destination": "/index.html"
+    }
+  ]
 }
