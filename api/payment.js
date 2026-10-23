@@ -14,7 +14,17 @@ function creemConfig() {
     err.code = "CREEM_NOT_CONFIGURED";
     throw err;
   }
-  return { apiKey: process.env.CREEM_API_KEY, productId: process.env.CREEM_PRODUCT_ID, baseUrl: process.env.CREEM_API_BASE_URL || "https://api.creem.io" };
+  const mode = process.env.CREEM_MODE || "test";
+  if (mode !== "test" && mode !== "live") throw new Error("CREEM_MODE must be set to test or live.");
+  const expectedHost = mode === "live" ? "api.creem.io" : "test-api.creem.io";
+  const configuredBase = process.env.CREEM_API_BASE_URL || `https://${expectedHost}`;
+  let parsed;
+  try { parsed = new URL(configuredBase); } catch { throw new Error("CREEM_API_BASE_URL must be a valid HTTPS Creem API URL."); }
+  if (parsed.protocol !== "https:" || parsed.hostname !== expectedHost || !["", "/", "/v1", "/v1/"].includes(parsed.pathname)) {
+    throw new Error(`Creem ${mode} mode must use https://${expectedHost} (the API base URL must not point to the other environment).`);
+  }
+  // Accept a legacy trailing /v1 in the environment variable, since requests below append /v1 themselves.
+  return { apiKey: process.env.CREEM_API_KEY, productId: process.env.CREEM_PRODUCT_ID, baseUrl: parsed.origin, mode };
 }
 async function creemRequest(path, options = {}) {
   const { apiKey, baseUrl } = creemConfig();
