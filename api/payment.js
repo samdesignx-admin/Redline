@@ -94,8 +94,9 @@ export default async function handler(req, res) {
     }
     if (req.body.action === "verify") {
       const checkoutId = String(req.body.checkoutId || "").trim();
-      if (!checkoutId || !/^ch_[A-Za-z0-9_-]+$/.test(checkoutId)) { res.status(400).json({ error: "Invalid payment checkout." }); return; }
-      const checkout = await getCheckout(checkoutId);
+      if (!checkoutId || checkoutId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(checkoutId) || checkoutId.includes("checkout_id")) { res.status(400).json({ error: "The checkout reference is missing or malformed. Please return to UXNest and contact support if you were charged." }); return; }
+      const checkoutResponse = await getCheckout(checkoutId);
+      const checkout = checkoutResponse?.checkout || checkoutResponse?.data || checkoutResponse;
       const verified = await validateCompletedCheckout(checkout, sess.accountId);
       await grantPurchase(db, { accountId: sess.accountId, checkoutId: verified.checkoutId, quantity: verified.quantity, amountCents: verified.amountCents, currency: verified.currency });
       const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
