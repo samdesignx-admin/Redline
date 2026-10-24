@@ -36,7 +36,9 @@ export default async function handler(req, res) {
     if (checkout.status !== "completed" || !accountId || !quantity || !checkout.id) throw new Error("Incomplete checkout.completed event.");
     if (!process.env.CREEM_PRODUCT_ID || actualProductId !== process.env.CREEM_PRODUCT_ID) throw new Error("Unexpected Creem product.");
     if (product?.billing_type && product.billing_type !== "onetime") throw new Error("Unexpected Creem billing type.");
-    const amountCents = product?.price ? Number(product.price) * quantity : 0;
+    const unitPriceCents = product?.price == null ? 500 : Number(product.price);
+    if (unitPriceCents !== 500 || (product?.currency && String(product.currency).toLowerCase() !== "usd")) throw new Error("Unexpected Creem price or currency.");
+    const amountCents = unitPriceCents * quantity;
     const { error: grantError } = await db.rpc("grant_creem_audit_purchase", {
       p_account_id: accountId,
       p_checkout_id: checkout.id,
