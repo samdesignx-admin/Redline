@@ -99,6 +99,16 @@ export default async function handler(req, res) {
       const checkout = checkoutResponse?.checkout || checkoutResponse?.data || checkoutResponse;
       const verified = await validateCompletedCheckout(checkout, sess.accountId);
       await grantPurchase(db, { accountId: sess.accountId, checkoutId: verified.checkoutId, quantity: verified.quantity, amountCents: verified.amountCents, currency: verified.currency });
+      // Retain the Creem transaction ID so a verified refund webhook can identify this purchase.
+      const tx = checkout?.order?.transaction || checkout?.transaction || checkout?.order?.transactions?.[0];
+      const transactionId = typeof tx === "string" ? tx : tx?.id;
+      if (typeof transactionId === "string" && /^tran_[A-Za-z0-9_-]+$/.test(transactionId)) {
+        const { error: txError } = await db.from("audit_purchases").update({ creem_transaction_id: transactionId })
+          .eq("creem_checkout_id", verified.checkoutId).eq("account_id", sess.accountId)
+          .is("creem_transaction_id", null);
+        if (txError) console.warn("[UXNest] Unable to store Creem transaction ID", txError.message);
+      }
+
       const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
       res.status(200).json({ paid: (acct && acct.paid_audits) || 0, used: (acct && acct.audits_used) || 0, credited: true, quantity: verified.quantity });
       return;
