@@ -723,6 +723,8 @@ const api = {
   quota: () => apiPost("/api/audits", { action: "quota", token: getToken() }),
   checkoutAudit: (quantity) => apiPost("/api/payment", { action: "checkout", token: getToken(), quantity }),
   verifyAuditPayment: (checkoutId) => apiPost("/api/payment", { action: "verify", token: getToken(), checkoutId }),
+  purchaseHistory: () => apiPost("/api/payment", { action: "history", token: getToken() }),
+  requestRefund: (purchaseId, reason) => apiPost("/api/payment", { action: "request_refund", token: getToken(), purchaseId, reason }),
   saveAudit: (audit) => apiPost("/api/audits", { action: "create", token: getToken(), audit }),
   deleteAudit: (id) => apiPost("/api/audits", { action: "delete", token: getToken(), id }),
 };
@@ -3091,6 +3093,29 @@ export default function UxnestApp() {
     return VALID_PAGES.includes(h) ? h : "landing";
   });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [purchaseHistory, setPurchaseHistory] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [refundPurchaseId, setRefundPurchaseId] = useState(null);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const loadPurchaseHistory = async () => {
+    setHistoryLoading(true); setHistoryError("");
+    try { const data = await api.purchaseHistory(); setPurchaseHistory(data.purchases || []); }
+    catch (e) { setHistoryError(e.message || "Unable to load purchases."); }
+    finally { setHistoryLoading(false); }
+  };
+  const submitRefundRequest = async () => {
+    if (!refundPurchaseId) return;
+    setRefundSubmitting(true); setHistoryError("");
+    try {
+      await api.requestRefund(refundPurchaseId, refundReason);
+      setRefundPurchaseId(null); setRefundReason("");
+      await loadPurchaseHistory();
+    } catch (e) { setHistoryError(e.message || "Unable to submit request."); }
+    finally { setRefundSubmitting(false); }
+  };
+
 
   // Reflect the current page in the URL hash so emailed links land in the
   // right place, and respond to back/forward navigation.
@@ -4245,6 +4270,43 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                         <div className="audit-credit-widget__note">Beta pricing · Pay once, use anytime</div>
                       </div>
                     )}
+                  </section>
+                )}
+
+                {user && (
+                  <section style={{ marginBottom: 20, border: `1px solid ${C.border}`, borderRadius: 16, background: C.surface, padding: 16, textAlign: "left" }}>
+                    <button onClick={() => { if (purchaseHistory === null) loadPurchaseHistory(); else setPurchaseHistory(null); }} style={{ width: "100%", background: "transparent", border: "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: C.text, fontWeight: 750, fontSize: 14, padding: 0 }}>
+                      <span>Purchase history & refunds</span><span>{purchaseHistory === null ? "View purchases ↓" : "Hide ↑"}</span>
+                    </button>
+                    {historyLoading && <p style={{ fontSize: 13, color: C.textDim }}>Loading purchases…</p>}
+                    {historyError && <p role="alert" style={{ color: "#B64D46", fontSize: 12 }}>{historyError}</p>}
+                    {purchaseHistory && (purchaseHistory.length === 0
+                      ? <p style={{ color: C.textDim, fontSize: 13 }}>No purchases yet.</p>
+                      : <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+                          {purchaseHistory.map((purchase) => (
+                            <div key={purchase.id} style={{ padding: 13, border: `1px solid ${C.border}`, borderRadius: 12, display: "grid", gap: 7 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", fontSize: 13, fontWeight: 650 }}>
+                                <span>{purchase.quantity} audit credit{purchase.quantity === 1 ? "" : "s"}</span>
+                                <span>${(purchase.amount_cents / 100).toFixed(2)} {String(purchase.currency || "USD").toUpperCase()}</span>
+                              </div>
+                              <div style={{ color: C.textDim, fontSize: 11 }}>
+                                {new Date(purchase.created_at).toLocaleDateString()} · {purchase.payment_provider === "creem" ? "Creem" : "Previous purchase"}
+                              </div>
+                              {purchase.refund_request
+                                ? <div style={{ fontSize: 12, color: C.textDim }}>Refund request: <strong>{purchase.refund_request.status}</strong></div>
+                                : purchase.payment_provider === "creem" && <button onClick={() => { setRefundPurchaseId(purchase.id); setRefundReason(""); }} style={{ justifySelf: "start", background: "transparent", color: "#137A63", border: "none", padding: "3px 0", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Request a refund</button>}
+                              {refundPurchaseId === purchase.id && <div style={{ display: "grid", gap: 8 }}>
+                                <label style={{ fontSize: 12, fontWeight: 650 }}>Reason for refund</label>
+                                <textarea value={refundReason} onChange={(e) => setRefundReason(e.target.value)} maxLength={1000} rows={3} placeholder="Tell us why you're requesting a refund (at least 10 characters)" style={{ width: "100%", border: `1px solid ${C.border}`, borderRadius: 9, padding: 10, fontSize: 13 }} />
+                                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                  <button disabled={refundSubmitting || refundReason.trim().length < 10} onClick={submitRefundRequest} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 9, padding: "9px 14px", cursor: "pointer" }}>{refundSubmitting ? "Submitting…" : "Submit request"}</button>
+                                  <button onClick={() => setRefundPurchaseId(null)} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 9, padding: "9px 14px", cursor: "pointer" }}>Cancel</button>
+                                </div>
+                                <p style={{ fontSize: 11, color: C.textDim, margin: 0 }}>Requests are reviewed manually. Submitting does not issue a refund.</p>
+                              </div>}
+                            </div>
+                          ))}
+                        </div>)}
                   </section>
                 )}
 
