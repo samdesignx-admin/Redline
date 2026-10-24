@@ -26,6 +26,28 @@ export default async function handler(req, res) {
   if (!verifySignature(rawBody, req.headers["creem-signature"], process.env.CREEM_WEBHOOK_SECRET)) { res.status(401).send("Invalid signature"); return; }
   let event; try { event = JSON.parse(rawBody); } catch { res.status(400).send("Invalid JSON"); return; }
   try {
+    if (event.eventType === "refund.created") {
+      const refund = event.object || {};
+      const tx = refund.transaction;
+      const txId = typeof tx === "string" ? tx : tx?.id;
+      if (refund.status !== "succeeded") { res.status(200).send("OK"); return; }
+      if (!/^tran_[A-Za-z0-9_-]+$/.test(String(txId || "")) ||
+          !/^ref_[A-Za-z0-9_-]+$/.test(String(refund.id || ""))) {
+        throw new Error("Refund event missing transaction/refund ID.");
+      }
+      const amount = Number(refund.refund_amount);
+      const { data: applied, error } = await db.rpc("apply_creem_refund", {
+        p_transaction_id: txId, p_refund_id: refund.id, p_amount_cents: amount,
+      });
+      if (error) throw error;
+      if (!applied) {
+        console.error("[UXNest] Refund could not be reconciled with a matching, fully-paid purchase",txId);
+        res.status(500).send("Refund reconciliation pending");
+        return;
+      }
+      res.status(200).send("OK");
+      return;
+    }
     if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
     const checkout = event.object || {}, metadata = checkout.metadata || {};
     const accountId = String(metadata.account_id || ""), quantity = parseQuantity(checkout.units || metadata.quantity);
@@ -48,6 +70,14 @@ export default async function handler(req, res) {
       p_currency: String(product?.currency || "USD").toLowerCase(),
     });
     if (grantError) throw grantError;
+    const tx = checkout?.order?.transaction || checkout?.transaction || checkout?.order?.transactions?.[0];
+    const txId = typeof tx === "string" ? tx : tx?.id;
+    if (typeof txId === "string" && /^tran_[A-Za-z0-9_-]+$/.test(txId)) {
+      const {error:txError}=await db.from("audit_purchases").update({creem_transaction_id:txId})
+        .eq("creem_checkout_id",checkout.id).is("creem_transaction_id",null);
+      if (txError) console.warn("[UXNest] Could not save Creem transaction",txError.message);
+    }
+
 
     res.status(200).send("OK");
   } catch (e) { console.error("[UXNest Creem webhook]", e); res.status(500).send("Internal error"); }
