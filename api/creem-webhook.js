@@ -19,6 +19,21 @@ function verifySignature(rawBody, signature, secret) {
 function parseQuantity(value) {
   const n = Number(value); return Number.isInteger(n) && n >= 1 && n <= 20 ? n : null;
 }
+async function saveRefundEvent(db, event, refund, state, detail = null) {
+  const txn = refund.transaction && typeof refund.transaction === "object" ? refund.transaction : null;
+  if (!/^evt_[A-Za-z0-9_-]+$/.test(event.id || "")) throw new Error("Creem refund event missing id.");
+  const { error } = await db.from("creem_refund_events").upsert({
+    event_id: event.id,
+    refund_id: refund.id || "",
+    transaction_id: txn?.id || (typeof refund.transaction === "string" ? refund.transaction : null),
+    amount_cents: Number.isInteger(Number(refund.refund_amount)) ? Number(refund.refund_amount) : null,
+    currency: refund.refund_currency || null,
+    transaction_status: txn?.status || null,
+    state, detail,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "event_id" });
+  if (error) throw error;
+}
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
   if (!process.env.CREEM_WEBHOOK_SECRET) { res.status(503).send("Creem webhook is not configured."); return; }
@@ -29,11 +44,16 @@ export default async function handler(req, res) {
   try {
     if (event.eventType === "refund.created") {
       const refund = event.object || {};
-      if (refund.status !== "succeeded") { res.status(200).send("OK"); return; }
+      if (refund.status !== "succeeded") {
+        await saveRefundEvent(db, event, refund, "received", "Refund not yet succeeded.");
+        res.status(200).send("OK"); return;
+      }
+      await saveRefundEvent(db, event, refund, "received");
       const txn = typeof refund.transaction === "object" ? refund.transaction : null;
       // Partial refunds do not map reliably to whole audit credits; defer them
       // for manual review and leave credits unchanged.
       if (!txn || txn.status !== "refunded") {
+        await saveRefundEvent(db, event, refund, "review_required", "Partial or unconfirmed refund; do not revoke whole credits.");
         console.warn("[UXNest Creem webhook] Partial or unconfirmed refund requires review.");
         res.status(200).send("Partial refund acknowledged for manual review");
         return;
@@ -62,7 +82,11 @@ export default async function handler(req, res) {
           if (refundError) throw refundError;
         }
       }
-      if (recorded !== true) throw new Error("Refund purchase not linked; retry after reconciliation.");
+      if (recorded !== true) {
+        await saveRefundEvent(db, event, refund, "pending_link", "Refund purchase not linked.");
+        throw new Error("Refund purchase not linked; retry after reconciliation.");
+      }
+      await saveRefundEvent(db, event, refund, "applied");
       res.status(200).send("OK");
       return;
     }
