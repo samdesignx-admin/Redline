@@ -1,3 +1,4 @@
+import AdminRefunds from "./components/AdminRefunds.jsx";
 import { useState, useEffect, useMemo } from "react";
 import {
   Users, FileText, Gauge, TrendingUp, Globe, ImageIcon, AlertCircle,
@@ -388,6 +389,8 @@ export default function AdminPage({ C, onExit }) {
           </div>
         )}
       </Panel>
+
+      <AdminRefunds adminKey={entered} />
 
       <button onClick={onExit} style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.muted, fontSize: 12.5, borderRadius: 999, padding: "9px 16px", cursor: "pointer" }}>
         Back to UXNest
