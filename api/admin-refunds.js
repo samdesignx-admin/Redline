@@ -3,6 +3,7 @@
 import crypto from "crypto";
 import { requireDb } from "./_lib.js";
 import { getCreemCheckout, syncCreemPurchase, getCreemTransaction, syncRefundTransactionFromCreem } from "./_creem-transactions.js";
+import { issueCreemFullRefund } from "./_creem-refunds.js";
 export const maxDuration = 20;
 function validKey(given, expected) {
   if (!expected || !given) return false;
@@ -36,7 +37,68 @@ export default async function handler(req, res) {
         .select("event_id,refund_id,transaction_id,amount_cents,currency,transaction_status,refund_status,state,detail,received_at")
         .neq("state", "applied").order("received_at", { ascending: false }).limit(100);
       if (refundEventsError) throw refundEventsError;
-      return res.status(200).json({ requests, purchases, unlinkedPurchases: unlinkedPurchases || [], refundEvents: refundEvents || [] });
+      return res.status(200).json({ requests, purchases, unlinkedPurchases: unlinkedPurchases || [], refundEvents: refundEvents || [], apiRefundsEnabled: process.env.CREEM_ENABLE_API_REFUNDS === "true" });
+    }
+    if (req.body?.action === "issue_full_refund") {
+      if (process.env.CREEM_ENABLE_API_REFUNDS !== "true")
+        return res.status(403).json({ error: "Creem API refunds have not been enabled." });
+      if (req.body.confirm !== "ISSUE_FULL_REFUND")
+        return res.status(400).json({ error: "Explicit full-refund confirmation is required." });
+      const requestId = String(req.body.requestId || "");
+      if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(requestId))
+        return res.status(400).json({ error: "Invalid refund request." });
+      const { data: request, error: requestError } = await db.from("audit_refund_requests")
+        .select("id,purchase_id,account_id,status").eq("id", requestId).maybeSingle();
+      if (requestError) throw requestError;
+      if (!request || request.status !== "approved")
+        return res.status(409).json({ error: "A reviewed, approved refund request is required." });
+      const { data: purchase, error: purchaseError } = await db.from("audit_purchases")
+        .select("id,account_id,payment_provider,creem_transaction_id,creem_order_id,refund_status,amount_cents,currency,quantity")
+        .eq("id", request.purchase_id).maybeSingle();
+      if (purchaseError) throw purchaseError;
+      if (!purchase || purchase.account_id !== request.account_id ||
+          purchase.payment_provider !== "creem" ||
+          purchase.refund_status !== "none" || !purchase.creem_transaction_id)
+        return res.status(409).json({ error: "This purchase is not eligible for a new Creem refund." });
+      const { data: account, error: balanceError } = await db.from("accounts")
+        .select("paid_audits").eq("id", purchase.account_id).single();
+      if (balanceError) throw balanceError;
+      if (account.paid_audits < purchase.quantity)
+        return res.status(409).json({ error: "Not enough unused credits for a standard full refund." });
+      const transaction = await getCreemTransaction(purchase.creem_transaction_id);
+      const txnOrder = typeof transaction?.order === "object" ? transaction.order.id : transaction?.order;
+      if (transaction?.id !== purchase.creem_transaction_id ||
+          transaction.status !== "paid" ||
+          String(transaction.currency || "").toLowerCase() !== "usd" ||
+          (purchase.creem_order_id && txnOrder !== purchase.creem_order_id))
+        return res.status(409).json({ error: "Creem has not confirmed this transaction is currently paid and refundable." });
+      // The conditional update reserves this purchase: simultaneous admin clicks
+      // cannot issue a second refund while the first is in flight.
+      const { data: claimed, error: claimError } = await db.from("audit_purchases")
+        .update({ refund_status: "processing" }).eq("id", purchase.id)
+        .eq("refund_status", "none").select("id").maybeSingle();
+      if (claimError) throw claimError;
+      if (!claimed) return res.status(409).json({ error: "Another refund request is already processing." });
+      try {
+        const refund = await issueCreemFullRefund(purchase.creem_transaction_id);
+        // Do not overwrite 'refunded' if a verified webhook arrived first.
+        const { error: pendingError } = await db.from("audit_purchases")
+          .update({ refund_status: "pending" })
+          .eq("id", purchase.id).eq("refund_status", "processing");
+        if (pendingError) throw pendingError;
+        return res.status(200).json({
+          note: "Refund submitted to Creem. Await its signed webhook before revoking credits.",
+          refundId: typeof refund?.id === "string" ? refund.id : null,
+          providerStatus: refund?.status || "submitted",
+        });
+      } catch (error) {
+        // A failed/ambiguous API call may already have triggered a refund.
+        // Keep 'processing' instead of retrying or creating a duplicate payment.
+        console.error("[UXNest Creem refund submission requires reconciliation]", error);
+        return res.status(502).json({
+          error: "Creem refund submission could not be confirmed. The purchase is locked from further refund attempts; reconcile in Creem before any retry."
+        });
+      }
     }
     if (req.body?.action === "retry_event") {
       const eventId = String(req.body.eventId || "");
