@@ -8,6 +8,7 @@ export default function AdminRefunds({ adminKey }) {
   const [requests, setRequests] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [unlinked, setUnlinked] = useState([]);
+  const [refundEvents, setRefundEvents] = useState([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,7 @@ export default function AdminRefunds({ adminKey }) {
     setRequests(data.requests || []);
     setPurchases(data.purchases || []);
     setUnlinked(data.unlinkedPurchases || []);
+    setRefundEvents(data.refundEvents || []);
   }, [send]);
 
   useEffect(() => {
@@ -80,5 +82,14 @@ export default function AdminRefunds({ adminKey }) {
       <small>{money(p.amount_cents, "USD")} · {p.quantity} credits · {new Date(p.created_at).toLocaleDateString()}</small>
       <div><button disabled={busy || !p.creem_checkout_id} onClick={() => run("sync_purchase", { purchaseId: p.id }, "Reconciliation completed; review transaction linkage.")}>Sync from Creem</button></div>
     </div>)}
+    <h3 style={{ fontSize: 15 }}>Refund webhooks requiring attention ({refundEvents.length})</h3>
+    {!refundEvents.length && <p>No unresolved refund events.</p>}
+    {refundEvents.map(event => <article key={event.event_id} style={{ borderTop: "1px solid #e0e8e4", padding: "12px 0" }}>
+      <strong>{event.state.replace(/_/g, " ")}</strong> · <small>{new Date(event.received_at).toLocaleString()}</small>
+      <div style={{ fontSize: 12, overflowWrap: "anywhere" }}>Event: {event.event_id} · Transaction: {event.transaction_id || "Not supplied"}</div>
+      <p style={{ fontSize: 13 }}>{money(event.amount_cents, event.currency)} · Provider status: {event.refund_status || "Unknown"} / {event.transaction_status || "Unknown"}</p>
+      {event.detail && <p style={{ fontSize: 12 }}>{event.detail}</p>}
+      {event.refund_status === "succeeded" && event.transaction_status === "refunded" && <button disabled={busy} onClick={() => run("retry_event", { eventId: event.event_id }, "Verified refund reconciled; audit credits adjusted.")}>Verify and reconcile</button>}
+    </article>)}
   </section>;
 }
