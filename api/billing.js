@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   const accountId = session.accountId;
   try {
     const { data: account, error: accountError } = await db.from("accounts")
-      .select("id,paid_audits").eq("id", accountId).maybeSingle();
+      .select("id,paid_audits,credit_debt").eq("id", accountId).maybeSingle();
     if (accountError) throw accountError;
     if (!account) return res.status(401).json({ error: "Account not found." });
     const action = req.body?.action || "history";
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         .select("id,purchase_id,reason,status,created_at,updated_at")
         .eq("account_id", accountId).order("created_at", { ascending: false }).limit(100);
       if (refundError) throw refundError;
-      return res.status(200).json({ purchases, refunds, availableCredits: account.paid_audits });
+      return res.status(200).json({ purchases, refunds, availableCredits: account.paid_audits, creditAdjustmentDue: account.credit_debt });
     }
     if (action === "request_refund") {
       const purchaseId = String(req.body.purchaseId || "");
