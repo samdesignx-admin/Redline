@@ -2,7 +2,7 @@
 // Provider refund execution must be verified separately before marking refunded.
 import crypto from "crypto";
 import { requireDb } from "./_lib.js";
-import { getCreemCheckout, syncCreemPurchase } from "./_creem-transactions.js";
+import { getCreemCheckout, syncCreemPurchase, getCreemTransaction, syncRefundTransactionFromCreem } from "./_creem-transactions.js";
 export const maxDuration = 20;
 function validKey(given, expected) {
   if (!expected || !given) return false;
@@ -32,7 +32,54 @@ export default async function handler(req, res) {
         .select("id,account_id,created_at,creem_checkout_id,quantity,amount_cents")
         .eq("payment_provider", "creem").is("creem_transaction_id", null).limit(50);
       if (unlinkedError) throw unlinkedError;
-      return res.status(200).json({ requests, purchases, unlinkedPurchases: unlinkedPurchases || [] });
+      const { data: refundEvents, error: refundEventsError } = await db.from("creem_refund_events")
+        .select("event_id,refund_id,transaction_id,amount_cents,currency,transaction_status,refund_status,state,detail,received_at")
+        .neq("state", "applied").order("received_at", { ascending: false }).limit(100);
+      if (refundEventsError) throw refundEventsError;
+      return res.status(200).json({ requests, purchases, unlinkedPurchases: unlinkedPurchases || [], refundEvents: refundEvents || [] });
+    }
+    if (req.body?.action === "retry_event") {
+      const eventId = String(req.body.eventId || "");
+      if (!/^evt_[A-Za-z0-9_-]+$/.test(eventId))
+        return res.status(400).json({ error: "Invalid Creem event." });
+      const { data: event, error: eventError } = await db.from("creem_refund_events")
+        .select("*").eq("event_id", eventId).maybeSingle();
+      if (eventError) throw eventError;
+      if (!event) return res.status(404).json({ error: "Event not found." });
+      if (event.state === "applied") return res.status(200).json({ note: "Already reconciled." });
+      if (event.refund_status !== "succeeded" || event.transaction_status !== "refunded" ||
+          event.currency?.toLowerCase() !== "usd" ||
+          !/^tran_[A-Za-z0-9_-]+$/.test(event.transaction_id || "") ||
+          !/^ref_[A-Za-z0-9_-]+$/.test(event.refund_id || "") ||
+          !Number.isInteger(event.amount_cents) || event.amount_cents <= 0)
+        return res.status(409).json({ error: "This is not a confirmed full USD refund; manual review required." });
+      const transaction = await getCreemTransaction(event.transaction_id);
+      if (!transaction || transaction.id !== event.transaction_id || transaction.status !== "refunded" ||
+          (Number(transaction.amount_paid) > 0 && event.amount_cents < Number(transaction.amount_paid)))
+        return res.status(409).json({ error: "Creem has not confirmed a fully refunded transaction." });
+      let { data: applied, error: rpcError } = await db.rpc("apply_creem_refund", {
+        p_transaction_id: event.transaction_id,
+        p_refund_id: event.refund_id,
+        p_amount_cents: event.amount_cents,
+      });
+      if (rpcError) throw rpcError;
+      if (!applied) {
+        const linked = await syncRefundTransactionFromCreem(db, event.transaction_id);
+        if (linked) {
+          ({ data: applied, error: rpcError } = await db.rpc("apply_creem_refund", {
+            p_transaction_id: event.transaction_id,
+            p_refund_id: event.refund_id,
+            p_amount_cents: event.amount_cents,
+          }));
+          if (rpcError) throw rpcError;
+        }
+      }
+      if (!applied) return res.status(409).json({ error: "Reconcile the original checkout transaction before retrying this refund." });
+      const { error: updateError } = await db.from("creem_refund_events")
+        .update({ state: "applied", detail: null, updated_at: new Date().toISOString() })
+        .eq("event_id", eventId);
+      if (updateError) throw updateError;
+      return res.status(200).json({ note: "Verified Creem refund reconciled and credit adjustment applied once. No refund payment initiated." });
     }
     if (req.body?.action === "sync_purchase") {
       const id = String(req.body?.purchaseId || "");
