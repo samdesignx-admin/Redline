@@ -41,6 +41,7 @@ export default function BillingPanel({ getToken, onClose }) {
     {error && <p role="alert" style={{ color: "#a42323" }}>{error}</p>}
     {data && <>
       <p><strong>{data.availableCredits}</strong> available paid audit credits</p>
+      {data.creditAdjustmentDue > 0 && <p style={{ fontSize: 13 }}>Credit adjustment: {data.creditAdjustmentDue} previously refunded credit(s) were already used. Future credit purchases will settle this balance first.</p>}
       {!data.purchases.length && <p>No purchases recorded for this account yet.</p>}
       {data.purchases.map(p => {
         const request = data.refunds.find(r => r.purchase_id === p.id);
