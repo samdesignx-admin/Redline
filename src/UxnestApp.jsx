@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
+import BillingPanel from "./components/BillingPanel.jsx";
 import BrandLogo from "./components/BrandLogo.jsx";
 import SupportChat from "./SupportChat.jsx";
 import { stripDashLines, parseIssues, parseNumberedList, parseDashList, parseSummary, parseTop10, parseScorecard, normalizeReportText, parseReport, buildPlainTextSummary } from "./utils/reportParser.js";
@@ -3132,6 +3133,7 @@ export default function UxnestApp() {
   const pendingRunRef = useRef(null);
 
   const [user, setUser] = useState(null);
+  const [showBilling, setShowBilling] = useState(false);
 
   // Restore the signed-in user from the server session token.
   useEffect(() => {
@@ -4165,6 +4167,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           </div>
         )}
       </header>
+      {user && <div style={{ maxWidth: 720, margin: "0 auto 12px", textAlign: "right" }}><button onClick={() => setShowBilling(v => !v)} style={{ border: "1px solid #9fcfc1", borderRadius: 10, padding: "9px 14px", background: "#eef8f4", color: "#155b4a", cursor: "pointer", fontWeight: 700 }}>Billing & Purchases</button></div>}
+      {user && showBilling && <BillingPanel getToken={getToken} onClose={() => setShowBilling(false)} />}
       {user && user.ephemeral && (
         <div style={{ maxWidth: 720, margin: "0 auto 14px", fontSize: 11.5, color: C.high, background: C.highSoft, border: `1px solid ${C.high}44`, borderRadius: 8, padding: "8px 12px" }}>
           Persistent storage isn't available right now — your account and history will only last for this session.
