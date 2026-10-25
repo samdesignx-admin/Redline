@@ -31,13 +31,21 @@ export default async function handler(req, res) {
       const refund = event.object || {};
       if (refund.status !== "succeeded") { res.status(200).send("OK"); return; }
       const txn = typeof refund.transaction === "object" ? refund.transaction : null;
+      // Partial refunds do not map reliably to whole audit credits; defer them
+      // for manual review and leave credits unchanged.
+      if (!txn || txn.status !== "refunded") {
+        console.warn("[UXNest Creem webhook] Partial or unconfirmed refund requires review.");
+        res.status(200).send("Partial refund acknowledged for manual review");
+        return;
+      }
       const transactionId = txn?.id || refund.transaction;
       const refundId = refund.id;
       const amountCents = Number(refund.refund_amount);
       if (String(refund.refund_currency || "").toLowerCase() !== "usd" ||
           !/^tran_[A-Za-z0-9_-]+$/.test(transactionId || "") ||
           !/^ref_[A-Za-z0-9_-]+$/.test(refundId || "") ||
-          !Number.isInteger(amountCents) || amountCents <= 0) {
+          !Number.isInteger(amountCents) || amountCents <= 0 ||
+          (Number.isFinite(Number(txn.amount_paid)) && Number(txn.amount_paid) > 0 && amountCents < Number(txn.amount_paid))) {
         throw new Error("Invalid or unexpected Creem refund payload.");
       }
       let { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
