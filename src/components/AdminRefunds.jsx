@@ -9,6 +9,7 @@ export default function AdminRefunds({ adminKey }) {
   const [purchases, setPurchases] = useState([]);
   const [unlinked, setUnlinked] = useState([]);
   const [refundEvents, setRefundEvents] = useState([]);
+  const [apiRefundsEnabled, setApiRefundsEnabled] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,7 @@ export default function AdminRefunds({ adminKey }) {
     setPurchases(data.purchases || []);
     setUnlinked(data.unlinkedPurchases || []);
     setRefundEvents(data.refundEvents || []);
+    setApiRefundsEnabled(data.apiRefundsEnabled === true);
   }, [send]);
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function AdminRefunds({ adminKey }) {
       Approving a request is not a payment refund. Issue an approved refund in your Creem dashboard;
       UXNest deducts credits only after a verified refund webhook.
     </p>
+    {!apiRefundsEnabled && <p style={{ fontSize: 12 }}>Creem API refunds are disabled. Issue full refunds through your Creem dashboard after approval.</p>}
     <button disabled={busy} onClick={() => refresh().catch(e => setError(e.message))}>Refresh</button>
     {error && <p role="alert" style={{ color: "#a32323" }}>{error}</p>}
     {message && <p role="status" style={{ color: "#15634e" }}>{message}</p>}
@@ -68,6 +71,14 @@ export default function AdminRefunds({ adminKey }) {
           {purchase.quantity} credits · {money(purchase.amount_cents, purchase.currency)} · {purchase.payment_provider || "Provider unknown"}
           <span style={{ display: "block", overflowWrap: "anywhere" }}>Transaction: {purchase.creem_transaction_id || "Not linked"}</span>
         </p>}
+        {purchase?.refund_status && purchase.refund_status !== "none" && <p style={{ fontSize: 12 }}>Payment refund state: <strong>{purchase.refund_status}</strong></p>}
+        {request.status === "approved" && apiRefundsEnabled && purchase?.refund_status === "none" &&
+          <button disabled={busy} onClick={() => {
+            if (window.confirm("Issue an IRREVERSIBLE FULL REFUND in Creem for this payment? No automatic retry will be attempted.")) {
+              run("issue_full_refund", { requestId: request.id, confirm: "ISSUE_FULL_REFUND" },
+                "Full refund submitted to Creem. Awaiting confirmation webhook.");
+            }
+          }}>Issue full refund in Creem</button>}
         {["requested", "reviewing"].includes(request.status) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button disabled={busy} onClick={() => run("review", { requestId: request.id, decision: "approved" }, "Approved for refund processing. Issue the refund in Creem.")}>Approve</button>
           <button disabled={busy} onClick={() => run("review", { requestId: request.id, decision: "rejected" }, "Refund request rejected.")}>Reject</button>
