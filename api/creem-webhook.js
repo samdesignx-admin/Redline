@@ -29,6 +29,7 @@ async function saveRefundEvent(db, event, refund, state, detail = null) {
     amount_cents: Number.isInteger(Number(refund.refund_amount)) ? Number(refund.refund_amount) : null,
     currency: refund.refund_currency || null,
     transaction_status: txn?.status || null,
+    refund_status: refund.status || null,
     state, detail,
     updated_at: new Date().toISOString(),
   }, { onConflict: "event_id" });
