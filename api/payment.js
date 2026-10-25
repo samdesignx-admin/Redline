@@ -93,6 +93,46 @@ export default async function handler(req, res) {
       res.status(200).json({ checkout_url: checkout.checkout_url, checkout_id: checkout.id, quantity, total_cents: BETA_PRICE_CENTS * quantity });
       return;
     }
+    if (req.body.action === "history") {
+      const { data: purchases, error: historyError } = await db.from("audit_purchases")
+        .select("id, created_at, amount_cents, quantity, currency, payment_provider, creem_checkout_id")
+        .eq("account_id", sess.accountId).order("created_at", { ascending: false }).limit(100);
+      if (historyError) throw historyError;
+      const ids = (purchases || []).map((p) => p.id);
+      let requests = [];
+      if (ids.length) {
+        const { data, error } = await db.from("audit_refund_requests")
+          .select("purchase_id, status, created_at").eq("account_id", sess.accountId).in("purchase_id", ids);
+        if (error) throw error;
+        requests = data || [];
+      }
+      const statuses = new Map(requests.map((r) => [r.purchase_id, r]));
+      res.status(200).json({ purchases: (purchases || []).map((p) => ({
+        ...p, refund_request: statuses.get(p.id) || null,
+      })) });
+      return;
+    }
+    if (req.body.action === "request_refund") {
+      const purchaseId = String(req.body.purchaseId || "");
+      const reason = String(req.body.reason || "").trim();
+      if (!/^[0-9a-f-]{36}$/i.test(purchaseId) || reason.length < 10 || reason.length > 1000) {
+        res.status(400).json({ error: "Choose a purchase and provide a reason (10–1000 characters)." }); return;
+      }
+      const { data: purchase, error: lookupError } = await db.from("audit_purchases")
+        .select("id, payment_provider, created_at").eq("id", purchaseId).eq("account_id", sess.accountId).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!purchase || purchase.payment_provider !== "creem") {
+        res.status(404).json({ error: "This purchase is not eligible for an in-app refund request." }); return;
+      }
+      const { error: requestError } = await db.from("audit_refund_requests")
+        .insert({ purchase_id: purchase.id, account_id: sess.accountId, reason, status: "requested" });
+      if (requestError) {
+        if (requestError.code === "23505") { res.status(409).json({ error: "A refund request already exists for this purchase." }); return; }
+        throw requestError;
+      }
+      res.status(200).json({ status: "requested", message: "Your refund request was submitted for review. No refund has been issued yet." });
+      return;
+    }
     if (req.body.action === "verify") {
       const checkoutId = String(req.body.checkoutId || "").trim();
       if (!checkoutId || checkoutId.length > 200 || !/^[A-Za-z0-9_-]+$/.test(checkoutId) || checkoutId.includes("checkout_id")) { res.status(400).json({ error: "The checkout reference is missing or malformed. Please return to UXNest and contact support if you were charged." }); return; }
