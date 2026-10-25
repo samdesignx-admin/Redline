@@ -1,5 +1,6 @@
 // Creem one-time checkout for UXNest audit credits.
 import { requireDb, readSession } from "./_lib.js";
+import { syncCreemPurchase } from "./_creem-transactions.js";
 export const maxDuration = 20;
 const BETA_PRICE_CENTS = 500;
 const MAX_PURCHASE_QUANTITY = 20;
@@ -99,6 +100,7 @@ export default async function handler(req, res) {
       const checkout = checkoutResponse?.checkout || checkoutResponse?.data || checkoutResponse;
       const verified = await validateCompletedCheckout(checkout, sess.accountId);
       await grantPurchase(db, { accountId: sess.accountId, checkoutId: verified.checkoutId, quantity: verified.quantity, amountCents: verified.amountCents, currency: verified.currency });
+      await syncCreemPurchase(db, checkout);
       const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", sess.accountId).maybeSingle();
       res.status(200).json({ paid: (acct && acct.paid_audits) || 0, used: (acct && acct.audits_used) || 0, credited: true, quantity: verified.quantity });
       return;
