@@ -45,42 +45,34 @@ export default async function handler(req, res) {
       return;
     }
 
-    /* ---------------- Save a completed audit ---------------- */
+    /* ---------------- Save and charge atomically ---------------- */
     if (action === "create") {
-      const { data: acct } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
-      const used = (acct && acct.audits_used) || 0;
-      const paid = (acct && acct.paid_audits) || 0;
-      const hasFreeAudit = used < AUDIT_QUOTA;
-      if (!hasFreeAudit && paid <= 0) {
-        res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
-        return;
-      }
-
       const a = req.body.audit || {};
-      const { data, error } = await db.from("audits").insert({
-        account_id: accountId,
-        title: a.title || null,
-        mode: a.mode || "files",
-        url: a.url || null,
-        screen_count: a.screenCount || 0,
-        score: typeof a.score === "number" ? a.score : null,
-        assessment: a.assessment || null,
-        scorecard: a.scorecard || null,
-        severities: a.severities || null,
-        pages: a.pages || null,
-        raw_text: (a.rawText || "").slice(0, 60000),
-      }).select().single();
-      if (error) throw error;
-
-      if (hasFreeAudit) {
-        await db.from("accounts").update({ audits_used: used + 1 }).eq("id", accountId);
-      } else {
-        await db.from("accounts").update({ paid_audits: Math.max(paid - 1, 0) }).eq("id", accountId);
+      // Database function locks the account and inserts the audit in one transaction:
+      // two concurrent audits cannot spend one credit twice.
+      const { data, error } = await db.rpc("create_uxnest_audit", {
+        p_account_id: accountId,
+        p_audit: {
+          title: a.title || null,
+          mode: a.mode || "files",
+          url: a.url || null,
+          screenCount: Number.isInteger(a.screenCount) ? a.screenCount : 0,
+          score: typeof a.score === "number" && Number.isFinite(a.score) ? a.score : null,
+          assessment: a.assessment || null,
+          scorecard: a.scorecard || null,
+          severities: a.severities || null,
+          pages: a.pages || null,
+          rawText: String(a.rawText || "").slice(0, 60000),
+        },
+      });
+      if (error) {
+        if (String(error.message || "").includes("AUDIT_PAYMENT_REQUIRED")) {
+          res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
+          return;
+        }
+        throw error;
       }
-      const nextPaid = hasFreeAudit ? paid : Math.max(paid - 1, 0);
-      const nextUsed = hasFreeAudit ? used + 1 : used;
-      const remaining = Math.max(AUDIT_QUOTA - nextUsed, 0) + nextPaid;
-      res.status(200).json({ audit: data, used: nextUsed, paid: nextPaid, remaining });
+      res.status(200).json(data);
       return;
     }
 
