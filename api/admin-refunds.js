@@ -109,16 +109,25 @@ export default async function handler(req, res) {
       if (eventError) throw eventError;
       if (!event) return res.status(404).json({ error: "Event not found." });
       if (event.state === "applied") return res.status(200).json({ note: "Already reconciled." });
-      if (event.refund_status !== "succeeded" || event.transaction_status !== "refunded" ||
+      if (event.refund_status !== "succeeded" ||
           event.currency?.toLowerCase() !== "usd" ||
           !/^tran_[A-Za-z0-9_-]+$/.test(event.transaction_id || "") ||
           !/^ref_[A-Za-z0-9_-]+$/.test(event.refund_id || "") ||
           !Number.isInteger(event.amount_cents) || event.amount_cents <= 0)
         return res.status(409).json({ error: "This is not a confirmed full USD refund; manual review required." });
       const transaction = await getCreemTransaction(event.transaction_id);
-      if (!transaction || transaction.id !== event.transaction_id || transaction.status !== "refunded" ||
-          (Number(transaction.amount_paid) > 0 && event.amount_cents < Number(transaction.amount_paid)))
+      if (!transaction || transaction.id !== event.transaction_id ||
+          !["paid", "refunded"].includes(transaction.status) ||
+          String(transaction.currency || "").toLowerCase() !== "usd" ||
+          !Number.isInteger(Number(transaction.amount_paid)) || Number(transaction.amount_paid) <= 0 ||
+          event.amount_cents < Number(transaction.amount_paid))
         return res.status(409).json({ error: "Creem has not confirmed a fully refunded transaction." });
+      const { data: purchase, error: purchaseError } = await db.from("audit_purchases")
+        .select("amount_cents").eq("creem_transaction_id", event.transaction_id)
+        .eq("payment_provider", "creem").maybeSingle();
+      if (purchaseError) throw purchaseError;
+      if (purchase && event.amount_cents < purchase.amount_cents)
+        return res.status(409).json({ error: "Partial refund cannot reverse an entire audit credit." });
       let { data: applied, error: rpcError } = await db.rpc("apply_creem_refund", {
         p_transaction_id: event.transaction_id,
         p_refund_id: event.refund_id,
