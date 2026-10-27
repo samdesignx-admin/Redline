@@ -4281,6 +4281,148 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
+
+        /* Dark full-width footer: clear hierarchy on desktop and mobile. */
+        .uxn-footer {
+          position: relative;
+          left: 50%;
+          width: 100vw;
+          max-width: 100vw;
+          margin-left: -50vw;
+          margin-top: 62px;
+          color: #E8F4EE;
+          background:
+            radial-gradient(ellipse at 10% 0%, rgba(19,148,107,.18), transparent 44%),
+            linear-gradient(128deg, #071F21 0%, #082C29 52%, #061D20 100%);
+          border-top: 3px solid #1EBA86;
+          text-align: left;
+          overflow: hidden;
+        }
+        .uxn-footer__container {
+          max-width: 1160px;
+          margin: 0 auto;
+          padding: 58px clamp(20px, 4vw, 48px) 23px;
+        }
+        .uxn-footer__layout {
+          display: grid;
+          grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(115px, 1fr));
+          column-gap: clamp(19px, 2.6vw, 40px);
+          row-gap: 32px;
+          align-items: start;
+        }
+        .uxn-footer__brand { min-width: 0; }
+        .uxn-footer__logo {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          padding: 8px 10px;
+          background: #FFFFFF;
+          border: 1px solid rgba(255,255,255,.8);
+          border-radius: 13px;
+          text-decoration: none;
+        }
+        .uxn-footer__tagline {
+          color: #87E5BA;
+          font-weight: 800;
+          font-size: 13.5px;
+          letter-spacing: .1px;
+          margin: 19px 0 9px;
+        }
+        .uxn-footer__description {
+          color: #B1C9C1;
+          line-height: 1.75;
+          font-size: 12.5px;
+          max-width: 275px;
+          margin: 0 0 18px;
+        }
+        .uxn-footer__email {
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          max-width: 100%;
+          font-size: 12.5px;
+          font-weight: 700;
+          color: #B1F2D5;
+          text-decoration: none;
+          overflow-wrap: anywhere;
+        }
+        .uxn-footer__column h2 {
+          color: #FFFFFF;
+          font-family: "Plus Jakarta Sans", sans-serif;
+          font-weight: 800;
+          font-size: 13px;
+          line-height: 1.3;
+          letter-spacing: .15px;
+          margin: 4px 0 18px;
+        }
+        .uxn-footer__column ul {
+          padding: 0;
+          margin: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 12px;
+        }
+        .uxn-footer__column li { margin: 0; padding: 0; }
+        .uxn-footer__column a {
+          display: inline-block;
+          color: #AFCAC1;
+          text-decoration: none;
+          font-size: 12.5px;
+          line-height: 1.55;
+          transition: color 150ms ease;
+        }
+        .uxn-footer a:hover { color: #6FE3AE; }
+        .uxn-footer a:focus-visible {
+          outline: 2px solid #78E9B4;
+          outline-offset: 4px;
+          border-radius: 3px;
+        }
+        .uxn-footer__bottom {
+          margin-top: 43px;
+          border-top: 1px solid rgba(181,233,211,.18);
+          padding-top: 22px;
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px 25px;
+          color: #91B2A9;
+          font-size: 11.5px;
+          line-height: 1.6;
+        }
+        .uxn-footer__bottom a {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin-left: auto;
+          color: #B6EDD2;
+          text-decoration: none;
+          font-weight: 750;
+          white-space: nowrap;
+        }
+        @media (max-width: 1000px) {
+          .uxn-footer__layout {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 29px 22px;
+          }
+          .uxn-footer__brand { grid-column: 1 / -1; }
+          .uxn-footer__description { max-width: 520px; }
+          .uxn-footer__container { padding-top: 42px; }
+        }
+        @media (max-width: 620px) {
+          .uxn-footer { margin-top: 48px; }
+          .uxn-footer__layout {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 31px 17px;
+          }
+          .uxn-footer__container { padding: 39px 22px 23px; }
+          .uxn-footer__brand { grid-column: 1 / -1; }
+          .uxn-footer__column h2 { font-size: 13px; margin-bottom: 14px; }
+          .uxn-footer__column ul { gap: 11px; }
+          .uxn-footer__bottom { margin-top: 30px; gap: 8px; }
+          .uxn-footer__bottom a { margin-left: 0; flex-basis: 100%; margin-top: 4px; }
+        }
         /* Primary UX action: URL first, uploads second. */
         .audit-launch-header { text-align: left; margin: 0 0 17px; }
         .audit-launch-header__kicker { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: #DDF8E7; color: #077B55; font: 800 10px "IBM Plex Mono", monospace; letter-spacing: 1.3px; }
