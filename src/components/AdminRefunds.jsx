@@ -69,6 +69,9 @@ export default function AdminRefunds({ adminKey }) {
         <div style={{ fontSize: 12, overflowWrap: "anywhere" }}>Purchase ID: {request.purchase_id}</div>
         {purchase && <p style={{ fontSize: 13 }}>
           {purchase.quantity} credits · {money(purchase.amount_cents, purchase.currency)} · {purchase.payment_provider || "Provider unknown"}
+          {purchase.created_at && <span style={{ display: "block", fontSize: 12 }}>
+            Purchased: {new Date(purchase.created_at).toLocaleDateString()} · {Date.now() - new Date(purchase.created_at).getTime() <= 14 * 86400000 ? "Within standard 14-day request window" : "Outside standard 14-day window — consider service issues and applicable legal rights"}
+          </span>}
           <span style={{ display: "block", overflowWrap: "anywhere" }}>Transaction: {purchase.creem_transaction_id || "Not linked"}</span>
         </p>}
         {purchase?.refund_status && purchase.refund_status !== "none" && <p style={{ fontSize: 12 }}>Payment refund state: <strong>{purchase.refund_status}</strong></p>}
