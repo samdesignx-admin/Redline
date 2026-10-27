@@ -49,49 +49,61 @@ export default async function handler(req, res) {
         await saveRefundEvent(db, event, refund, "received", "Refund not yet succeeded.");
         res.status(200).send("OK"); return;
       }
+      // The refund status is authoritative in the SIGNED Creem event.
+      // Its embedded transaction.status can still be "paid" immediately
+      // after a successful full refund. Check the refunded amount against
+      // the original amount paid instead of relying on that stale status.
       await saveRefundEvent(db, event, refund, "received");
-      const txn = typeof refund.transaction === "object" ? refund.transaction : null;
-      // Partial refunds do not map reliably to whole audit credits; defer them
-      // for manual review and leave credits unchanged.
-      if (!txn || txn.status !== "refunded") {
-        await saveRefundEvent(db, event, refund, "review_required", "Partial or unconfirmed refund; do not revoke whole credits.");
-        console.warn("[UXNest Creem webhook] Partial or unconfirmed refund requires review.");
-        res.status(200).send("Partial refund acknowledged for manual review");
-        return;
-      }
-      const transactionId = txn?.id || refund.transaction;
+      const txn = refund.transaction && typeof refund.transaction === "object" ? refund.transaction : null;
+      const transactionId = txn?.id;
       const refundId = refund.id;
       const amountCents = Number(refund.refund_amount);
-      if (String(refund.refund_currency || "").toLowerCase() !== "usd" ||
-          !/^tran_[A-Za-z0-9_-]+$/.test(transactionId || "") ||
-          !/^ref_[A-Za-z0-9_-]+$/.test(refundId || "") ||
-          !Number.isInteger(amountCents) || amountCents <= 0 ||
-          (Number.isFinite(Number(txn.amount_paid)) && Number(txn.amount_paid) > 0 && amountCents < Number(txn.amount_paid))) {
-        throw new Error("Invalid or unexpected Creem refund payload.");
+      const paidCents = Number(txn?.amount_paid);
+      const validIdentifiers = /^tran_[A-Za-z0-9_-]+$/.test(transactionId || "") &&
+        /^ref_[A-Za-z0-9_-]+$/.test(refundId || "");
+      const validAmounts = Number.isInteger(amountCents) && amountCents > 0 &&
+        Number.isInteger(paidCents) && paidCents > 0;
+      if (!txn || !validIdentifiers || !validAmounts ||
+          String(refund.refund_currency || "").toLowerCase() !== "usd" ||
+          amountCents < paidCents) {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Unverified, partial, non-USD, or invalid refund; no audit credits reversed.");
+        res.status(200).send("Refund acknowledged for manual review");
+        return;
       }
-      let { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
-        p_transaction_id: transactionId, p_refund_id: refundId, p_amount_cents: amountCents,
+
+      const { data: existing, error: lookupError } = await db.from("audit_purchases")
+        .select("id,amount_cents,refund_status")
+        .eq("creem_transaction_id", transactionId)
+        .eq("payment_provider", "creem").maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!existing) {
+        // Never apply a sample refund to an unrelated customer. Preserve the
+        // signed event for reconciliation if the original purchase is unlinked.
+        await saveRefundEvent(db, event, refund, "pending_link",
+          "Refund succeeded, but no matching Creem purchase transaction is linked.");
+        res.status(200).send("Refund recorded for purchase reconciliation");
+        return;
+      }
+      if (amountCents < existing.amount_cents) {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Refund is smaller than the recorded purchase amount.");
+        res.status(200).send("Partial refund recorded for manual review");
+        return;
+      }
+
+      const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
+        p_transaction_id: transactionId,
+        p_refund_id: refundId,
+        p_amount_cents: amountCents,
       });
       if (refundError) throw refundError;
-      if (recorded !== true) {
-        // A refund may arrive before transaction linkage. Attempt provider-backed reconciliation.
-        const linked = await syncRefundTransactionFromCreem(db, transactionId);
-        if (linked) {
-          ({ data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
-            p_transaction_id: transactionId, p_refund_id: refundId, p_amount_cents: amountCents,
-          }));
-          if (refundError) throw refundError;
-        }
-      }
-      if (recorded !== true) {
-        await saveRefundEvent(db, event, refund, "pending_link", "Refund purchase not linked.");
-        throw new Error("Refund purchase not linked; retry after reconciliation.");
-      }
+      if (recorded !== true) throw new Error("Creem refund could not be reconciled.");
       await saveRefundEvent(db, event, refund, "applied");
-      res.status(200).send("OK");
+      res.status(200).send("Refund applied");
       return;
     }
-    if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
+        if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
     let checkout = event.object || {};
     let metadata = checkout.metadata || {};
     const expectedMode = process.env.CREEM_MODE || "test";
