@@ -25,7 +25,7 @@ export default async function handler(req, res) {
       const ids = [...new Set((requests || []).map(r => r.purchase_id))];
       let purchases = [];
       if (ids.length) {
-        const p = await db.from("audit_purchases").select("id,account_id,quantity,amount_cents,currency,payment_provider,creem_transaction_id,refund_status").in("id", ids);
+        const p = await db.from("audit_purchases").select("id,account_id,created_at,quantity,amount_cents,currency,payment_provider,creem_transaction_id,refund_status").in("id", ids);
         if (p.error) throw p.error;
         purchases = p.data || [];
       }
