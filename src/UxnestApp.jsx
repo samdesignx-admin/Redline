@@ -1322,25 +1322,31 @@ function Footer({ onOpenLegal }) {
 /* Upload / URL screens                                                    */
 /* ----------------------------------------------------------------------- */
 function ModeTabs({ mode, setMode }) {
+  const choices = [
+    { key: "url", label: "Website URL", description: "Audit a live website", icon: Globe },
+    { key: "files", label: "Screenshots & PDF", description: "Review uploaded screens", icon: ImageIcon },
+  ];
   return (
-    <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 20 }}>
-      {[
-        { key: "files", label: "Screens & PDFs", icon: Upload },
-        { key: "url", label: "Website URL", icon: Globe },
-      ].map((m) => {
-        const Icon = m.icon;
-        const active = mode === m.key;
+    <div role="tablist" aria-label="Choose an audit source" className="audit-source-options">
+      {choices.map((choice) => {
+        const Icon = choice.icon;
+        const active = mode === choice.key;
         return (
           <button
-            key={m.key}
-            onClick={() => setMode(m.key)}
-            style={{
-              display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 99,
-              border: `1px solid ${active ? C.gold : C.border}`, background: active ? C.goldSoft : C.surface,
-              color: active ? C.gold : C.muted, fontSize: 13, fontWeight: 500, cursor: "pointer",
-            }}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls="audit-source-panel"
+            id={`audit-tab-${choice.key}`}
+            key={choice.key}
+            onClick={() => setMode(choice.key)}
+            className={`audit-source-option${active ? " is-active" : ""}`}
           >
-            <Icon size={14} /> {m.label}
+            <span className="audit-source-option__icon"><Icon size={19} strokeWidth={2.2} /></span>
+            <span className="audit-source-option__copy">
+              <span className="audit-source-option__title">{choice.label}</span>
+              <span className="audit-source-option__description">{choice.description}</span>
+            </span>
           </button>
         );
       })}
@@ -1351,15 +1357,22 @@ function ModeTabs({ mode, setMode }) {
 function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOver, error, screenLimit }) {
   return (
     <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+        <span style={{ display: "grid", placeItems: "center", width: 36, height: 36, borderRadius: 10, background: "#DDF6E9", color: "#08795B" }}><ImageIcon size={19} /></span>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#0C3A30" }}>Upload your screenshots</h2>
+          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#55786D" }}>Screens, mockups, wireframes or a PDF</p>
+        </div>
+      </div>
       <label
         htmlFor="uxnest-file-input"
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); onAddFiles(e.dataTransfer.files); }}
         style={{
-          display: "block", position: "relative", border: `1.5px dashed ${dragOver ? C.gold : C.border}`,
-          background: dragOver ? C.goldSoft : C.surface, borderRadius: 14,
-          padding: images.length ? 18 : 38, textAlign: "center", cursor: "pointer", transition: "all 160ms ease",
+          display: "block", position: "relative", border: `2px dashed ${dragOver ? "#059669" : "#8CD7B5"}`,
+          background: dragOver ? "#E0F9EA" : "#F5FCF8", borderRadius: 14,
+          padding: images.length ? 18 : 30, textAlign: "center", cursor: "pointer", transition: "all 160ms ease",
         }}
       >
         <input
@@ -1372,8 +1385,8 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
         />
         {images.length === 0 ? (
           <>
-            <Upload size={26} color={C.gold} strokeWidth={1.8} style={{ marginBottom: 10 }} />
-            <div style={{ color: C.text, fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Drop screens or PDFs here, or tap to browse</div>
+            <Upload size={29} color="#0E8A64" strokeWidth={2} style={{ marginBottom: 10 }} />
+            <div style={{ color: C.text, fontSize: 15, fontWeight: 750, marginBottom: 6 }}>Tap to upload or drag files here</div>
             <div style={{ color: C.muted, fontSize: 12.5 }}>
               PNG, JPG, WEBP, SVG or PDF · up to {screenLimit} files
             </div>
@@ -1428,12 +1441,12 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
         onClick={onRun}
         style={{
           width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 10, border: "none",
-          background: images.length ? C.now : C.surfaceAlt, color: images.length ? C.dark : C.muted, borderRadius: 999,
-          fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 15, cursor: images.length ? "pointer" : "not-allowed",
+          background: images.length ? "linear-gradient(120deg, #0F9368, #12B981)" : "#E0EBE5", color: images.length ? "#FFFFFF" : "#5B7770",
+          fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 15, cursor: images.length ? "pointer" : "not-allowed",
           display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
         }}
       >
-        <Sparkles size={17} strokeWidth={2.2} /> Run the audit
+        <Sparkles size={17} strokeWidth={2.2} /> Audit uploaded screens
       </button>
     </div>
   );
@@ -1441,52 +1454,58 @@ function UploadScreen({ images, onAddFiles, onRemove, onRun, dragOver, setDragOv
 
 function UrlScreen({ url, setUrl, targetKeywords, setTargetKeywords, onRun, error, navLimit }) {
   return (
-    <div>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 22 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          <Globe size={18} color={C.gold} />
-          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 16, color: C.text }}>Review a live website</span>
+    <section aria-label="Website URL audit">
+      <div className="audit-url-hero">
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 13 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 12, background: "#D3F7E2", color: "#067B54", display: "grid", placeItems: "center" }}>
+            <Globe size={22} strokeWidth={2.1} />
+          </span>
+          <div>
+            <h2 style={{ fontSize: 19, lineHeight: 1.2, fontWeight: 850, color: "#103F32", margin: 0 }}>Enter your website URL</h2>
+            <p style={{ fontSize: 12.5, color: "#577B6E", margin: "4px 0 0" }}>Your audit starts here</p>
+          </div>
         </div>
-        <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "0 0 14px 0" }}>
-          UXNest reads the homepage and up to {navLimit} main navigation pages. This
-          is a content/structure-based review, not a pixel-level screenshot audit.
-        </p>
+        <label htmlFor="uxnest-website-url" style={{ display: "block", fontSize: 12.5, fontWeight: 750, color: "#285847", marginBottom: 7 }}>Website address</label>
         <input
+          id="uxnest-website-url"
+          className="audit-url-input"
           type="url"
-          placeholder="example.com"
+          inputMode="url"
+          autoComplete="url"
+          autoCapitalize="none"
+          spellCheck={false}
+          placeholder="https://example.com"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          style={inputStyle}
+          onKeyDown={(e) => { if (e.key === "Enter" && url.trim()) { e.preventDefault(); onRun(); } }}
         />
-        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.textDim, marginTop: 14, marginBottom: 6 }}>
-          Target SEO keywords <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
-        </label>
-        <input
-          type="text"
-          placeholder="e.g. AI UX audit, UX audit tool"
-          value={targetKeywords}
-          onChange={(e) => setTargetKeywords(e.target.value)}
-          maxLength={240}
-          style={inputStyle}
-        />
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 5 }}>
-          Add up to 8 comma-separated keywords so UXNest can check title, H1, headings, and content alignment.
-        </div>
-        {error && <div style={{ marginTop: 10, fontSize: 13, color: C.critical }}>{error}</div>}
-        <button
-          disabled={!url.trim()}
-          onClick={onRun}
-          style={{
-            width: "100%", marginTop: 16, padding: "14px 0", borderRadius: 10, border: "none",
-            background: url.trim() ? C.now : C.surfaceAlt, color: url.trim() ? C.dark : C.muted, borderRadius: 999,
-            fontWeight: 600, fontSize: 15, cursor: url.trim() ? "pointer" : "not-allowed",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}
-        >
-          <Sparkles size={17} /> Review this site
+        {error && <div role="alert" style={{ marginTop: 12, color: C.critical, background: "#FFF4F2", borderRadius: 9, padding: "10px 12px", fontSize: 13 }}>{error}</div>}
+        <button type="button" disabled={!url.trim()} onClick={onRun} className="audit-primary-action">
+          <Sparkles size={19} strokeWidth={2.2} /> Analyze this website <ArrowRight size={18} />
         </button>
+        <p style={{ fontSize: 11.5, color: "#537369", lineHeight: 1.55, margin: "12px 0 0" }}>
+          Reviews public website content, structure and up to {navLimit} navigation pages. For visual-only designs, choose Screenshots & PDF.
+        </p>
       </div>
-    </div>
+      <details className="audit-extra-options">
+        <summary>Optional SEO keywords <span style={{ marginLeft: "auto", color: "#577B6E", fontWeight: 500 }}>Advanced</span> <ChevronDown size={15} /></summary>
+        <div style={{ paddingTop: 12 }}>
+          <label htmlFor="uxnest-seo-keywords" style={{ display: "block", fontSize: 12, fontWeight: 700, color: C.textDim, marginBottom: 7 }}>Target SEO keywords</label>
+          <input
+            id="uxnest-seo-keywords"
+            type="text"
+            placeholder="e.g. AI UX audit, UX audit tool"
+            value={targetKeywords}
+            onChange={(e) => setTargetKeywords(e.target.value)}
+            maxLength={240}
+            style={inputStyle}
+          />
+          <p style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "8px 0 0" }}>
+            Up to 8 comma-separated keywords for title, headings and content alignment.
+          </p>
+        </div>
+      </details>
+    </section>
   );
 }
 
@@ -3126,7 +3145,7 @@ function PaymentResultScreen({ status, quantity = 1, message, onRetry, onContinu
 }
 
 export default function UxnestApp() {
-  const [mode, setMode] = useState("files");
+  const [mode, setMode] = useState("url");
   const [images, setImages] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -3929,7 +3948,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
   const onReset = useCallback(() => {
-    setReport(null); setRawReport(""); setImages([]); setUrlInput(""); setTargetKeywords(""); setError(null); setHistorySaved(false);
+    setReport(null); setRawReport(""); setMode("url"); setImages([]); setUrlInput(""); setTargetKeywords(""); setError(null); setHistorySaved(false);
     setAuditTitle("");
     setAuditedPages([]);
     setAuditScreenshot(null);
