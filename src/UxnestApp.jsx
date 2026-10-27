@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import AdminPage from "./AdminPage.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
+import HelpPage from "./components/HelpPage.jsx";
 import BrandLogo from "./components/BrandLogo.jsx";
 import SupportChat from "./SupportChat.jsx";
 import { LEGAL_CONTENT, POLICY_UPDATED } from "./legal/policies.js";
@@ -26,7 +27,7 @@ import {
   Accessibility as A11yIcon, TrendingUp, Brain, Rocket,
   Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
   ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft, EyeOff,
-  FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu,
+  FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu, Receipt, LifeBuoy,
 } from "lucide-react";
 
 /* ----------------------------------------------------------------------- */
@@ -3136,7 +3137,7 @@ export default function UxnestApp() {
   const [source, setSource] = useState({ mode: "files", url: "" });
   const [error, setError] = useState(null);
 
-  const VALID_PAGES = ["landing", "audit", "myaudits", "dashboard", "admin"];
+  const VALID_PAGES = ["landing", "audit", "myaudits", "dashboard", "billing", "help", "admin"];
   const [page, setPage] = useState(() => {
     const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
     return VALID_PAGES.includes(h) ? h : "landing";
@@ -3201,7 +3202,6 @@ export default function UxnestApp() {
   const pendingRunRef = useRef(null);
 
   const [user, setUser] = useState(null);
-  const [showBilling, setShowBilling] = useState(false);
 
   // Restore the signed-in user from the server session token.
   useEffect(() => {
@@ -3992,6 +3992,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
     setAuditsUsed(0);
     setShowHistory(false);
     setToken("");
+    setPage("landing");
+    setMenuOpen(false);
   };
 
   const doDownloadPdf = useCallback(() => {
@@ -4138,7 +4140,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         .nav-mobile { display: flex !important; }
         @media (min-width: 640px) {
           .nav-desktop { display: flex !important; }
-          .nav-mobile, .nav-mobile-menu { display: none !important; }
+          .nav-mobile { display: none !important; }
         }
         ::-webkit-scrollbar { display: none; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -4202,21 +4204,30 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
             <button onClick={() => { onReset(); setPage("audit"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 14px", cursor: "pointer" }}>
               <Zap size={13} /> New Audit
             </button>
-            <button onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" style={{ ...iconBtnStyle, width: 36, height: 36 }}>
+            {page !== "admin" && <button type="button" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-controls="uxnest-account-menu" aria-expanded={menuOpen} style={{ ...iconBtnStyle, width: 36, height: 36 }}>
               {menuOpen ? <X size={18} color={C.text} /> : <Menu size={18} color={C.text} />}
-            </button>
+            </button>}
           </div>
 
           {/* Desktop New Audit CTA */}
-          <button className="nav-desktop" onClick={() => { onReset(); setPage("audit"); setLegalPage(null); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 16px", cursor: "pointer" }}>
+          <button className="nav-desktop" onClick={() => { onReset(); setPage("audit"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 5, background: C.now, color: C.dark, border: "none", fontSize: 12.5, fontWeight: 700, borderRadius: 999, padding: "8px 16px", cursor: "pointer" }}>
             <Zap size={13} /> New Audit
           </button>
+          {page !== "admin" && (
+            <button type="button" className="nav-desktop" aria-label="Account menu" aria-controls="uxnest-account-menu" aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+              style={{ ...iconBtnStyle, width: 36, height: 36 }}>
+              {menuOpen ? <X size={18} color={C.text} /> : <Menu size={18} color={C.text} />}
+            </button>
+          )}
         </div>
 
-        {/* Mobile dropdown menu */}
-        {menuOpen && (
-          <div className="nav-mobile-menu" style={{ maxWidth: 720, margin: "10px auto 0", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
-            {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge]].map(([key, label, Icon]) => (
+        {/* Account menu is available via the hamburger on both desktop and mobile. */}
+        {menuOpen && page !== "admin" && (
+          <div style={{ maxWidth: 720, margin: "10px auto 0", display: "flex", justifyContent: "flex-end" }}>
+          <nav id="uxnest-account-menu" aria-label="Account and help" className="nav-account-menu" style={{ width: "min(100%, 370px)", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
+            {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge],
+              ...(user ? [["billing", "Billing & Purchases", Receipt]] : []), ["help", "Help & Support", LifeBuoy]].map(([key, label, Icon]) => (
               <button key={key} onClick={() => { setPage(key); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: page === key && !legalPage ? C.gold : C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
                 <Icon size={16} /> {label}
               </button>
@@ -4232,11 +4243,10 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                 <LogIn size={16} /> Log in / Sign up
               </button>
             )}
+          </nav>
           </div>
         )}
       </header>
-      {user && <div style={{ maxWidth: 720, margin: "0 auto 12px", textAlign: "right" }}><button onClick={() => setShowBilling(v => !v)} style={{ border: "1px solid #9fcfc1", borderRadius: 10, padding: "9px 14px", background: "#eef8f4", color: "#155b4a", cursor: "pointer", fontWeight: 700 }}>Billing & Purchases</button></div>}
-      {user && showBilling && <BillingPanel getToken={getToken} onClose={() => setShowBilling(false)} />}
       {user && user.ephemeral && (
         <div style={{ maxWidth: 720, margin: "0 auto 14px", fontSize: 11.5, color: C.high, background: C.highSoft, border: `1px solid ${C.high}44`, borderRadius: 8, padding: "8px 12px" }}>
           Persistent storage isn't available right now — your account and history will only last for this session.
@@ -4246,6 +4256,16 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       <main style={{ maxWidth: 720, margin: "0 auto" }}>
         {legalPage ? (
           <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} onOpenLegal={setLegalPage} />
+        ) : page === "billing" ? (
+          user
+            ? <BillingPanel getToken={getToken} onClose={() => setPage("landing")} />
+            : <section style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, padding: 24, textAlign: "center" }}>
+                <h1 style={{ fontSize: 21, color: C.text }}>Billing & Purchases</h1>
+                <p style={{ fontSize: 14, color: C.muted }}>Log in to view your account's payment history.</p>
+                <button onClick={() => requireLogin("billing")} style={{ background: C.now, border: "none", borderRadius: 9, padding: "11px 20px", fontWeight: 750, cursor: "pointer" }}>Log in</button>
+              </section>
+        ) : page === "help" ? (
+          <HelpPage getToken={getToken} user={user} onLogin={() => requireLogin("billing")} onClose={() => setPage("landing")} />
         ) : page === "landing" && !analyzing ? (
           <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} isLoggedIn={!!user} />
         ) : page === "admin" ? (
