@@ -100,7 +100,7 @@ export default function AdminRefunds({ adminKey }) {
       <div style={{ fontSize: 12, overflowWrap: "anywhere" }}>Event: {event.event_id} · Transaction: {event.transaction_id || "Not supplied"}</div>
       <p style={{ fontSize: 13 }}>{money(event.amount_cents, event.currency)} · Provider status: {event.refund_status || "Unknown"} / {event.transaction_status || "Unknown"}</p>
       {event.detail && <p style={{ fontSize: 12 }}>{event.detail}</p>}
-      {event.refund_status === "succeeded" && event.transaction_status === "refunded" && <button disabled={busy} onClick={() => run("retry_event", { eventId: event.event_id }, "Verified refund reconciled; audit credits adjusted.")}>Verify and reconcile</button>}
+      {event.refund_status === "succeeded" && event.currency?.toLowerCase() === "usd" && !!event.transaction_id && <button disabled={busy} onClick={() => run("retry_event", { eventId: event.event_id }, "Verified refund reconciled; audit credits adjusted.")}>Verify and reconcile</button>}
     </article>)}
   </section>;
 }
