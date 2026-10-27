@@ -114,7 +114,7 @@ export default async function handler(req, res) {
             throw new Error("Creem checkout could not be confirmed for account crediting.");
           }
         } catch (lookupError) {
-          if (/\\(404\\)/.test(String(lookupError?.message || ""))) {
+          if (lookupError?.message === "Creem transaction lookup failed (404)") {
             console.info("[UXNest Creem webhook] Synthetic test checkout acknowledged; no credits granted.");
             res.status(200).send("Synthetic checkout test acknowledged; no credits granted");
             return;
