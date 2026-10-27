@@ -41,6 +41,7 @@ export default function BillingPanel({ getToken, onClose }) {
     {error && <p role="alert" style={{ color: "#a42323" }}>{error}</p>}
     {data && <>
       <p><strong>{data.availableCredits}</strong> available paid audit credits</p>
+      <p style={{ fontSize: 12, lineHeight: 1.55, color: "#48665E", marginTop: 0 }}>For eligibility and processing details, read the <a href="/#legal-refunds" target="_blank" rel="noopener noreferrer" style={{ color: "#12654F", fontWeight: 700 }}>Refund Policy</a>. Payment invoices and refunds are handled by Creem.</p>
       {data.creditAdjustmentDue > 0 && <p style={{ fontSize: 13 }}>Credit adjustment: {data.creditAdjustmentDue} previously refunded credit(s) were already used. Future credit purchases will settle this balance first.</p>}
       {!data.purchases.length && <p>No purchases recorded for this account yet.</p>}
       {data.purchases.map(p => {
