@@ -3,6 +3,7 @@ import AdminPage from "./AdminPage.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
 import BrandLogo from "./components/BrandLogo.jsx";
 import SupportChat from "./SupportChat.jsx";
+import { LEGAL_CONTENT, POLICY_UPDATED } from "./legal/policies.js";
 import { stripDashLines, parseIssues, parseNumberedList, parseDashList, parseSummary, parseTop10, parseScorecard, normalizeReportText, parseReport, buildPlainTextSummary } from "./utils/reportParser.js";
 import {
   Squiggle,
@@ -1200,53 +1201,99 @@ const linkBtnStyle = { background: "none", border: "none", color: C.gold, fontWe
 /* ----------------------------------------------------------------------- */
 /* Legal pages                                                              */
 /* ----------------------------------------------------------------------- */
-const LEGAL_CONTENT = {
-  terms: {
-    title: "Terms of Service",
-    body: `Placeholder template — have this reviewed by a lawyer before real use.
 
-By using UXNest, you agree this tool provides AI-generated UX analysis for informational purposes only. It is not professional design, legal, accessibility-certification, or compliance advice, and UXNest's creators accept no liability for decisions made based on its output.
+function LegalContactForm({ pageKey }) {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState("");
+  const [sendError, setSendError] = useState("");
 
-You're responsible for the content you upload, including screenshots, PDFs, and URLs. Don't upload material you don't have the right to share, including other people's private data.
+  async function sendRequest(event) {
+    event.preventDefault();
+    if (sending) return;
+    setSending(true);
+    setSent("");
+    setSendError("");
+    try {
+      const response = await fetch("/api/support", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          message: message.trim(),
+          page: "legal-" + pageKey,
+          transcript: [],
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to send your request.");
+      setSent(data.ref ? "Your message was sent. Reference: " + data.ref : "Your message was sent.");
+      setMessage("");
+    } catch (error) {
+      setSendError(error.message || "Unable to send your request.");
+    } finally {
+      setSending(false);
+    }
+  }
 
-Accounts are provided as-is for this prototype, without uptime or data-retention guarantees. We may change or discontinue features at any time.`,
-  },
-  privacy: {
-    title: "Privacy Policy",
-    body: `Placeholder template — have this reviewed by a lawyer before real use.
-
-UXNest stores your name, email, company and (optionally) mobile number, along with the audits you run, in a private Postgres database. Passwords are never stored — only a scrypt hash. Your data is used to operate your account and is not sold.
-
-Uploaded screenshots and PDFs are sent to Claude (via Anthropic's API) to generate your report and are not separately stored by UXNest. Website reviews fetch publicly available page content.
-
-Don't treat this prototype as suitable for storing sensitive personal data about yourself or others.`,
-  },
-  disclaimer: {
-    title: "Disclaimer",
-    body: `UXNest produces AI-generated UX commentary. It is not a certified accessibility audit (WCAG conformance still requires manual and assistive-technology testing), not legal advice, and not a guarantee of business outcomes.
-
-Severity ratings, scores, and recommendations are estimates based on a language model's interpretation of what was uploaded or fetched — they can be incomplete, outdated, or simply wrong. Always validate critical or legal-risk findings (e.g., accessibility compliance, security, regulated-industry disclosures) with a qualified professional before acting on them.
-
-Website reviews are based on fetched page content, not a true visual screenshot, and may miss purely visual issues.`,
-  },
-};
-
-function LegalPage({ pageKey, onBack }) {
-  const page = LEGAL_CONTENT[pageKey];
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "8px 4px 60px" }}>
-      <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, cursor: "pointer", marginBottom: 18, padding: 0 }}>
-        <ArrowLeft size={14} /> Back
+    <section style={{ marginTop: 28, border: "1px solid #CBE3D9", background: "#F2FAF6", borderRadius: 16, padding: "22px 18px" }} aria-label="Contact UXNest">
+      <h3 style={{ color: C.text, fontSize: 17, margin: "0 0 8px", fontWeight: 800 }}>Questions or data requests?</h3>
+      <p style={{ color: C.textDim, lineHeight: 1.65, fontSize: 13.5, marginTop: 0 }}>Reach the UXNest team about privacy access or deletion, legal questions, a billing issue or an audit problem. Do not include passwords or payment card numbers. Account-related requests may require verification.</p>
+      <form onSubmit={sendRequest} style={{ display: "grid", gap: 12 }}>
+        <label style={{ display: "grid", gap: 5, color: C.text, fontSize: 13, fontWeight: 650 }}>
+          Your email address
+          <input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" style={{ ...inputStyle, fontSize: 14, background: "#fff" }} />
+        </label>
+        <label style={{ display: "grid", gap: 5, color: C.text, fontSize: 13, fontWeight: 650 }}>
+          Your request
+          <textarea required minLength={5} maxLength={3000} rows={4} value={message} onChange={event => setMessage(event.target.value)} placeholder="Please describe your question, refund issue or data request..." style={{ ...inputStyle, fontSize: 14, minHeight: 100, resize: "vertical", background: "#fff" }} />
+        </label>
+        <button type="submit" disabled={sending || message.trim().length < 5} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 12, padding: "12px 18px", fontWeight: 800, cursor: "pointer", opacity: sending ? 0.7 : 1 }}>
+          {sending ? "Sending..." : "Send request to UXNest"}
+        </button>
+        {sent && <p role="status" style={{ color: "#166b4c", fontSize: 13, margin: 0 }}>{sent}</p>}
+        {sendError && <p role="alert" style={{ color: "#b42318", fontSize: 13, margin: 0 }}>{sendError}</p>}
+      </form>
+    </section>
+  );
+}
+
+function LegalPage({ pageKey, onBack, onOpenLegal }) {
+  const page = LEGAL_CONTENT[pageKey];
+  if (!page) return null;
+  return (
+    <article style={{ maxWidth: 700, margin: "0 auto", padding: "8px 4px 60px" }}>
+      <button type="button" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: C.muted, fontSize: 13, marginBottom: 18, padding: 0, cursor: "pointer" }}>
+        <ArrowLeft size={14} /> Back to UXNest
       </button>
-      <h2 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, color: C.text, marginBottom: 14 }}>{page.title}</h2>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
-        {page.body.split("\n\n").map((p, i) => (
-          <p key={i} style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.65, margin: i === 0 ? "0 0 12px 0" : "0 0 12px 0", fontStyle: i === 0 ? "italic" : "normal" }}>
-            {p}
-          </p>
+      <nav aria-label="Legal policies" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+        {Object.entries(LEGAL_CONTENT).map(([key, item]) => (
+          <button key={key} type="button" onClick={() => onOpenLegal(key)}
+            aria-current={key === pageKey ? "page" : undefined}
+            style={{ border: "1px solid " + (key === pageKey ? "#46A18B" : "#D1E1DC"), background: key === pageKey ? "#E5F6EF" : "#fff", color: key === pageKey ? "#14664F" : C.textDim, borderRadius: 99, padding: "8px 12px", fontSize: 12, fontWeight: key === pageKey ? 800 : 600, cursor: "pointer" }}>
+            {item.title}
+          </button>
+        ))}
+      </nav>
+      <header style={{ marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: "clamp(25px, 5vw, 33px)", fontWeight: 850, color: C.text, lineHeight: 1.15, margin: "0 0 10px" }}>{page.title}</h1>
+        <p style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: "0 0 12px" }}>Last updated: <time dateTime="2026-10-27">{POLICY_UPDATED}</time></p>
+        <p style={{ fontSize: 15, color: C.textDim, lineHeight: 1.65, margin: 0 }}>{page.summary}</p>
+      </header>
+      <div style={{ background: C.surface, border: "1px solid " + C.borderSoft, borderRadius: 16, padding: "clamp(18px, 4vw, 30px)" }}>
+        {page.sections.map((s, index) => (
+          <section key={s.heading} style={{ marginTop: index ? 24 : 0 }}>
+            <h2 style={{ color: C.text, fontSize: 17, fontWeight: 800, lineHeight: 1.45, margin: "0 0 10px" }}>{s.heading}</h2>
+            {s.paragraphs.map((paragraph, i) => (
+              <p key={i} style={{ color: C.textDim, fontSize: 13.5, lineHeight: 1.8, margin: "0 0 12px" }}>{paragraph}</p>
+            ))}
+          </section>
         ))}
       </div>
-    </div>
+      <LegalContactForm key={pageKey} pageKey={pageKey} />
+    </article>
   );
 }
 
@@ -1257,7 +1304,7 @@ function Footer({ onOpenLegal }) {
         UXNest gives AI-generated UX analysis. It does not replace a certified accessibility audit, legal review, or professional UX research.
       </p>
       <div style={{ display: "flex", justifyContent: "center", gap: 14 }}>
-        {["terms", "privacy", "disclaimer"].map((k) => (
+        {["terms", "privacy", "refunds", "disclaimer"].map((k) => (
           <button key={k} onClick={() => onOpenLegal(k)} style={{ background: "none", border: "none", color: C.muted, fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
             {LEGAL_CONTENT[k].title}
           </button>
@@ -4177,7 +4224,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
 
       <main style={{ maxWidth: 720, margin: "0 auto" }}>
         {legalPage ? (
-          <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} />
+          <LegalPage pageKey={legalPage} onBack={() => setLegalPage(null)} onOpenLegal={setLegalPage} />
         ) : page === "landing" && !analyzing ? (
           <LandingPage onStart={() => setPage("audit")} onOpenLegal={setLegalPage} isLoggedIn={!!user} />
         ) : page === "admin" ? (
