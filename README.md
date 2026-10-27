@@ -25,9 +25,35 @@ npm run dev            # frontend only
 ## Known prototype limitations (backend work pending)
 - Auth/history use in-browser fallbacks — replace with Supabase or similar
 - Email report opens a mailto: draft — real delivery needs Resend/SendGrid
-- Legal pages are placeholder templates — get lawyer review before charging
+- Legal policies are now published (Terms, Privacy, Refunds, AI/Accessibility disclaimer); confirm the legal operator identity and obtain counsel review before public paid launch
 - Rate limiting in `api/audit.js` is in-memory per instance — add Redis
   (e.g. Upstash) before public launch
+
+
+## Published UXNest policies (updated October 27, 2026)
+
+- Terms of Service: https://uxnest.ai/#legal-terms
+- Privacy Policy: https://uxnest.ai/#legal-privacy
+- Refund Policy: https://uxnest.ai/#legal-refunds
+- AI & Accessibility Disclaimer: https://uxnest.ai/#legal-disclaimer
+
+Policy content is maintained in `src/legal/policies.js`. The website renders
+it through the LegalPage component in `src/UxnestApp.jsx`. The footer, signup
+disclosure, account Billing & Purchases panel, and the audit-credit checkout
+widget link to the relevant policies.
+
+Creem acts as merchant of record for checkout, taxes, buyer invoices and
+refund payment processing. UXNest reviews customer requests and handles
+product support. The beta refund policy offers a 14-day request window for
+unused purchased credit packs, generally requiring enough unused credits to
+reverse the full purchase. Mandatory rights and defective-service exceptions
+continue to apply. Account and privacy inquiries use the contact form on the
+legal pages, delivered through the existing Resend-backed support endpoint.
+
+**Launch owner checks:** Confirm the business's legal operator name, address,
+applicable jurisdiction and contact route; approve the proposed 14-day refund
+terms; arrange jurisdiction-appropriate legal/privacy review. The policy
+content is not a substitute for licensed legal advice.
 
 ## Version
 v1.0 benchmark — see git tags.
