@@ -4177,8 +4177,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
 
       <header style={{ position: "sticky", top: 0, zIndex: 40, background: C.surface, boxShadow: "0 1px 0 rgba(18,48,43,0.08)", margin: "-20px -14px 18px", padding: "12px 14px" }}>
         <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div onClick={() => { setPage("landing"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", cursor: "pointer" }} aria-label="UXNest home">
-            <BrandLogo size={28} />
+          <div onClick={() => { setPage("landing"); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", cursor: "pointer", flex: "0 1 152px", minWidth: 0, width: "clamp(105px, 36vw, 160px)" }} aria-label="UXNest home">
+            <BrandLogo size={38} />
           </div>
 
           {/* Desktop nav — hidden on mobile via CSS class */}
@@ -4283,7 +4283,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                     <Stamp size={20} color={C.gold} strokeWidth={2} />
                     <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: 2, color: C.gold }}>SENIOR UX REVIEW</span>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "center", margin: "0 0 12px" }}><BrandLogo size={54} /></div>
+                  <div style={{ display: "flex", justifyContent: "center", maxWidth: "100%", margin: "0 0 12px" }}><BrandLogo size={78} /></div>
                   <p style={{ color: C.muted, fontSize: 14.5, lineHeight: 1.55, margin: "0 auto", maxWidth: 440 }}>
                     Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
                   </p>
