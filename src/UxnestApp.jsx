@@ -2657,21 +2657,31 @@ function HistoryPanel({ entries, onOpen, onClose, loading }) {
 /* Marketing landing page                                                   */
 /* ----------------------------------------------------------------------- */
 const FEATURES = [
-  { icon: ImageIcon, img: "/images/feature-screenshots.jpg", title: "Screenshot Analysis", desc: "Upload up to 5 screens (20 on Pro) for a full visual UX review." },
+  { icon: ImageIcon, img: "/images/feature-screenshots.jpg", title: "Screenshot Analysis", desc: "Upload screenshots and interface designs for AI-assisted visual UX review." },
   { icon: FileType2, img: "/images/feature-pdf.jpg", title: "PDF Upload", desc: "Submit design documents, wireframes, or prototypes as PDFs." },
   { icon: Globe, img: "/images/feature-url.jpg", title: "URL Crawl & Review", desc: "Enter a URL and UXNest explores the top pages for a site-wide audit." },
-  { icon: FileText, img: "/images/feature-reports.jpg", title: "Structured Reports", desc: "Findings across usability, accessibility, visual design, trust & conversion." },
+  { icon: FileText, img: "/images/feature-reports.jpg", title: "Structured UX & SEO Reports", desc: "Evidence-based findings across seven areas, including website SEO where verifiable." },
   { icon: Lightbulb, img: "/images/feature-ai.jpg", title: "AI Recommendations", desc: "Prioritized, actionable recommendations ranked by impact." },
-  { icon: Download, img: "/images/feature-deck.jpg", title: "Slide-Deck Report", desc: "A 12-slide presentation deck ready to share with your team." },
+  { icon: Download, img: "/images/feature-deck.jpg", title: "Shareable Reports", desc: "Export a PDF report or 12-slide presentation deck for your team." },
 ];
 
 const DIMENSIONS = [
-  { icon: NavIcon, img: "/images/dim-usability.jpg", title: "Usability", desc: "Navigation, task completion, user flow analysis" },
-  { icon: Palette, img: "/images/dim-visualdesign.jpg", title: "Visual Design", desc: "Layout, typography, color, and visual hierarchy" },
-  { icon: A11yIcon, img: "/images/dim-accessibility.jpg", title: "Accessibility", desc: "WCAG compliance and inclusive design standards" },
-  { icon: ShieldCheck, img: "/images/dim-trust.jpg", title: "Trust & Credibility", desc: "Security signals, social proof, and brand perception" },
-  { icon: TrendingUp, img: "/images/dim-conversion.jpg", title: "Conversion", desc: "CTA effectiveness, friction points, and persuasion patterns" },
-  { icon: Brain, img: "/images/dim-cognitive.jpg", title: "Cognitive Load", desc: "Information density, mental models, and user comprehension" },
+  { icon: NavIcon, img: "/images/dim-usability.jpg", title: "Usability & Navigation", desc: "Navigation, discoverability, user control, task flows and error prevention." },
+  { icon: Palette, img: "/images/dim-visualdesign.jpg", title: "Visual Design", desc: "Hierarchy, spacing, layout, typography, color and visual consistency." },
+  { icon: A11yIcon, img: "/images/dim-accessibility.jpg", title: "Accessibility", desc: "Evidence-based readability, contrast, touch-target and inclusive-design concerns." },
+  { icon: Search, img: "/images/feature-url.jpg", title: "SEO & Search Visibility", desc: "For websites: metadata, headings, crawl signals and keyword alignment when verifiable." },
+  { icon: ShieldCheck, img: "/images/dim-trust.jpg", title: "Trust & Credibility", desc: "Transparency, confidence, security cues and professional presentation." },
+  { icon: TrendingUp, img: "/images/dim-conversion.jpg", title: "Conversion Optimization", desc: "Calls to action, forms, user motivation, decision friction and persuasion." },
+  { icon: Brain, img: "/images/dim-cognitive.jpg", title: "Cognitive Load", desc: "Information density, clarity, mental effort and decision fatigue." },
+];
+
+const REPORT_DELIVERABLES = [
+  { icon: Gauge, title: "Executive Summary & UX Score", desc: "Overall assessment, strengths, concerns and a clear verdict." },
+  { icon: FileText, title: "Evidence-Based Findings", desc: "Severity-ranked observations and specific recommendations, grounded in available evidence." },
+  { icon: Lightbulb, title: "AI Recommendations", desc: "Design-lead perspective with prioritized, actionable improvements." },
+  { icon: Trophy, title: "Top 10 Improvements", desc: "Ranked fixes with expected user and business benefits." },
+  { icon: Zap, title: "Quick Wins & Strategy", desc: "Short-term fixes and a longer-term improvement roadmap." },
+  { icon: Download, title: "Scorecard & Shareable Reports", desc: "Five scored UX categories, a verdict, plus PDF and 12-slide deck export." },
 ];
 
 const STEPS = [
@@ -2791,7 +2801,7 @@ function InstantPreview({ onSignup, isLoggedIn }) {
           <div style={{ background: C.goldSoft, borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text, marginBottom: 4 }}>That's the preview. The full audit adds:</div>
             <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.7, marginBottom: 12 }}>
-              All six dimensions · every finding with fixes · Top 10 ranked improvements · quick wins and strategy · a 12-slide deck and PDF · screenshots and PDFs as input
+              Seven analysis areas (SEO when verifiable) · evidence-based findings · Top 10 ranked improvements · quick wins and strategy · five-score scorecard · PDF and 12-slide deck · screenshots, PDFs and website URLs
             </div>
             <button onClick={onSignup} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "11px 20px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
               {isLoggedIn ? "Run the full audit" : "Get the full report — free"} <ArrowRight size={14} />
@@ -2852,28 +2862,59 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         </div>
       </div>
 
-      {/* Six Dimensions */}
-      <div style={sect}>
+      {/* Seven evidence-based analysis areas plus the actionable report deliverables */}
+      <section style={sect} aria-labelledby="ux-analysis-heading">
         <SectionKicker>ANALYSIS FRAMEWORKS</SectionKicker>
-        <h2 style={h2}>Six Dimensions of UX Excellence</h2>
-        <p style={{ color: C.muted, fontSize: 14, maxWidth: 480, margin: "0 auto 26px" }}>Every design is evaluated across proven UX frameworks to deliver comprehensive, actionable insights.</p>
+        <h2 id="ux-analysis-heading" style={h2}>Complete UX Intelligence, From Analysis to Action</h2>
+        <p style={{ color: C.textDim, fontSize: 14, maxWidth: 620, margin: "0 auto 26px", lineHeight: 1.7 }}>
+          Seven core analysis areas help uncover what works, where users struggle, and what to improve next.
+          Findings are limited to what UXNest can verify from the provided website, screenshots or documents.
+        </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, textAlign: "left" }}>
           {DIMENSIONS.map((d) => { const Icon = d.icon; return (
-            <div key={d.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(18,48,43,0.07)" }}>
+            <article key={d.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(18,48,43,0.07)" }}>
               <div style={{ position: "relative", height: 84, overflow: "hidden" }}>
                 <img src={d.img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </div>
-              <div style={{ padding: "12px 14px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <Icon size={17} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ padding: "14px 15px 16px", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ display: "grid", placeItems: "center", background: "#E3F8EE", color: "#0D8464", borderRadius: 9, minWidth: 31, height: 31 }}>
+                  <Icon size={17} strokeWidth={2} />
+                </span>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: C.text, marginBottom: 3 }}>{d.title}</div>
-                  <div style={{ fontSize: 12, color: C.textDim, lineHeight: 1.45 }}>{d.desc}</div>
+                  <h3 style={{ fontWeight: 800, fontSize: 14, color: C.text, margin: "0 0 6px", lineHeight: 1.35 }}>{d.title}</h3>
+                  <p style={{ fontSize: 12, color: C.textDim, lineHeight: 1.6, margin: 0 }}>{d.desc}</p>
                 </div>
               </div>
-            </div>
+            </article>
           );})}
         </div>
-      </div>
+        <p style={{ fontSize: 11.5, lineHeight: 1.65, color: C.muted, maxWidth: 640, margin: "16px auto 0" }}>
+          SEO and technical website signals are assessed when URL evidence is available. Screenshot-only audits cannot verify technical SEO, and automated accessibility findings do not certify legal or WCAG compliance.
+        </p>
+
+        <div style={{ marginTop: 34, padding: "28px clamp(16px, 4vw, 30px)", background: "linear-gradient(145deg,#EDF9F2,#F8FCFA)", border: "1px solid #BDE6D0", borderRadius: 20, textAlign: "left" }}>
+          <div style={{ textAlign: "center", maxWidth: 620, margin: "0 auto 24px" }}>
+            <SectionKicker>WHAT YOUR REPORT INCLUDES</SectionKicker>
+            <h3 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#174D38", fontSize: "clamp(22px,4vw,27px)", lineHeight: 1.25, margin: "8px 0 9px", fontWeight: 800 }}>
+              Insights you can act on, not just scores.
+            </h3>
+            <p style={{ color: "#4E7464", fontSize: 13.5, lineHeight: 1.65, margin: 0 }}>
+              Every completed audit turns observations into prioritized recommendations and shareable outputs.
+            </p>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(205px, 1fr))", gap: 11 }}>
+            {REPORT_DELIVERABLES.map((item) => { const Icon = item.icon; return (
+              <div key={item.title} style={{ background: "#FFFFFF", border: "1px solid #D4E9DD", borderRadius: 12, padding: "16px 14px" }}>
+                <span style={{ background: "#DCF6E8", color: "#10805E", width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", marginBottom: 11 }}>
+                  <Icon size={18} strokeWidth={2} />
+                </span>
+                <h4 style={{ margin: "0 0 7px", fontWeight: 800, fontSize: 13.5, color: "#194D38", lineHeight: 1.4 }}>{item.title}</h4>
+                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: "#587669" }}>{item.desc}</p>
+              </div>
+            );})}
+          </div>
+        </div>
+      </section>
 
       {/* How it works */}
       <div style={sect}>
@@ -2898,7 +2939,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
           Get your first complete audit free. Additional audits are $5 each during beta (normally $10). Buy 1–20 audit credits per purchase. No subscription.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "All six analysis dimensions", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
+          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "Seven evidence-based analysis areas", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
@@ -2909,14 +2950,27 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         </button>
       </div>
 
-      {/* Early access (honest, in place of testimonials) */}
-      <div style={sect}>
+      {/* Early access — personal feedback sent to the approved UXNest owner inbox */}
+      <section style={sect} aria-labelledby="uxnest-early-access-title">
         <SectionKicker>EARLY ACCESS</SectionKicker>
-        <h2 style={h2}>Be one of the first design teams on UXNest</h2>
-        <p style={{ color: C.textDim, fontSize: 14, maxWidth: 500, margin: "0 auto 8px", lineHeight: 1.6 }}>
-          UXNest is new — we don't have a wall of testimonials yet, and we won't invent one. Run an audit, tell us what's sharp and what's off, and help shape the tool.
+        <h2 id="uxnest-early-access-title" style={h2}>Be one of the first design teams on UXNest</h2>
+        <p style={{ color: C.textDim, fontSize: 14, maxWidth: 530, margin: "0 auto 18px", lineHeight: 1.65 }}>
+          UXNest is new — we don't have a wall of testimonials yet, and we won't invent one.
+          Run an audit, tell us what's sharp and what's off, and help shape the tool.
         </p>
-      </div>
+        <div style={{ maxWidth: 510, margin: "0 auto", background: "#EDF9F3", border: "1px solid #B7E5D0", borderRadius: 16, padding: "19px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#0C7957", fontSize: 13, fontWeight: 800, marginBottom: 7 }}>
+            <Mail size={17} /> Send your feedback directly
+          </div>
+          <a href="mailto:samdesignx@gmail.com?subject=UXNest%20Early%20Access%20Feedback"
+            style={{ display: "inline-block", color: "#105D46", fontSize: "clamp(15px, 4vw, 18px)", fontWeight: 800, overflowWrap: "anywhere", textDecoration: "underline", textUnderlineOffset: 4 }}>
+            samdesignx@gmail.com
+          </a>
+          <p style={{ color: "#547569", fontSize: 12, lineHeight: 1.55, margin: "9px 0 0" }}>
+            Share feature ideas, report-quality feedback or a problem you encountered. We read every message.
+          </p>
+        </div>
+      </section>
 
       {/* Suites showcase */}
       <div style={sect}>
