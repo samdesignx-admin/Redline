@@ -1,7 +1,7 @@
 // Creem webhook for UXNest audit credits.
 import crypto from "crypto";
 import { requireDb } from "./_lib.js";
-import { syncCreemPurchase, syncRefundTransactionFromCreem } from "./_creem-transactions.js";
+import { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } from "./_creem-transactions.js";
 export const maxDuration = 20;
 export const config = { api: { bodyParser: false } };
 
@@ -92,11 +92,45 @@ export default async function handler(req, res) {
       return;
     }
     if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
-    const checkout = event.object || {}, metadata = checkout.metadata || {};
+    let checkout = event.object || {};
+    let metadata = checkout.metadata || {};
+    const expectedMode = process.env.CREEM_MODE || "test";
+
+    // Creem's dashboard "Send test event" generates a signed, synthetic
+    // checkout without UXNest's account_id metadata. A fake checkout must
+    // NEVER create a purchase or grant credits. Confirm the checkout is not
+    // present in Creem's test API before acknowledging it with HTTP 200.
+    // Genuine incomplete payments must continue to fail and be retried.
+    if (expectedMode === "test" && !metadata.account_id) {
+      const checkoutId = String(checkout.id || "");
+      if (/^ch_[A-Za-z0-9_-]{3,200}$/.test(checkoutId)) {
+        try {
+          const providerCheckout = await getCreemCheckout(checkoutId);
+          if (providerCheckout?.id === checkoutId && providerCheckout.status === "completed") {
+            // An actual completed checkout: recover authoritative metadata.
+            checkout = providerCheckout;
+            metadata = checkout.metadata || {};
+          } else {
+            throw new Error("Creem checkout could not be confirmed for account crediting.");
+          }
+        } catch (lookupError) {
+          if (/\\(404\\)/.test(String(lookupError?.message || ""))) {
+            console.info("[UXNest Creem webhook] Synthetic test checkout acknowledged; no credits granted.");
+            res.status(200).send("Synthetic checkout test acknowledged; no credits granted");
+            return;
+          }
+          throw lookupError;
+        }
+      } else if (/^evt_test_[A-Za-z0-9_-]+$/.test(String(event.id || ""))) {
+        console.info("[UXNest Creem webhook] Synthetic test checkout with no valid checkout reference; no credits granted.");
+        res.status(200).send("Synthetic checkout test acknowledged; no credits granted");
+        return;
+      }
+    }
+
     const accountId = String(metadata.account_id || ""), quantity = parseQuantity(checkout.units || metadata.quantity);
     const product = typeof checkout.product === "object" ? checkout.product : null;
     const actualProductId = product?.id || checkout.product;
-    const expectedMode = process.env.CREEM_MODE || "test";
     if (checkout.mode && !((expectedMode === "live" && ["live", "prod"].includes(checkout.mode)) || (expectedMode === "test" && checkout.mode === "test"))) throw new Error("Creem event came from the wrong payment mode.");
     if (checkout.status !== "completed" || !accountId || !quantity || !checkout.id) throw new Error("Incomplete checkout.completed event.");
     if (!process.env.CREEM_PRODUCT_ID || actualProductId !== process.env.CREEM_PRODUCT_ID) throw new Error("Unexpected Creem product.");
