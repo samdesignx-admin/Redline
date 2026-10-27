@@ -1344,8 +1344,8 @@ function Footer({ onOpenLegal, onNavigatePage, onNavigateSection, isLoggedIn }) 
               Insightful audits and practical recommendations for better digital experiences.
               Start with a website URL or your own design screenshots.
             </p>
-            <a className="uxn-footer__email" href="mailto:samdesignx@gmail.com?subject=UXNest%20Inquiry">
-              <Mail size={16} aria-hidden="true" /> samdesignx@gmail.com
+            <a className="uxn-footer__email" href="mailto:support@uxnest.ai?subject=UXNest%20Inquiry">
+              <Mail size={16} aria-hidden="true" /> support@uxnest.ai
             </a>
           </div>
 
@@ -1382,7 +1382,7 @@ function Footer({ onOpenLegal, onNavigatePage, onNavigateSection, isLoggedIn }) 
             <ul>
               <li><a href="/#help" onClick={(event) => follow(event, () => onNavigatePage("help"))}>Help &amp; Support</a></li>
               <li><a href="/#early-access" onClick={(event) => follow(event, () => onNavigateSection("early-access"))}>Share Feedback</a></li>
-              <li><a href="mailto:samdesignx@gmail.com?subject=UXNest%20Support">Email Us</a></li>
+              <li><a href="mailto:support@uxnest.ai?subject=UXNest%20Support">Email Us</a></li>
             </ul>
           </nav>
 
@@ -3279,7 +3279,7 @@ function PaymentResultScreen({ status, quantity = 1, message, onRetry, onContinu
         <h1 style={{ color: C.text, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 28, letterSpacing: "-.8px", margin: "0 0 12px", lineHeight: 1.2 }}>{title}</h1>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.7, margin: "0 auto 24px", maxWidth: 390 }}>{description}</p>
         {success && <div style={{ background: "#EEF6F3", border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 22, color: C.text, fontSize: 13, textAlign: "left" }}><strong>You're all set.</strong><br />You can continue your audit now. Your available credits will refresh in your account.</div>}
-        {!success && !verifying && !signin && <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: "-8px 0 22px" }}>Please don't pay again until you've checked your available audit credits. If you were charged, contact care@uxnest.ai.</p>}
+        {!success && !verifying && !signin && <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, margin: "-8px 0 22px" }}>Please don't pay again until you've checked your available audit credits. If you were charged, contact support@uxnest.ai.</p>}
         <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
           {(!success && !verifying && !signin) && <button onClick={onRetry} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 999, padding: "12px 18px", fontSize: 13, fontWeight: 650, cursor: "pointer" }}>Try verification again</button>}
           <button onClick={onContinue} style={{ border: "none", background: C.now, color: C.dark, borderRadius: 999, padding: "12px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
