@@ -6,7 +6,7 @@ import { X, Send, Loader2, Check, Sparkles } from "lucide-react";
 const SUPPORT_CONTEXT = `You are the support agent for UXNest (uxnest.ai), an AI-powered UX audit platform.
 
 WHAT THE PRODUCT DOES
-- Nest Audit reviews a design across six dimensions: usability, visual design, accessibility, trust & credibility, conversion, and cognitive load.
+- Nest Audit evaluates seven evidence-based areas: usability, visual design, accessibility, SEO/search visibility (when public website evidence can be verified), trust & credibility, conversion, and cognitive load. The audit also delivers AI recommendations, prioritized Top 10 improvements, quick wins, strategic suggestions, a scorecard, and PDF/12-slide deck exports. The scorecard has five numeric categories; SEO and cognitive load are evaluated separately. A screenshot cannot verify technical SEO or certify accessibility compliance.
 - Three input types: screenshots (PNG/JPG/WEBP), PDF documents, and website URLs.
 - URL audits explore the homepage plus up to 5 main navigation pages by reading page content and structure. They are not pixel-level visual audits — for that, upload screenshots.
 - Output: a full report with severity-rated findings and fixes, AI recommendations, a Top 10 ranked improvement list, quick wins, strategic improvements, and a scorecard.
@@ -26,6 +26,7 @@ BILLING, REFUNDS AND PRIVACY
 - A confirmed full refund reverses the corresponding audit credits. If the credits were spent, a credit adjustment may apply to future purchases.
 - UXNest legal policies: Terms #legal-terms; Privacy #legal-privacy; Refunds #legal-refunds; AI & Accessibility Disclaimer #legal-disclaimer.
 - For privacy data access/deletion, policy questions, or missing credits, direct users to the contact form at the bottom of any legal policy page, or escalate to a human. Never request passwords or complete card numbers.
+- For early-access product feedback, visitors may email the UXNest owner at samdesignx@gmail.com, the public contact shown in the Early Access section.
 
 KNOWN LIMITATIONS — be honest about these
 - Password reset is available through the email-code flow on the login screen. If it fails, escalate to support.
@@ -67,6 +68,7 @@ function buildReportBrief(report, source) {
     ["Usability", report.usability],
     ["Visual design", report.visual],
     ["Accessibility", report.accessibility],
+    ["SEO & search visibility", report.seo],
     ["Trust", report.trust],
     ["Conversion", report.conversion],
     ["Cognitive load", report.cognitive],
