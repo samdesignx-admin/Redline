@@ -3309,12 +3309,19 @@ export default function UxnestApp() {
     return VALID_PAGES.includes(h) ? h : "landing";
   });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [landingScrollTarget, setLandingScrollTarget] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const key = window.location.hash.replace(/^#/, "");
+    return LANDING_SECTION_IDS.includes(key) ? key : null;
+  });
 
   // Reflect the current page in the URL hash so emailed links land in the
   // right place, and respond to back/forward navigation.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.location.hash.startsWith("#legal-")) return;
+    // Keep direct, shareable landing-section hashes intact.
+    if (page === "landing" && LANDING_SECTION_IDS.includes(window.location.hash.slice(1))) return;
     const target = page === "landing" ? "" : "#" + page;
     if (window.location.hash !== target) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search + target);
@@ -3327,8 +3334,10 @@ export default function UxnestApp() {
       const h = window.location.hash.replace("#", "");
       const legalKey = h.startsWith("legal-") ? h.slice(6) : null;
       const legal = legalKey && Object.prototype.hasOwnProperty.call(LEGAL_CONTENT, legalKey) ? legalKey : null;
+      const section = LANDING_SECTION_IDS.includes(h) ? h : null;
       setLegalPage(legal);
-      setPage(legal ? "landing" : VALID_PAGES.includes(h) ? h : "landing");
+      setLandingScrollTarget(section);
+      setPage(legal || section ? "landing" : VALID_PAGES.includes(h) ? h : "landing");
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -3355,6 +3364,7 @@ export default function UxnestApp() {
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!legalPage && page === "landing" && LANDING_SECTION_IDS.includes(window.location.hash.slice(1))) return;
     const target = legalPage ? "#legal-" + legalPage : page === "landing" ? "" : "#" + page;
     if (window.location.hash !== target) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search + target);
@@ -3363,6 +3373,13 @@ export default function UxnestApp() {
   useEffect(() => {
     if (legalPage && typeof window !== "undefined") window.scrollTo(0, 0);
   }, [legalPage]);
+  useEffect(() => {
+    if (page !== "landing" || legalPage || !landingScrollTarget) return;
+    const section = document.getElementById(landingScrollTarget);
+    if (!section) return;
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+    setLandingScrollTarget(null);
+  }, [page, legalPage, landingScrollTarget]);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const pendingRunRef = useRef(null);
@@ -4628,7 +4645,32 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           </>
         )}
 
-        <Footer onOpenLegal={setLegalPage} />
+        <Footer
+          onOpenLegal={(key) => {
+            setLandingScrollTarget(null);
+            setMenuOpen(false);
+            setLegalPage(key);
+            window.scrollTo(0, 0);
+          }}
+          onNavigatePage={(next) => {
+            setLandingScrollTarget(null);
+            setLegalPage(null);
+            setMenuOpen(false);
+            setPage(next);
+            window.scrollTo(0, 0);
+          }}
+          onNavigateSection={(sectionId) => {
+            if (!LANDING_SECTION_IDS.includes(sectionId)) return;
+            setMenuOpen(false);
+            setLegalPage(null);
+            setPage("landing");
+            setLandingScrollTarget(sectionId);
+            if (window.location.hash !== "#" + sectionId) {
+              window.location.hash = sectionId;
+            }
+          }}
+          isLoggedIn={!!user}
+        />
       </main>
 
       {showDisclaimer && <DisclaimerModal onAccept={onAcceptDisclaimer} onCancel={() => { setShowDisclaimer(false); pendingRunRef.current = null; }} />}
