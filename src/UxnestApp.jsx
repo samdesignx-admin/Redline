@@ -4117,18 +4117,56 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
-        .audit-credit-widget {
-          width: 100%; margin: 0 0 18px; padding: 18px;
-          background: linear-gradient(135deg, #E9F8F3 0%, #F7FCFA 100%);
-          border: 1px solid #A8DCCF; border-radius: 18px;
-          box-shadow: 0 8px 22px rgba(20, 103, 82, .07);
-          text-align: left; color: ${C.text};
-        }
-        .audit-credit-widget__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        .audit-credit-widget__identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
-        .audit-credit-widget__icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; background: #D5F0E8; color: #137A63; }
-        .audit-credit-widget__eyebrow { font: 700 10px 'IBM Plex Mono', monospace; letter-spacing: 1.5px; color: #348674; margin-bottom: 4px; }
-        .audit-credit-widget__balance { font-size: 15px; line-height: 1.35; font-weight: 700; color: ${C.text}; overflow-wrap: anywhere; }
+        /* Primary UX action: URL first, uploads second. */
+        .audit-launch-header { text-align: left; margin: 0 0 17px; }
+        .audit-launch-header__kicker { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 999px; background: #DDF8E7; color: #077B55; font: 800 10px "IBM Plex Mono", monospace; letter-spacing: 1.3px; }
+        .audit-launch-header h1 { margin: 11px 0 7px; font-family: "Plus Jakarta Sans", sans-serif; font-weight: 850; font-size: clamp(25px, 5vw, 32px); line-height: 1.13; letter-spacing: -0.9px; color: #143D30; }
+        .audit-launch-header p { margin: 0; color: #54756A; font-size: 13.5px; line-height: 1.55; }
+        .audit-source-card { padding: 18px; border: 2px solid #7BD7A9; border-radius: 20px; background: linear-gradient(150deg, #E8FAEE 0%, #F3FCF7 54%, #FFFFFF 100%); box-shadow: 0 10px 28px rgba(21,125,91,0.09); }
+        .audit-source-card__heading { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+        .audit-source-card__heading span { font: 750 10px "IBM Plex Mono", monospace; letter-spacing: 1.5px; color: #178365; }
+        .audit-source-card__heading strong { font: 800 17px "Plus Jakarta Sans",sans-serif; color: #133F30; }
+        .audit-source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
+        .audit-source-option { display: flex; align-items: center; text-align: left; min-width: 0; gap: 9px; min-height: 76px; border: 1.5px solid #C5DFD0; border-radius: 14px; padding: 11px 12px; background: rgba(255,255,255,.94); color: #496A5E; cursor: pointer; transition: border 160ms ease, background 160ms ease, box-shadow 160ms ease; }
+        .audit-source-option.is-active { border-color: #159E6F; background: #D8F6E6; color: #0B593F; box-shadow: 0 0 0 2px rgba(28,166,117,.12); }
+        .audit-source-option:focus-visible { outline: 3px solid #32A47A; outline-offset: 2px; }
+        .audit-source-option__icon { width: 35px; height: 35px; flex: 0 0 35px; display: grid; place-items: center; border-radius: 11px; background: #EDF7F1; color: #35856D; }
+        .audit-source-option.is-active .audit-source-option__icon { background: #0F9165; color: #FFFFFF; }
+        .audit-source-option__copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .audit-source-option__title { display: block; color: inherit; font-weight: 800; font-size: 13.5px; line-height: 1.22; }
+        .audit-source-option__description { display: block; font-size: 11px; line-height: 1.3; color: #648278; }
+        .audit-source-option.is-active .audit-source-option__description { color: #2C755B; }
+        .audit-url-hero { background: #FFFFFF; border: 1px solid #C7E8D4; border-radius: 15px; padding: 19px; box-shadow: 0 4px 14px rgba(20,100,65,.035); }
+        .audit-url-input { width: 100%; min-width: 0; min-height: 57px; border: 2px solid #19A477; border-radius: 12px; padding: 12px 14px; font: 600 16px "Inter",sans-serif; color: #153F30; background: #FFFFFF; box-shadow: 0 0 0 3px rgba(30,166,114,.085); transition: border 150ms ease, box-shadow 150ms ease; }
+        .audit-url-input::placeholder { color: #9DB5A9; font-weight: 450; }
+        .audit-url-input:focus { outline: none; border-color: #0A8058; box-shadow: 0 0 0 4px rgba(21,160,107,.2); }
+        .audit-primary-action { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 54px; margin-top: 15px; padding: 11px 16px; border: none; border-radius: 12px; background: linear-gradient(110deg, #118B62, #0EBB80); color: #FFFFFF; font: 800 15px "Inter",sans-serif; cursor: pointer; box-shadow: 0 5px 15px rgba(12,126,88,.18); }
+        .audit-primary-action:hover:not(:disabled) { filter: brightness(1.04); }
+        .audit-primary-action:focus-visible { outline: 3px solid #006848; outline-offset: 3px; }
+        .audit-primary-action:disabled { background: #E0EDE5; color: #66847A; cursor: not-allowed; box-shadow: none; }
+        .audit-extra-options { margin-top: 12px; padding: 11px 14px; border: 1px solid #D8E8E0; background: #FFFFFF; border-radius: 12px; }
+        .audit-extra-options > summary { list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; color: #2C6953; font-size: 12.5px; font-weight: 750; }
+        .audit-extra-options > summary::-webkit-details-marker { display: none; }
+        .audit-extra-options[open] > summary svg { transform: rotate(180deg); }
+        .audit-advanced { margin-top: 13px; padding: 13px 16px; background: #FFFFFF; border: 1px solid #DEEAE3; border-radius: 13px; }
+        .audit-advanced > summary { display: flex; justify-content: space-between; align-items: center; list-style: none; cursor: pointer; gap: 12px; color: #365B4F; font-size: 13px; font-weight: 750; }
+        .audit-advanced > summary::-webkit-details-marker { display: none; }
+        .audit-advanced > summary span { display: flex; align-items: center; gap: 8px; }
+        .audit-advanced > summary span:last-child { font-weight: 550; font-size: 12px; color: #728D82; }
+        .audit-advanced[open] > summary span:last-child svg { transform: rotate(180deg); }
+        .audit-advanced__content { padding-top: 14px; }
+        .audit-advanced__content label { display: block; color: #3B6454; font-size: 12px; font-weight: 750; margin-bottom: 7px; }
+        /* Credit purchase lives below the input and starts collapsed. */
+        .audit-credit-widget { width: 100%; margin: 13px 0 18px; padding: 0; background: linear-gradient(135deg,#F4FAF6,#FBFEFC); border: 1px solid #CDE3D7; border-radius: 14px; box-shadow: none; text-align: left; color: #173E31; }
+        .audit-credit-widget__top { display: flex; align-items: center; justify-content: space-between; gap: 9px; cursor: pointer; padding: 13px 16px; list-style: none; }
+        .audit-credit-widget__top::-webkit-details-marker { display: none; }
+        .audit-credit-widget__body { padding: 0 16px 16px; }
+        .audit-credit-widget__identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
+        .audit-credit-widget__icon { width: 35px; height: 35px; flex: 0 0 35px; display: grid; place-items: center; border-radius: 11px; background: #E2F2EA; color: #147855; }
+        .audit-credit-widget__eyebrow { display: block; font: 700 9px "IBM Plex Mono", monospace; letter-spacing: 1.3px; color: #598A76; margin-bottom: 4px; }
+        .audit-credit-widget__balance { display: block; font-size: 12.5px; line-height: 1.38; font-weight: 750; color: #285443; overflow-wrap: anywhere; }
+        .audit-credit-widget__toggle { display: inline-flex; align-items: center; gap: 6px; color: #107556; font-size: 12px; font-weight: 750; flex-shrink: 0; }
+        .audit-credit-widget[open] .audit-credit-widget__toggle svg { transform: rotate(180deg); }
         .audit-credit-widget__badge { font-size: 10px; font-weight: 650; color: #2F7869; border: 1px solid #B8E0D6; background: rgba(255,255,255,.65); padding: 6px 9px; border-radius: 999px; white-space: nowrap; }
         .audit-credit-widget__buy { margin-top: 16px; padding-top: 15px; border-top: 1px solid #CBE9E1; display: grid; grid-template-columns: 92px minmax(110px, 1fr); align-items: center; gap: 12px; }
         .audit-credit-widget__quantity { display: flex; flex-direction: column; gap: 5px; }
@@ -4143,17 +4181,34 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         .audit-credit-widget__note { grid-column: 1 / -1; text-align: center; color: #63877F; font-size: 11px; margin-top: -3px; }
         .audit-credit-widget__spinner { animation: spin 1s linear infinite; }
         @media (min-width: 520px) {
-          .audit-credit-widget { padding: 20px 22px; }
+          .audit-credit-widget__top { padding: 15px 22px; }
+          .audit-credit-widget__body { padding: 0 22px 20px; }
           .audit-credit-widget__buy { grid-template-columns: 100px minmax(120px, 1fr) auto; }
           .audit-credit-widget__button { grid-column: auto; width: auto; min-width: 170px; }
           .audit-credit-widget__note { grid-column: 1 / -1; }
         }
         @media (max-width: 370px) {
-          .audit-credit-widget { padding: 14px; }
+          .audit-source-card { padding: 12px; border-radius: 16px; }
+          .audit-source-option { min-height: 71px; padding: 9px 7px; gap: 6px; }
+          .audit-source-option__icon { width: 28px; height: 28px; flex: 0 0 28px; }
+          .audit-source-option__title { font-size: 12px; }
+          .audit-source-option__description { display: none; }
+          .audit-url-hero { padding: 14px; }
+          .audit-credit-widget__top { padding: 12px; }
+          .audit-credit-widget__body { padding: 0 12px 14px; }
+          .audit-credit-widget__toggle { font-size: 11px; }
           .audit-credit-widget__badge { display: none; }
           .audit-credit-widget__buy { grid-template-columns: 76px minmax(0,1fr); gap: 9px; }
           .audit-credit-widget__price strong { font-size: 17px; }
           .audit-credit-widget__button { font-size: 13px; }
+        }
+        @media (max-width: 480px) {
+          .audit-source-card { padding: 13px; }
+          .audit-source-option { min-height: 72px; padding: 10px 8px; gap: 7px; }
+          .audit-source-option__icon { width: 30px; height: 30px; flex: 0 0 30px; }
+          .audit-source-option__title { font-size: 12.5px; }
+          .audit-source-option__description { display: none; }
+          .audit-url-hero { padding: 15px; }
         }
         .nav-desktop { display: none !important; }
         .nav-mobile { display: flex !important; }
