@@ -3193,6 +3193,9 @@ export default function UxnestApp() {
       window.history.replaceState(null, "", window.location.pathname + window.location.search + target);
     }
   }, [legalPage]);
+  useEffect(() => {
+    if (legalPage && typeof window !== "undefined") window.scrollTo(0, 0);
+  }, [legalPage]);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const pendingRunRef = useRef(null);
@@ -4313,7 +4316,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                         </button>
                         <div className="audit-credit-widget__note">Beta pricing · Pay once, use anytime</div>
                         <div className="audit-credit-widget__note" style={{ lineHeight: 1.6 }}>
-                          Checkout, taxes and payment receipts are handled by Creem as merchant of record.
+                          Unused purchased credits are generally eligible for a full refund request within 14 days. Creem handles checkout, taxes and payment receipts as merchant of record.
                           <button type="button" onClick={() => setLegalPage("refunds")} style={{ background: "none", border: "none", font: "inherit", fontWeight: 750, textDecoration: "underline", color: "#155F4C", cursor: "pointer", marginLeft: 4 }}>Refund Policy</button>
                           <span> · </span>
                           <button type="button" onClick={() => setLegalPage("terms")} style={{ background: "none", border: "none", font: "inherit", fontWeight: 750, textDecoration: "underline", color: "#155F4C", cursor: "pointer" }}>Terms</button>
