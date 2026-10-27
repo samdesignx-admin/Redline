@@ -1301,20 +1301,113 @@ function LegalPage({ pageKey, onBack, onOpenLegal }) {
   );
 }
 
-function Footer({ onOpenLegal }) {
+const LANDING_SECTION_IDS = ["features", "analysis-frameworks", "how-it-works", "pricing", "early-access", "coming-soon"];
+
+function Footer({ onOpenLegal, onNavigatePage, onNavigateSection, isLoggedIn }) {
+  const routeLinks = [
+    { title: "New Audit", key: "audit" },
+    { title: "My Audits", key: "myaudits" },
+    { title: "UX Toolkit", key: "dashboard" },
+    ...(isLoggedIn ? [{ title: "Billing & Purchases", key: "billing" }] : []),
+  ];
+  const exploreLinks = [
+    { title: "Features", key: "features" },
+    { title: "Analysis Frameworks", key: "analysis-frameworks" },
+    { title: "How It Works", key: "how-it-works" },
+    { title: "Pricing", key: "pricing" },
+    { title: "Early Access", key: "early-access" },
+    { title: "Future Tools (Coming Soon)", key: "coming-soon" },
+  ];
+  const legalLinks = ["terms", "privacy", "refunds", "disclaimer"];
+  const follow = (event, action) => {
+    if (event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    action();
+  };
+
   return (
-    <div style={{ maxWidth: 720, margin: "30px auto 0", textAlign: "center", padding: "16px 10px 0", borderTop: `1px solid ${C.borderSoft}` }}>
-      <p style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.6, margin: "0 0 8px 0" }}>
-        UXNest gives AI-generated UX analysis. It does not replace a certified accessibility audit, legal review, or professional UX research.
-      </p>
-      <div style={{ display: "flex", justifyContent: "center", gap: 14 }}>
-        {["terms", "privacy", "refunds", "disclaimer"].map((k) => (
-          <button key={k} onClick={() => onOpenLegal(k)} style={{ background: "none", border: "none", color: C.muted, fontSize: 11.5, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
-            {LEGAL_CONTENT[k].title}
-          </button>
-        ))}
+    <footer className="uxn-footer" aria-label="UXNest footer">
+      <div className="uxn-footer__container">
+        <div className="uxn-footer__layout">
+          <div className="uxn-footer__brand">
+            <a
+              className="uxn-footer__logo"
+              href="/"
+              aria-label="UXNest — home"
+              onClick={(event) => follow(event, () => onNavigatePage("landing"))}
+            >
+              <BrandLogo size={52} />
+            </a>
+            <p className="uxn-footer__tagline">AI-Powered UX Intelligence</p>
+            <p className="uxn-footer__description">
+              Insightful audits and practical recommendations for better digital experiences.
+              Start with a website URL or your own design screenshots.
+            </p>
+            <a className="uxn-footer__email" href="mailto:samdesignx@gmail.com?subject=UXNest%20Inquiry">
+              <Mail size={16} aria-hidden="true" /> samdesignx@gmail.com
+            </a>
+          </div>
+
+          <nav aria-label="Product" className="uxn-footer__column">
+            <h2>Product</h2>
+            <ul>
+              {routeLinks.map((link) => (
+                <li key={link.key}>
+                  <a href={`/#${link.key}`}
+                    onClick={(event) => follow(event, () => onNavigatePage(link.key))}>
+                    {link.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <nav aria-label="Explore" className="uxn-footer__column">
+            <h2>Explore</h2>
+            <ul>
+              {exploreLinks.map((link) => (
+                <li key={link.key}>
+                  <a href={`/#${link.key}`}
+                    onClick={(event) => follow(event, () => onNavigateSection(link.key))}>
+                    {link.title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <nav aria-label="Support" className="uxn-footer__column">
+            <h2>Support</h2>
+            <ul>
+              <li><a href="/#help" onClick={(event) => follow(event, () => onNavigatePage("help"))}>Help &amp; Support</a></li>
+              <li><a href="/#early-access" onClick={(event) => follow(event, () => onNavigateSection("early-access"))}>Share Feedback</a></li>
+              <li><a href="mailto:samdesignx@gmail.com?subject=UXNest%20Support">Email Us</a></li>
+            </ul>
+          </nav>
+
+          <nav aria-label="Legal" className="uxn-footer__column">
+            <h2>Legal</h2>
+            <ul>
+              {legalLinks.map((key) => (
+                <li key={key}>
+                  <a href={`/#legal-${key}`}
+                    onClick={(event) => follow(event, () => onOpenLegal(key))}>
+                    {LEGAL_CONTENT[key].title}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+
+        <div className="uxn-footer__bottom">
+          <span>© {new Date().getFullYear()} UXNest. All rights reserved.</span>
+          <span>AI-generated guidance is not a certified accessibility or compliance audit.</span>
+          <a href="/" onClick={(event) => follow(event, () => onNavigatePage("landing"))}>Back to home <ArrowRight size={13} aria-hidden="true" /></a>
+        </div>
       </div>
-    </div>
+    </footer>
   );
 }
 
@@ -2841,7 +2934,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </div>
 
       {/* Features */}
-      <div style={sect}>
+      <div id="features" style={{ ...sect, scrollMarginTop: 96 }}>
         <SectionKicker>FEATURES</SectionKicker>
         <h2 style={h2}>Everything You Need for a Complete UX Audit</h2>
         <p style={{ color: C.muted, fontSize: 14, maxWidth: 480, margin: "0 auto 26px" }}>From upload to report delivery, every step is designed to give you expert-level UX insight.</p>
@@ -2863,7 +2956,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </div>
 
       {/* Seven evidence-based analysis areas plus the actionable report deliverables */}
-      <section style={sect} aria-labelledby="ux-analysis-heading">
+      <section id="analysis-frameworks" style={{ ...sect, scrollMarginTop: 96 }} aria-labelledby="ux-analysis-heading">
         <SectionKicker>ANALYSIS FRAMEWORKS</SectionKicker>
         <h2 id="ux-analysis-heading" style={h2}>Complete UX Intelligence, From Analysis to Action</h2>
         <p style={{ color: C.textDim, fontSize: 14, maxWidth: 620, margin: "0 auto 26px", lineHeight: 1.7 }}>
@@ -2917,7 +3010,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </section>
 
       {/* How it works */}
-      <div style={sect}>
+      <div id="how-it-works" style={{ ...sect, scrollMarginTop: 96 }}>
         <SectionKicker>HOW IT WORKS</SectionKicker>
         <h2 style={h2}>Four Steps to Expert UX Insights</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginTop: 24, textAlign: "left" }}>
@@ -2932,7 +3025,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </div>
 
       {/* Free access */}
-      <div style={sect}>
+      <div id="pricing" style={{ ...sect, scrollMarginTop: 96 }}>
         <SectionKicker>Pricing</SectionKicker>
         <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
@@ -2951,7 +3044,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </div>
 
       {/* Early access — personal feedback sent to the approved UXNest owner inbox */}
-      <section style={sect} aria-labelledby="uxnest-early-access-title">
+      <section id="early-access" style={{ ...sect, scrollMarginTop: 96 }} aria-labelledby="uxnest-early-access-title">
         <SectionKicker>EARLY ACCESS</SectionKicker>
         <h2 id="uxnest-early-access-title" style={h2}>Be one of the first design teams on UXNest</h2>
         <p style={{ color: C.textDim, fontSize: 14, maxWidth: 530, margin: "0 auto 18px", lineHeight: 1.65 }}>
@@ -2973,7 +3066,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       </section>
 
       {/* Suites showcase */}
-      <div style={sect}>
+      <div id="coming-soon" style={{ ...sect, scrollMarginTop: 96 }}>
         <SectionKicker>COMING SOON</SectionKicker>
         <h2 style={h2}>The Full Nest Toolkit</h2>
         <p style={{ color: C.muted, fontSize: 14, maxWidth: 500, margin: "0 auto 26px" }}>Beyond audits, five product suites are in development to cover every UX challenge.</p>
