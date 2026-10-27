@@ -27,7 +27,7 @@ import {
   Accessibility as A11yIcon, TrendingUp, Brain, Rocket,
   Mail, Download, History as HistoryIcon, Link2, ShieldAlert,
   ScrollText, LogIn, LogOut, UserPlus, Lock, Globe, Lightbulb, ArrowLeft, EyeOff,
-  FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu, Receipt, LifeBuoy,
+  FileType2, Search, Trash2, ArrowRight, Users, BarChart3, MessageSquare, TestTube2, ClipboardList, Plus, Menu, Receipt, LifeBuoy, ChevronDown,
 } from "lucide-react";
 
 /* ----------------------------------------------------------------------- */
@@ -4297,41 +4297,73 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           <>
             {!analyzing && !report && (
               <div style={{ maxWidth: 640, margin: "0 auto" }}>
-                <div style={{ textAlign: "center", marginBottom: 22 }}>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <Stamp size={20} color={C.gold} strokeWidth={2} />
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, letterSpacing: 2, color: C.gold }}>SENIOR UX REVIEW</span>
+                <header className="audit-launch-header">
+                  <div className="audit-launch-header__kicker"><Sparkles size={14} /> NEW AUDIT</div>
+                  <h1>Start your UX audit</h1>
+                  <p>Enter a website URL to analyze its experience, or upload screenshots and PDFs for a visual review.</p>
+                </header>
+
+                <section className="audit-source-card" aria-label="Start a new UX audit">
+                  <div className="audit-source-card__heading">
+                    <span>YOUR STARTING POINT</span>
+                    <strong>What would you like to review?</strong>
                   </div>
-                  <div style={{ display: "flex", justifyContent: "center", maxWidth: "100%", margin: "0 0 12px" }}><BrandLogo size={78} /></div>
-                  <p style={{ color: C.muted, fontSize: 14.5, lineHeight: 1.55, margin: "0 auto", maxWidth: 440 }}>
-                    Drop in a screen, a PDF, or a website URL and get the audit a 20-year design director would give it.
-                  </p>
-                </div>
+                  <ModeTabs mode={mode} setMode={(next) => { setMode(next); setError(null); }} />
+                  <div id="audit-source-panel" role="tabpanel" aria-labelledby={`audit-tab-${mode}`}>
+                    {mode === "url" ? (
+                      <UrlScreen url={urlInput} setUrl={setUrlInput} targetKeywords={targetKeywords} setTargetKeywords={setTargetKeywords} onRun={onRunUrl} error={error} navLimit={navLimit} />
+                    ) : (
+                      <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} />
+                    )}
+                  </div>
+                </section>
+
+                <details className="audit-advanced">
+                  <summary>
+                    <span><FileText size={16} /> Add an audit title</span>
+                    <span>Optional <ChevronDown size={16} /></span>
+                  </summary>
+                  <div className="audit-advanced__content">
+                    <label htmlFor="uxnest-audit-title">Audit title</label>
+                    <input
+                      id="uxnest-audit-title"
+                      value={auditTitle}
+                      onChange={(e) => setAuditTitle(e.target.value)}
+                      placeholder="e.g. Homepage redesign or checkout flow"
+                      maxLength={80}
+                      style={inputStyle}
+                    />
+                  </div>
+                </details>
 
                 {user && (
-                  <section className="audit-credit-widget" aria-label="Audit credit purchase">
-                    <div className="audit-credit-widget__top">
-                      <div className="audit-credit-widget__identity">
-                        <div className="audit-credit-widget__icon">
-                          <FileText size={20} />
-                        </div>
-                        <div>
-                          <div className="audit-credit-widget__eyebrow">AUDIT CREDITS</div>
-                          <div className="audit-credit-widget__balance">
+                  <details className="audit-credit-widget" aria-label="Audit credits and purchases">
+                    <summary className="audit-credit-widget__top">
+                      <span className="audit-credit-widget__identity">
+                        <span className="audit-credit-widget__icon"><FileText size={18} /></span>
+                        <span>
+                          <span className="audit-credit-widget__eyebrow">AUDIT CREDITS</span>
+                          <span className="audit-credit-widget__balance">
                             {auditsUsed < AUDIT_QUOTA
-                              ? "1 free audit included"
+                              ? "Your free audit is available"
                               : paidAudits > 0
-                                ? `${paidAudits} paid audit${paidAudits === 1 ? "" : "s"} available`
-                                : QUOTA_MESSAGE}
-                          </div>
-                        </div>
-                      </div>
-                      {auditsUsed >= AUDIT_QUOTA && (
-                        <span className="audit-credit-widget__badge">No subscription</span>
-                      )}
-                    </div>
-                    {auditsUsed >= AUDIT_QUOTA && (
-                      <div className="audit-credit-widget__buy">
+                                ? `${paidAudits} paid audit credit${paidAudits === 1 ? "" : "s"} available`
+                                : "No paid credits available"}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="audit-credit-widget__toggle">
+                        {auditsUsed < AUDIT_QUOTA ? "View details" : "Buy credits"}
+                        <ChevronDown size={16} />
+                      </span>
+                    </summary>
+                    <div className="audit-credit-widget__body">
+                      {auditsUsed < AUDIT_QUOTA ? (
+                        <p style={{ fontSize: 12.5, color: "#4D7668", lineHeight: 1.6, margin: 0 }}>
+                          Your first completed audit is on us. After using it, you can buy additional audit credits for $5 each.
+                        </p>
+                      ) : (
+                        <div className="audit-credit-widget__buy">
                         <div className="audit-credit-widget__quantity">
                           <label htmlFor="audit-credit-quantity">Quantity</label>
                           <select
@@ -4361,21 +4393,9 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                           <button type="button" onClick={() => setLegalPage("terms")} style={{ background: "none", border: "none", font: "inherit", fontWeight: 750, textDecoration: "underline", color: "#155F4C", cursor: "pointer" }}>Terms</button>
                         </div>
                       </div>
-                    )}
-                  </section>
-                )}
-
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.textDim, marginBottom: 6 }}>Audit title <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span></label>
-                  <input value={auditTitle} onChange={(e) => setAuditTitle(e.target.value)} placeholder="e.g. Homepage Redesign v2, Checkout Flow, Mobile App…" maxLength={80} style={inputStyle} />
-                </div>
-
-                <ModeTabs mode={mode} setMode={setMode} />
-
-                {mode === "files" ? (
-                  <UploadScreen images={images} onAddFiles={onAddFiles} onRemove={onRemove} onRun={onRunFiles} dragOver={dragOver} setDragOver={setDragOver} error={error} screenLimit={screenLimit} />
-                ) : (
-                  <UrlScreen url={urlInput} setUrl={setUrlInput} targetKeywords={targetKeywords} setTargetKeywords={setTargetKeywords} onRun={onRunUrl} error={error} navLimit={navLimit} />
+                      )}
+                    </div>
+                  </details>
                 )}
 
                 <div style={{ display: "flex", justifyContent: "center", gap: 18, marginTop: 22, flexWrap: "wrap" }}>
