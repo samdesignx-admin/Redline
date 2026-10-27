@@ -1185,6 +1185,9 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
       </>
       )}
 
+      {mode === "signup" && <p style={{ fontSize: 12, color: C.textDim, lineHeight: 1.6, marginTop: 14 }}>
+        By creating an account, you agree to the <a href="/#legal-terms" target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>Terms of Service</a> and acknowledge the <a href="/#legal-privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.gold, textDecoration: "underline" }}>Privacy Policy</a>.
+      </p>}
       <p style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
         Passwords are securely hashed. Password reset codes expire after 10 minutes.
       </p>
@@ -3144,9 +3147,10 @@ export default function UxnestApp() {
   // right place, and respond to back/forward navigation.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const target = page === "landing" ? "" : `#${page}`;
+    if (window.location.hash.startsWith("#legal-")) return;
+    const target = page === "landing" ? "" : "#" + page;
     if (window.location.hash !== target) {
-      window.history.replaceState(null, "", (target || window.location.pathname) + window.location.search);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search + target);
     }
   }, [page]);
 
@@ -3154,7 +3158,10 @@ export default function UxnestApp() {
     if (typeof window === "undefined") return;
     const onHash = () => {
       const h = window.location.hash.replace("#", "");
-      setPage(VALID_PAGES.includes(h) ? h : "landing");
+      const legalKey = h.startsWith("legal-") ? h.slice(6) : null;
+      const legal = legalKey && Object.prototype.hasOwnProperty.call(LEGAL_CONTENT, legalKey) ? legalKey : null;
+      setLegalPage(legal);
+      setPage(legal ? "landing" : VALID_PAGES.includes(h) ? h : "landing");
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -3174,7 +3181,18 @@ export default function UxnestApp() {
   const [paidAudits, setPaidAudits] = useState(0);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [purchaseQuantity, setPurchaseQuantity] = useState(1);
-  const [legalPage, setLegalPage] = useState(null);
+  const [legalPage, setLegalPage] = useState(() => {
+    if (typeof window === "undefined") return null;
+    const value = window.location.hash.replace(/^#legal-/, "");
+    return window.location.hash.startsWith("#legal-") && Object.prototype.hasOwnProperty.call(LEGAL_CONTENT, value) ? value : null;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const target = legalPage ? "#legal-" + legalPage : page === "landing" ? "" : "#" + page;
+    if (window.location.hash !== target) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search + target);
+    }
+  }, [legalPage]);
   const [showDeck, setShowDeck] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const pendingRunRef = useRef(null);
@@ -4294,6 +4312,12 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                           {paymentLoading ? <><Loader2 size={16} className="audit-credit-widget__spinner" /> Opening checkout…</> : <>Buy {purchaseQuantity} audit credit{purchaseQuantity === 1 ? "" : "s"} <ArrowRight size={16} /></>}
                         </button>
                         <div className="audit-credit-widget__note">Beta pricing · Pay once, use anytime</div>
+                        <div className="audit-credit-widget__note" style={{ lineHeight: 1.6 }}>
+                          Checkout, taxes and payment receipts are handled by Creem as merchant of record.
+                          <button type="button" onClick={() => setLegalPage("refunds")} style={{ background: "none", border: "none", font: "inherit", fontWeight: 750, textDecoration: "underline", color: "#155F4C", cursor: "pointer", marginLeft: 4 }}>Refund Policy</button>
+                          <span> · </span>
+                          <button type="button" onClick={() => setLegalPage("terms")} style={{ background: "none", border: "none", font: "inherit", fontWeight: 750, textDecoration: "underline", color: "#155F4C", cursor: "pointer" }}>Terms</button>
+                        </div>
                       </div>
                     )}
                   </section>
