@@ -1,75 +1,72 @@
 import React from "react";
 
-// Displays the user-approved UXNest green-to-teal U/leaf artwork.
-// Icon and wordmark are tightly cropped from the approved source, so neither
-// shrinks into empty padding in the mobile header or presentation deck.
+// User-approved UXNest bird-and-nest horizontal lockup.
+// Source artwork includes the exact UXNest wordmark and tagline.
+// The compact icon is cropped from that same artwork for icon-only usage.
 export default function BrandLogo({
   size = 28,
   showWordmark = true,
   dark = false,
   className = "",
 }) {
-  const [iconFailed, setIconFailed] = React.useState(false);
-  const [wordmarkFailed, setWordmarkFailed] = React.useState(false);
-  const dimension = Math.max(16, Number(size) || 28);
-  const textHeight = Math.round(dimension * 0.83);
-  const gap = Math.max(6, Math.round(dimension * 0.21));
-  const wordColor = dark ? "#FFFFFF" : "#08172B";
-  const nestColor = dark ? "#8CE6D4" : "#009E91";
+  const [failed, setFailed] = React.useState(false);
+  const height = Math.max(16, Number(size) || 28);
+  const width = showWordmark ? Math.round(height * 4) : height;
+  const url = showWordmark
+    ? "/uxnest-horizontal.webp?v=7"
+    : "/uxnest-bird-180.png?v=7";
 
   return (
     <span
       className={className}
       role="img"
-      aria-label="UXNest"
+      aria-label="UXNest — AI-Powered UX Intelligence"
       style={{
         display: "inline-flex",
         alignItems: "center",
-        flexShrink: 0,
+        justifyContent: "center",
+        flexShrink: 1,
+        minWidth: 0,
+        width: dark ? width + 10 : width,
+        maxWidth: "100%",
         whiteSpace: "nowrap",
-        gap: showWordmark ? gap : 0,
-        height: dimension,
         lineHeight: 1,
         verticalAlign: "middle",
+        background: dark ? "#fff" : "transparent",
+        borderRadius: dark ? 10 : 0,
+        padding: dark ? 5 : 0,
+        boxSizing: "border-box",
       }}
     >
-      {!iconFailed && (
+      {!failed ? (
         <img
-          src="/uxnest-icon.png?v=5"
+          src={url}
+          width={width}
+          height={height}
           alt=""
           aria-hidden="true"
-          width={dimension}
-          height={dimension}
           decoding="async"
-          onError={() => setIconFailed(true)}
-          style={{ width: dimension, height: dimension, objectFit: "contain", flexShrink: 0, display: "block" }}
-        />
-      )}
-      {showWordmark && (!dark && !wordmarkFailed ? (
-        <img
-          src="/uxnest-wordmark.png?v=5"
-          alt=""
-          aria-hidden="true"
-          height={textHeight}
-          decoding="async"
-          onError={() => setWordmarkFailed(true)}
-          style={{ height: textHeight, width: "auto", objectFit: "contain", maxWidth: "none", display: "block" }}
+          onError={() => setFailed(true)}
+          style={{
+            display: "block",
+            width: "100%",
+            maxWidth: width,
+            height: "auto",
+            objectFit: "contain",
+            flexShrink: 1,
+          }}
         />
       ) : (
-        <span
-          aria-hidden="true"
-          style={{
-            fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
-            fontSize: Math.round(dimension * 0.84),
-            fontWeight: 850,
-            letterSpacing: "-0.045em",
-            lineHeight: 1,
-          }}
-        >
-          <span style={{ color: wordColor }}>UX</span>
-          <span style={{ color: nestColor }}>Nest</span>
-        </span>
-      ))}
+        <strong style={{
+          color: dark ? "#07352E" : "#08253A",
+          fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
+          fontWeight: 850,
+          fontSize: Math.max(14, Math.round(height * 0.68)),
+          letterSpacing: "-0.045em",
+        }}>
+          UX<span style={{ color: "#0AAA72" }}>Nest</span>
+        </strong>
+      )}
     </span>
   );
 }
