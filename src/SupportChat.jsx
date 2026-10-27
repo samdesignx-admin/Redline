@@ -20,7 +20,7 @@ ACCOUNTS AND LIMITS
 - Paid audit credits are USD $5 each during beta, purchased in one-time packs of 1–20. No recurring subscription. Creem handles checkout as merchant of record.
 
 BILLING, REFUNDS AND PRIVACY
-- Signed-in users can open Billing & Purchases to review purchase history, credits and refund-request status.
+- Signed-in users open Billing & Purchases from the hamburger menu to review purchase history, credits and payment/refund statuses. Billing does not offer a refund-request button. To request a refund or check an existing support request, open Help & Support in the hamburger menu, expand Billing questions & refunds → Refund requests and status, then select the purchase.
 - The published Refund Policy (#legal-refunds) offers a 14-day request window for full refunds of unused credit packs, normally only when enough unused paid credits remain in the account. Exceptions and non-waivable rights still apply. Refunds require review; never promise automatic approval.
 - Creem is merchant of record and processes payments, sales taxes, buyer invoices and approved refunds. UXNest handles product support and eligibility review.
 - A confirmed full refund reverses the corresponding audit credits. If the credits were spent, a credit adjustment may apply to future purchases.
