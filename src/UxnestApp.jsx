@@ -2947,8 +2947,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
               </div>
               <div style={{ padding: "12px 16px 16px" }}>
               <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15.5, marginBottom: 5, color: C.text }}>{f.title}</div>
-              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5, marginBottom: 10 }}>{f.desc}</div>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 700, color: C.gold }}>Learn more <ArrowRight size={13} /></span>
+              <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.6 }}>{f.desc}</div>
               </div>
             </div>
           );})}
