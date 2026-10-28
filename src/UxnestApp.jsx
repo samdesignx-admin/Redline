@@ -202,7 +202,7 @@ Top Concerns:
 
   `# Usability Analysis
 Evaluate Navigation, Discoverability, Learnability, User Control, Error Prevention.
-Use the issue block format, exactly 3 issues.
+Use the issue block format for up to 3 evidence-supported issues. Never invent findings to reach a fixed count.
 
 # Visual Design Analysis
 Evaluate Layout, Alignment, Spacing, Typography, Color Usage, Consistency.
@@ -211,7 +211,7 @@ If fewer than 3 material issues are supported, state that explicitly and do not 
 
   `# Accessibility Review
 Evaluate Contrast, Readability, Touch Targets, Screen Reader Friendliness, Keyboard Accessibility.
-Use the issue block format, exactly 3 issues.
+Use the issue block format for up to 3 evidence-supported issues. Never invent findings to reach a fixed count.
 
 # SEO & Search Visibility Review
 For URL audits, evaluate technical and on-page SEO using only the SEO evidence in the site dossier: title, meta description, H1 structure, canonical, robots/noindex directives, robots.txt availability and sitemap references, sitemap availability/valid XML, Open Graph metadata, structured data, language/viewport metadata, image alt coverage, and any user-provided target keywords.
@@ -228,11 +228,11 @@ For uploaded screenshots/documents where technical SEO cannot be verified, outpu
 
 # Trust & Credibility Review
 Evaluate Professional appearance, Transparency, Security signals, User confidence.
-Use the issue block format, exactly 2 issues.`,
+Use the issue block format for up to 2 evidence-supported issues. Do not invent absent signals or claim unchecked pages lack those signals.`,
 
   `# Conversion Optimization Review
 Evaluate Calls to Action, Friction Points, User Motivation, Form Complexity, Decision Making.
-Use the issue block format, exactly 2 issues.
+Use the issue block format for up to 2 evidence-supported issues. Do not invent absent signals or claim unchecked pages lack those signals.
 
 # Cognitive Load Assessment
 Evaluate Information Density, Mental Effort, Decision Fatigue, Content Clarity.
@@ -258,14 +258,14 @@ Expected Business Benefit: <max 12 words>
 (continue 2 through 10 in the same shape)`,
 
   `# Final Scorecard
-Use the findings and evidence from the preceding audit sections to assign numeric scores. Do not leave placeholders.
+Use the findings and evidence from the preceding audit sections to assign indicative numeric scores. These are AI estimates, not independent measurements. Never treat unverified details as proven failures. The overall score is holistic and not necessarily the simple average of the five scored categories. Do not leave placeholders.
 Usability: <0-100 integer>
 Accessibility: <0-100 integer>
 Visual Design: <0-100 integer>
 Trust: <0-100 integer>
 Conversion: <0-100 integer>
 Overall UX Score: <0-100 integer>
-Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
+Final Verdict: <Measured evidence-aware conclusion in 2-3 sentences, max 60 words. State the most important evidenced next step and what still needs testing. Do not issue a categorical Approve or Do Not Approve based only on an automated audit.>`,
 ];
 
 // Visual URL audits use fewer, denser batches because every request carries the
@@ -327,14 +327,14 @@ Expected Business Benefit: <max 12 words>
 Continue through 10. Every recommendation must be supported by visible evidence.
 
 # Final Scorecard
-Score the captured page from visible evidence only. Do not leave placeholders.
+Score the captured page from visible evidence only. These scores are indicative AI estimates, not measured accessibility or performance metrics. Do not subtract points for implementation that was never tested. Do not leave placeholders.
 Usability: <0-100 integer>
 Accessibility: <0-100 integer>
 Visual Design: <0-100 integer>
 Trust: <0-100 integer>
 Conversion: <0-100 integer>
 Overall UX Score: <0-100 integer>
-Final Verdict: <Approve or Do Not Approve, then why in 2-3 sentences, max 60 words>`,
+Final Verdict: <Measured evidence-aware conclusion in 2-3 sentences, max 60 words. State the most important evidenced next step and what still needs testing. Do not issue a categorical Approve or Do Not Approve based only on an automated audit.>`,
 ];
 
 function buildFilesBatchPrompt(batchSections) {
@@ -449,7 +449,7 @@ Return JSON only. Do not use markdown or commentary. Use this exact schema:
 
 status must be one of: observed, inferred, unverified, visual-only, blocked, insufficient.
 confidence must be one of: high, medium, low.
-Use "observed" + "high" only when the exact target is directly visible. Use "inferred" + "medium" only when the visible target supports the finding but requires a modest interpretation. Use "unverified" + "low" when the screenshot cannot establish the claim; normally omit such findings.
+Use "observed" + "high" only when the exact target and its connection to the finding are directly visible. If the target is uncertain, omit the mapping rather than generating a generic pinpoint. Do not map nonvisual technical claims to screenshots.
 
 Coordinates are percentages of the full screenshot. targetX/targetY identify the center of one exact UI element; targetRadius is a small ring radius as a percentage of screenshot width. Mark the button, label, price, nav item, input, card title, or other exact visible element described by the finding — never the surrounding image, entire card, section, page, or whitespace. Use targetRadius 1.5–3.5 (maximum 4.5). Keep all values between 0 and 100. If the finding has no unambiguous visible target, omit it. Return at most 6 objects, or [] if nothing can be located confidently. Prefer clearly visible, high-impact findings.
 
@@ -2067,6 +2067,9 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
             <ScoreBar label="Conversion" value={scorecard.conversion} />
             <div style={{ height: 1, background: C.border, margin: "14px 0" }} />
             <ScoreBar label="Overall UX Score" value={scorecard.overall} />
+            <p style={{ margin: "15px 0 0", padding: "11px 13px", borderRadius: 10, background: "#EDF9F2", color: "#376957", fontSize: 12, lineHeight: 1.6 }}>
+              <strong>How scoring works:</strong> Scores are indicative AI estimates based on available evidence, not independently measured performance or compliance results. The five categories above are scored numerically; SEO and cognitive load are evaluated separately. The overall score is holistic, not necessarily an average. Unverified behaviors require manual testing.
+            </p>
             <div style={{ marginTop: 18, padding: "14px 16px", background: C.surfaceAlt, borderRadius: 10, border: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Stamp size={16} color={C.gold} />
@@ -2632,6 +2635,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
             </div>
           ))}
         </div>
+        <p style={{ fontSize: "8.6pt", lineHeight: 1.5, color: T.textDim, margin: "2mm 0 9mm 0", maxWidth: "230mm" }}>
+          These are indicative AI scores, not independent compliance results. Five categories are scored numerically; SEO and cognitive load receive separate qualitative analysis. Overall is a holistic estimate, not necessarily the average. Validate untested behaviors independently.
+        </p>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
 
@@ -2783,7 +2789,7 @@ const FEATURES = [
   { icon: Globe, img: "/images/feature-url.jpg", title: "URL Crawl & Review", desc: "Enter a URL and UXNest explores the top pages for a site-wide audit." },
   { icon: FileText, img: "/images/feature-reports.jpg", title: "Structured UX & SEO Reports", desc: "Evidence-based findings across seven areas, including website SEO where verifiable." },
   { icon: Lightbulb, img: "/images/feature-ai.jpg", title: "AI Recommendations", desc: "Prioritized, actionable recommendations ranked by impact." },
-  { icon: Download, img: "/images/feature-deck.jpg", title: "Shareable Reports", desc: "Export a PDF report or 12-slide presentation deck for your team." },
+  { icon: Download, img: "/images/feature-deck.jpg", title: "Shareable Reports", desc: "Export a searchable PDF presentation with optional visual-evidence pages." },
 ];
 
 const DIMENSIONS = [
@@ -2802,7 +2808,7 @@ const REPORT_DELIVERABLES = [
   { icon: Lightbulb, title: "AI Recommendations", desc: "Design-lead perspective with prioritized, actionable improvements." },
   { icon: Trophy, title: "Top 10 Improvements", desc: "Ranked fixes with expected user and business benefits." },
   { icon: Zap, title: "Quick Wins & Strategy", desc: "Short-term fixes and a longer-term improvement roadmap." },
-  { icon: Download, title: "Scorecard & Shareable Reports", desc: "Five scored UX categories, a verdict, plus PDF and 12-slide deck export." },
+  { icon: Download, title: "Scorecard & Shareable Reports", desc: "Five scored UX categories, evidence limits, and a presentation PDF." },
 ];
 
 const STEPS = [
@@ -2960,7 +2966,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
           Get your first complete audit free. Additional audits are $5 each during beta (normally $10). Buy 1–20 audit credits per purchase. No subscription.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "Seven evidence-based analysis areas", "AI recommendations and Top 10", "12-slide deck and PDF export", "No subscription required"].map((f) => (
+          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "Seven evidence-based analysis areas", "AI recommendations and Top 10", "Searchable presentation PDF with optional evidence pages", "No subscription required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
