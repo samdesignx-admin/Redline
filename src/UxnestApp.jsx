@@ -2395,7 +2395,7 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
   const T = theme || REPORT_THEME_FALLBACK;
   const severity = issue?.severity || "Medium";
   const clip = (value, max = 230) => {
-    const s = String(value || "").replace(/\\s+/g, " ").trim();
+    const s = String(value || "").replace(/\s+/g, " ").trim();
     if (s.length <= max) return s;
     const end = s.slice(0, max).lastIndexOf(" ");
     return s.slice(0, Math.max(100, end)) + "…";
@@ -2449,7 +2449,11 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
-  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot && visualEvidence.length ? visualEvidence.length : 0);
+  const verifiedVisualEvidence = (visualEvidence || []).filter((item) =>
+    item?.confidence === "high" && ["observed", "visual-only"].includes(item.status)
+    && Number.isFinite(Number(item.cx)) && Number.isFinite(Number(item.cy))
+    && String(item.target || "").trim());
+  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot ? verifiedVisualEvidence.length : 0);
   let n = 0;
   const next = () => ++n;
 
@@ -2602,7 +2606,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       </div>
 
       {/* Focused visual evidence — one finding per slide so the UI is readable at presentation size */}
-      {auditScreenshot && visualEvidence.length > 0 && (() => {
+      {auditScreenshot && verifiedVisualEvidence.length > 0 && (() => {
         const allIssues = [
           ["Usability", usability], ["Visual Design", visual], ["Accessibility", accessibility],
           ["SEO & Search Visibility", seo], ["Trust & Credibility", trust],
@@ -2610,7 +2614,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         ].flatMap(([section, data]) => (data?.issues || []).map((candidate) => ({ ...candidate, section })))
           .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
           .slice(0, 8);
-        return visualEvidence.map((item, index) => {
+        return verifiedVisualEvidence.map((item, index) => {
           const indexedIssue = item.findingIndex ? allIssues[item.findingIndex - 1] : null;
           const issue = indexedIssue && (!item.issueTitle || indexedIssue.title === item.issueTitle)
             ? indexedIssue
@@ -3941,27 +3945,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         ? auditScreenshotsRef.current
         : (auditScreenshotRef.current ? [{ url: urlInput.trim(), screenshot: auditScreenshotRef.current }] : []);
       let mappedEvidence = which === "url" && evidenceScreenshots.length ? await generateVisualEvidence(parsed, evidenceScreenshots) : [];
-      if (!mappedEvidence.length && which === "url" && auditScreenshotRef.current) {
-        const candidates = [
-          ["Usability", parsed.usability], ["Visual Design", parsed.visual], ["Accessibility", parsed.accessibility],
-          ["SEO & Search Visibility", parsed.seo], ["Trust & Credibility", parsed.trust],
-          ["Conversion", parsed.conversion], ["Cognitive Load", parsed.cognitive],
-        ].flatMap(([section, data]) => (data?.issues || []).map((issue) => ({ ...issue, section })))
-          .filter((issue) => issue?.title)
-          .sort((a, b) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] ?? 4) - ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity] ?? 4))
-          .slice(0, 8);
-        mappedEvidence = candidates.slice(0, 6).map((issue, index) => ({
-          id: `fallback-evidence-${index + 1}`,
-          findingIndex: index + 1,
-          issueTitle: issue.title,
-          cx: 50, cy: 50, radius: 4.5,
-          target: "General page context; precise pinpoint unavailable",
-          explanation: "A screenshot is available, but the audit could not verify an exact target location. This image is contextual evidence only.",
-          screenshot: evidenceScreenshots[0]?.screenshot || auditScreenshotRef.current,
-          screenshotUrl: evidenceScreenshots[0]?.url || "",
-          status: "insufficient", confidence: "low",
-        }));
-      }
+      // Do not invent midpoint pins when no visible element was mapped.
+      // An unmapped screenshot remains useful as page context only.
       setVisualEvidence(mappedEvidence);
       const themeImage = which === "url" ? auditScreenshotRef.current : (images[0]?.dataUrl || images[0]?.url || null);
       const adaptiveTheme = await extractBrandTheme(themeImage);
