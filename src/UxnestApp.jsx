@@ -2464,7 +2464,13 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         <div style={{ position: "absolute", width: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "96mm", height: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "62mm", borderRadius: T.ornament === "block" ? "8mm" : T.ornament === "frame" ? "0" : "50%", border: T.ornament === "line" ? "0.5mm solid rgba(255,255,255,0.13)" : "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm", transform: T.ornament === "block" ? "rotate(14deg)" : "none" }} />
         <div style={{ position: "absolute", width: T.ornament === "grid" ? "74mm" : "70mm", height: T.ornament === "grid" ? "74mm" : "70mm", borderRadius: T.ornament === "block" ? "7mm" : T.ornament === "frame" ? "0" : "50%", background: T.ornament === "line" ? "transparent" : "rgba(255,255,255,0.035)", border: T.ornament === "grid" ? "0.5mm solid rgba(255,255,255,0.07)" : "none", left: "-18mm", bottom: "-22mm" }} />
         <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
-          <BrandLogo size={64} dark />
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 14, borderRadius: 14, padding: "6px 14px" }}>
+            <BrandLogo size={62} showWordmark={false} />
+            <div style={{ textAlign: "left", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <div style={{ color: "#FFFFFF", fontWeight: 850, fontSize: 34, lineHeight: 1.1, letterSpacing: "-1.2px" }}>UX<span style={{ color: "#70EDAF" }}>Nest</span></div>
+              <div style={{ color: "#C5E9DA", fontSize: 10.5, fontWeight: 700, letterSpacing: .2, marginTop: 4 }}>AI-Powered UX Intelligence</div>
+            </div>
+          </div>
           <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review · {T.descriptor || "ADAPTIVE SYSTEM"}</div>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: T.titleWeight || 800, fontSize: 58 * (T.titleScale || 1), lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: T.letterSpacing || "-1.5pt" }}>UXNest Audit Report</div>
           <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 15, lineHeight: 1.3, color: "#BFD8D2", maxWidth: "190mm", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sourceLabel}</div>
@@ -2809,7 +2815,7 @@ const DIMENSIONS = [
   { icon: NavIcon, img: "/images/dim-usability.jpg", title: "Usability & Navigation", desc: "Navigation, discoverability, user control, task flows and error prevention." },
   { icon: Palette, img: "/images/dim-visualdesign.jpg", title: "Visual Design", desc: "Hierarchy, spacing, layout, typography, color and visual consistency." },
   { icon: A11yIcon, img: "/images/dim-accessibility.jpg", title: "Accessibility", desc: "Evidence-based readability, contrast, touch-target and inclusive-design concerns." },
-  { icon: Search, img: "/images/feature-url.jpg", title: "SEO & Search Visibility", desc: "For websites: metadata, headings, crawl signals and keyword alignment when verifiable." },
+  { icon: Search, img: null, title: "SEO & Search Visibility", desc: "For websites: metadata, headings, crawl signals and keyword alignment when verifiable." },
   { icon: ShieldCheck, img: "/images/dim-trust.jpg", title: "Trust & Credibility", desc: "Transparency, confidence, security cues and professional presentation." },
   { icon: TrendingUp, img: "/images/dim-conversion.jpg", title: "Conversion Optimization", desc: "Calls to action, forms, user motivation, decision friction and persuasion." },
   { icon: Brain, img: "/images/dim-cognitive.jpg", title: "Cognitive Load", desc: "Information density, clarity, mental effort and decision fatigue." },
@@ -2914,7 +2920,14 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
           {DIMENSIONS.map((d) => { const Icon = d.icon; return (
             <article key={d.title} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 6px 20px rgba(18,48,43,0.07)" }}>
               <div style={{ position: "relative", height: 84, overflow: "hidden" }}>
-                <img src={d.img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                {d.img ? (
+                  <img src={d.img} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                ) : (
+                  <div aria-hidden="true" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 16, color: "#D9FFEA", background: "linear-gradient(125deg, #08493D, #138B63 58%, #6BCDA0)" }}>
+                    <Search size={38} strokeWidth={1.8} />
+                    <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, fontWeight: 750, letterSpacing: 1.3, lineHeight: 1.7, color: "#E2FFEE" }}>SEO<br/>SEARCH INSIGHTS</div>
+                  </div>
+                )}
               </div>
               <div style={{ padding: "14px 15px 16px", display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <span style={{ display: "grid", placeItems: "center", background: "#E3F8EE", color: "#0D8464", borderRadius: 9, minWidth: 31, height: 31 }}>
