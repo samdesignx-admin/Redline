@@ -2691,6 +2691,54 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   );
 }
 
+/*
+ * Add a searchable/selectable invisible text layer above each captured slide.
+ * The visible slide remains pixel-faithful, while PDF readers can search and
+ * copy the underlying text rather than seeing only one JPEG per page.
+ *
+ * Invisible text is standard PDF rendering mode 3 (supported by jsPDF). It is
+ * positioned using DOM text rectangles after export mode removes viewer zoom.
+ * For complex multi-line text, placement is approximate but the wording is real.
+ */
+function addSelectableSlideTextLayer(pdf, slide) {
+  if (typeof document === "undefined" || !slide || !pdf) return;
+  const bounds = slide.getBoundingClientRect();
+  if (bounds.width < 1 || bounds.height < 1) return;
+  const xFactor = 296 / bounds.width;
+  const yFactor = 166 / bounds.height;
+  const tree = document.createTreeWalker(slide, 4); // NodeFilter.SHOW_TEXT
+  pdf.setFont("helvetica", "normal");
+  let node = tree.nextNode();
+  let count = 0;
+  while (node && count < 350) {
+    const parent = node.parentElement;
+    const raw = String(node.nodeValue || "").replace(/\s+/g, " ").trim();
+    node = tree.nextNode();
+    if (!raw || !parent || parent.closest("svg,script,style,[aria-hidden='true']")) continue;
+    const style = window.getComputedStyle(parent);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+    const range = document.createRange();
+    range.selectNodeContents(parent.firstChild && parent.firstChild.nodeType === 3 ? parent.firstChild : parent);
+    const rect = range.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0 || rect.top >= bounds.bottom || rect.bottom <= bounds.top) continue;
+    const x = Math.max(1, Math.min(292, (rect.left - bounds.left) * xFactor));
+    const y = Math.max(1, Math.min(163, (rect.top - bounds.top) * yFactor));
+    const fontPx = parseFloat(style.fontSize) || 13;
+    const fontPt = Math.max(6, Math.min(34, fontPx * 0.75));
+    const text = raw.normalize("NFKD")
+      .replace(/[–—]/g, "-").replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+      .replace(/[^\x20-\x7E]/g, " ").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    pdf.setFontSize(fontPt);
+    pdf.text(text, x, y, {
+      renderingMode: "invisible",
+      baseline: "top",
+      maxWidth: Math.max(10, Math.min(292 - x, rect.width * xFactor)),
+    });
+    count++;
+  }
+}
+
 function PrintableReport({ report, source, auditedPages = [], auditScreenshot = null, auditScreenshots = [], visualEvidence = [], theme = REPORT_THEME_FALLBACK }) {
   if (!report) return null;
   return (
@@ -4120,9 +4168,9 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
 
   const [exporting, setExporting] = useState(false);
 
-  /* Genuine PDF export: rasterize each rendered slide with html2canvas and
-     place it on a landscape 16:9 jsPDF page. Requires the deck viewer to be
-     open so the slides exist in the DOM at full size. */
+  /* Preserve the exact slide artwork, then add an invisible searchable
+     text layer so exported PDFs are no longer image-only. The deck viewer
+     must be open to render slides at full native size. */
   const tryExportDeck = useCallback(async () => {
     if (!report || exporting) return;
     setExporting(true);
@@ -4138,7 +4186,20 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         return;
       }
 
+      // Wait for report imagery to finish loading before the canvas snapshot.
+      const sourceImages = slides.flatMap((slide) => Array.from(slide.querySelectorAll("img")));
+      await Promise.allSettled(sourceImages.map(async (img) => {
+        if (img.complete && img.naturalWidth > 0) return;
+        if (typeof img.decode === "function") await img.decode();
+      }));
+
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: [296, 166] });
+      pdf.setProperties({
+        title: "UXNest UX Audit Report",
+        subject: "AI-assisted UX audit with evidence and recommendations",
+        author: "UXNest",
+        keywords: "UXNest, user experience, usability, audit report, accessibility, SEO",
+      });
       for (let i = 0; i < slides.length; i++) {
         const canvas = await html2canvas(slides[i], {
           scale: 2,
@@ -4147,9 +4208,10 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           logging: false,
           windowWidth: 1119,
         });
-        const img = canvas.toDataURL("image/jpeg", 0.9);
+        const img = canvas.toDataURL("image/jpeg", 0.95);
         if (i > 0) pdf.addPage([296, 166], "landscape");
         pdf.addImage(img, "JPEG", 0, 0, 296, 166, undefined, "FAST");
+        addSelectableSlideTextLayer(pdf, slides[i]);
       }
       const name = `uxnest-ux-audit-${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(name);
