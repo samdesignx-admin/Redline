@@ -489,41 +489,35 @@ function parseVisualEvidence(raw, issues) {
       return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : fallback;
     };
 
-    const hasPinpoint = Number.isFinite(Number(item?.targetX)) && Number.isFinite(Number(item?.targetY));
-    const hasLegacyFocalPoint = Number.isFinite(Number(item?.cx)) && Number.isFinite(Number(item?.cy));
+    const isCoordinate = (value) => value != null && String(value).trim() !== "" && Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 100;
+    const hasPinpoint = isCoordinate(item?.targetX) && isCoordinate(item?.targetY);
+    const hasLegacyFocalPoint = isCoordinate(item?.cx) && isCoordinate(item?.cy);
+    // A screenshot pinpoint must identify a real, explicit coordinate.
+    // Never invent a center point or a fallback rectangle when AI omits it.
+    if (!hasPinpoint && !hasLegacyFocalPoint) return null;
     let cx;
     let cy;
     let radius;
 
-    if (hasPinpoint || hasLegacyFocalPoint) {
-      cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
-      cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
-      radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
-    } else {
-      const x = clamp(item.x, 0), y = clamp(item.y, 0);
-      const w = Math.max(2, Math.min(100 - x, clamp(item.w, 12)));
-      const h = Math.max(2, Math.min(100 - y, clamp(item.h, 8)));
-      cx = Math.max(3, Math.min(97, x + w / 2));
-      cy = Math.max(3, Math.min(97, y + h / 2));
-      radius = Math.max(1.5, Math.min(3.5, Math.min(w, h) / 4));
-    }
+    cx = clamp(hasPinpoint ? item.targetX : item.cx, 50);
+    cy = clamp(hasPinpoint ? item.targetY : item.cy, 50);
+    radius = Math.max(1.5, Math.min(4.5, clamp(hasPinpoint ? item.targetRadius : item.radius, 2.5)));
 
     const explanation = String(item.explanation || "").trim().slice(0, 220);
     if (!explanation) return null;
-    const allowedStatus = new Set(["observed", "inferred", "unverified", "visual-only", "blocked", "insufficient"]);
-    const allowedConfidence = new Set(["high", "medium", "low"]);
-    const statusRaw = String(item.status || "observed").trim().toLowerCase();
-    const confidenceRaw = String(item.confidence || "").trim().toLowerCase();
-    const status = allowedStatus.has(statusRaw) ? statusRaw : "observed";
-    const confidence = allowedConfidence.has(confidenceRaw)
-      ? confidenceRaw
-      : status === "observed" || status === "visual-only" ? "high" : status === "inferred" ? "medium" : "low";
+    const status = String(item.status || "").trim().toLowerCase();
+    const confidence = String(item.confidence || "").trim().toLowerCase();
+    // Only directly observed, high-confidence visual targets receive
+    // evidence pins. Inferred, unknown and unverified targets stay unpinned.
+    if (!["observed", "visual-only"].includes(status) || confidence !== "high") return null;
+    const target = String(item.target || "").trim().slice(0, 100);
+    if (!target) return null;
     return {
       id: `F-${findingIndex}-${index}`,
       findingIndex,
       issueTitle: issue.title,
       cx, cy, radius,
-      target: String(item.target || "").trim().slice(0, 100),
+      target,
       explanation,
       status,
       confidence,
@@ -2711,14 +2705,15 @@ function addSelectableSlideTextLayer(pdf, slide) {
   let node = tree.nextNode();
   let count = 0;
   while (node && count < 350) {
-    const parent = node.parentElement;
-    const raw = String(node.nodeValue || "").replace(/\s+/g, " ").trim();
+    const textNode = node;
+    const parent = textNode.parentElement;
+    const raw = String(textNode.nodeValue || "").replace(/\s+/g, " ").trim();
     node = tree.nextNode();
     if (!raw || !parent || parent.closest("svg,script,style,[aria-hidden='true']")) continue;
     const style = window.getComputedStyle(parent);
     if (style.display === "none" || style.visibility === "hidden") continue;
     const range = document.createRange();
-    range.selectNodeContents(parent.firstChild && parent.firstChild.nodeType === 3 ? parent.firstChild : parent);
+    range.selectNodeContents(textNode);
     const rect = range.getBoundingClientRect();
     if (!rect || rect.width <= 0 || rect.height <= 0 || rect.top >= bounds.bottom || rect.bottom <= bounds.top) continue;
     const x = Math.max(1, Math.min(292, (rect.left - bounds.left) * xFactor));
