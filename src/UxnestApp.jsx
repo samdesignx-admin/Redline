@@ -3043,7 +3043,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         </button>
       </div>
 
-      {/* Early access — personal feedback sent to the approved UXNest owner inbox */}
+      {/* Early-access feedback sent to the UXNest support inbox */}
       <section id="early-access" style={{ ...sect, scrollMarginTop: 96 }} aria-labelledby="uxnest-early-access-title">
         <SectionKicker>EARLY ACCESS</SectionKicker>
         <h2 id="uxnest-early-access-title" style={h2}>Be one of the first design teams on UXNest</h2>
@@ -3053,14 +3053,14 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
         </p>
         <div style={{ maxWidth: 510, margin: "0 auto", background: "#EDF9F3", border: "1px solid #B7E5D0", borderRadius: 16, padding: "19px 18px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#0C7957", fontSize: 13, fontWeight: 800, marginBottom: 7 }}>
-            <Mail size={17} /> Send your feedback directly
+            <Mail size={17} /> Email the UXNest team
           </div>
-          <a href="mailto:samdesignx@gmail.com?subject=UXNest%20Early%20Access%20Feedback"
+          <a href="mailto:support@uxnest.ai?subject=UXNest%20Early%20Access%20Feedback"
             style={{ display: "inline-block", color: "#105D46", fontSize: "clamp(15px, 4vw, 18px)", fontWeight: 800, overflowWrap: "anywhere", textDecoration: "underline", textUnderlineOffset: 4 }}>
-            samdesignx@gmail.com
+            support@uxnest.ai
           </a>
           <p style={{ color: "#547569", fontSize: 12, lineHeight: 1.55, margin: "9px 0 0" }}>
-            Share feature ideas, report-quality feedback or a problem you encountered. We read every message.
+            Share feature ideas, report-quality feedback or issues with the UXNest support team.
           </p>
         </div>
       </section>
