@@ -2373,29 +2373,19 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
     return () => { cancelled = true; };
   }, [screenshot, cx, cy, radius]);
 
-  const marker = Math.max(1.5, Math.min(4.5, Number(radius) || 2.5));
   return (
-    <div style={{ display: "grid", gridTemplateRows: "minmax(0, 7fr) minmax(0, 3fr)", height: "100%", width: "100%", background: "#F4F5F3" }}>
-      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", background: "#F4F5F3", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <img src={screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
-        <div style={{
-          position: "absolute",
-          left: `${Math.max(2, Math.min(98, Number(cx || 50)))}%`,
-          top: `${Math.max(2, Math.min(98, Number(cy || 50)))}%`,
-          width: `${Math.max(3, Math.min(12, marker * 2))}%`,
-          height: `${Math.max(5, Math.min(24, marker * 3))}%`,
-          transform: "translate(-50%, -50%)",
-          border: "0.55mm solid #D58A16",
-          borderRadius: "1.5mm",
-          boxShadow: "0 0 0 0.35mm rgba(255,255,255,.95)",
-          pointerEvents: "none",
-        }} />
-        <div style={{ position: "absolute", left: "4mm", bottom: "2.5mm", background: "rgba(15,22,20,.78)", color: "#fff", padding: "1.5mm 2.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.5pt", letterSpacing: .6 }}>
-          CONTEXT · FULL PAGE
-        </div>
+    <div style={{ display: "grid", gridTemplateRows: "minmax(0, 4fr) minmax(0, 1fr)", height: "100%", width: "100%", minHeight: 0, background: "#EDF5F0" }}>
+      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", background: "#F8FCF9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={crop || screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+        <span style={{ position: "absolute", bottom: "2mm", left: "3mm", borderRadius: "2mm", padding: "1.3mm 2.5mm", color: "#FFFFFF", background: "rgba(8,57,42,.9)", fontFamily: "'IBM Plex Mono',monospace", fontSize: "7.5pt" }}>
+          TARGET DETAIL · AI-SUGGESTED CROP
+        </span>
       </div>
-      <div style={{ minHeight: 0, overflow: "hidden", borderTop: "0.35mm solid #D9E2DF", background: "#E9EFEC", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <img src={crop || screenshot} alt={alt ? `Target detail: ${alt}` : "Target detail"} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
+      <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderTop: "0.3mm solid #D9E5DE", background: "#E9F2ED", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <img src={screenshot} alt="Full page context" style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "top center", display: "block" }} />
+        <span style={{ position: "absolute", left: "3mm", bottom: "1mm", color: "#FFFFFF", background: "rgba(8,57,42,.75)", fontFamily: "'IBM Plex Mono',monospace", fontSize: "6.5pt", padding: "0.5mm 2mm", borderRadius: "1.5mm" }}>
+          FULL PAGE CONTEXT
+        </span>
       </div>
     </div>
   );
@@ -2404,73 +2394,49 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
 function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, issue, theme = REPORT_THEME_FALLBACK }) {
   const T = theme || REPORT_THEME_FALLBACK;
   const severity = issue?.severity || "Medium";
-  const sev = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
-  const cx = Number.isFinite(Number(item.cx)) ? Number(item.cx) : 50;
-  const cy = Number.isFinite(Number(item.cy)) ? Number(item.cy) : 50;
-  const tight = Math.max(1.5, Math.min(4.5, Number(item.radius) || 2.5));
-
+  const clip = (value, max = 230) => {
+    const s = String(value || "").replace(/\\s+/g, " ").trim();
+    if (s.length <= max) return s;
+    const end = s.slice(0, max).lastIndexOf(" ");
+    return s.slice(0, Math.max(100, end)) + "…";
+  };
+  const title = clip(item.issueTitle || issue?.title || "Visual finding", 98);
   return (
     <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
-      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>
-        Evidence · Finding {index + 1}
-      </div>
-      <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${27 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>
-        {item.issueTitle}
-      </h2>
-      <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Visual Evidence · Finding {index + 1}</div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontSize: "21pt", lineHeight: 1.16, letterSpacing: "-.4pt", marginBottom: "3mm", maxHeight: "16mm", overflow: "hidden" }}>{title}</h2>
+      <div style={{ ...SLIDE.rule, width: "27mm", height: "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, marginBottom: "5mm" }} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5mm", flex: 1, minHeight: 0 }}>
-        <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderRadius: `${Math.max(8, T.radius || 14)}px`, border: `0.4mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow, minWidth: 0 }}>
-          <EvidenceCrop
-            screenshot={screenshot}
-            cx={cx}
-            cy={cy}
-            radius={tight}
-            alt={`Focused evidence for finding ${index + 1}`}
-          />
-          <div style={{ position: "absolute", left: "6mm", bottom: "6mm", background: "rgba(15,22,20,.82)", color: "#fff", padding: "2.2mm 3.5mm", borderRadius: "99px", fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: .7 }}>
-            TARGET DETAIL · CONTEXT BELOW
-          </div>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.05fr)", gap: "6mm", flex: 1, minHeight: 0, marginBottom: "3mm" }}>
+        <div style={{ minHeight: 0, overflow: "hidden", borderRadius: "4mm", border: `0.35mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow }}>
+          <EvidenceCrop screenshot={screenshot} cx={item.cx} cy={item.cy} radius={item.radius} alt={`AI-suggested detail for ${title}`} />
         </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "2.5mm", minHeight: 0, minWidth: 0, overflow: "visible", overflowWrap: "break-word", wordBreak: "normal" }}>
-          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, boxShadow: T.cardShadow }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "3mm", marginBottom: "3mm", flexWrap: "wrap" }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary }}>THE FINDING</span>
-              <div style={{ display: "flex", gap: "2mm", alignItems: "center" }}>
-                <SevChip severity={severity} />
-                <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.8pt", letterSpacing: .7, color: T.primary, background: T.soft, border: `0.3mm solid ${T.border}`, borderRadius: 99, padding: "1mm 2.5mm", whiteSpace: "nowrap" }}>
-                  {String(item.status || "observed").toUpperCase()} · {String(item.confidence || "high").toUpperCase()} CONFIDENCE
-                </span>
-              </div>
-            </div>
-            <div style={{ fontSize: "10.5pt", fontWeight: T.titleWeight || 800, lineHeight: 1.3, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.issueTitle}</div>
-          </div>
-
-          <div style={{ padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.soft, border: `0.3mm solid ${T.border}` }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>WHAT THE PINPOINT SHOWS</div>
-            <div style={{ fontSize: "8pt", lineHeight: 1.42, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{item.explanation}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "3mm", minHeight: 0, minWidth: 0 }}>
+          <div style={{ padding: "4mm", borderRadius: "3mm", background: T.soft, border: `0.3mm solid ${T.border}` }}>
+            <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, marginBottom: "2mm", fontWeight: 700 }}>VISIBLE ELEMENT</div>
+            <div style={{ fontSize: "11pt", fontWeight: 800, color: T.text, lineHeight: 1.35, marginBottom: "2mm", overflowWrap: "anywhere" }}>{clip(item.target || title, 120)}</div>
+            <div style={{ fontSize: "9.6pt", lineHeight: 1.45, color: T.textDim, overflowWrap: "anywhere" }}>{clip(item.explanation, 185)}</div>
           </div>
 
           {issue?.why && (
-            <div style={{ padding: "0 1mm" }}>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.muted, marginBottom: "2mm" }}>WHY IT MATTERS</div>
-              <div style={{ fontSize: "7.8pt", lineHeight: 1.42, color: T.textDim, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word", maxWidth: "100%" }}>{issue.why}</div>
+            <div style={{ padding: "3mm 4mm", borderRadius: "3mm", border: `0.3mm solid ${T.border}`, background: T.surface }}>
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, fontWeight: 700, marginBottom: "1.5mm" }}>WHY IT MATTERS</div>
+              <div style={{ fontSize: "10pt", lineHeight: 1.45, color: T.textDim, overflowWrap: "anywhere" }}>{clip(issue.why, 195)}</div>
             </div>
           )}
 
           {issue?.recommendation && (
-            <div style={{ marginTop: "auto", padding: "5mm", borderRadius: `${T.radius || 14}px`, background: T.surface, border: `0.3mm solid ${T.border}`, borderLeft: `1.4mm solid ${T.primary}` }}>
-              <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", letterSpacing: 1, color: T.primary, marginBottom: "2mm" }}>RECOMMENDED IMPROVEMENT</div>
-              <div style={{ fontSize: "8.5pt", lineHeight: 1.5, color: T.text, whiteSpace: "normal", wordBreak: "normal", overflowWrap: "break-word" }}>{issue.recommendation}</div>
+            <div style={{ marginTop: "auto", padding: "4mm", borderRadius: "3mm", border: `0.35mm solid ${T.primary}`, background: T.surface }}>
+              <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, fontWeight: 700, marginBottom: "1.5mm" }}>SUGGESTED NEXT STEP</div>
+              <div style={{ fontSize: "10.5pt", lineHeight: 1.45, color: T.text, overflowWrap: "anywhere" }}>{clip(issue.recommendation, 210)}</div>
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ position: "absolute", right: "10mm", bottom: "7mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.2pt", color: T.muted, letterSpacing: .35, background: T.background, padding: "1.2mm 2mm", borderRadius: "2mm", border: "0.25mm solid " + T.border }}>
-        Evidence confidence: <b>OBSERVED</b> = directly visible · <b>INFERRED</b> = supported interpretation · <b>UNVERIFIED</b> = not established
-      </div>
+      <p style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "7pt", color: T.muted, lineHeight: 1.35, margin: "0 0 8mm", maxWidth: "240mm" }}>
+        Evidence crop and coordinates are AI-estimated, not independently verified. Check the live interface before acting; full finding text appears in the earlier section. Severity: {severity}.
+      </p>
       <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
   );
