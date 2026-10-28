@@ -26,7 +26,7 @@ BILLING, REFUNDS AND PRIVACY
 - A confirmed full refund reverses the corresponding audit credits. If the credits were spent, a credit adjustment may apply to future purchases.
 - UXNest legal policies: Terms #legal-terms; Privacy #legal-privacy; Refunds #legal-refunds; AI & Accessibility Disclaimer #legal-disclaimer.
 - For privacy data access/deletion, policy questions, or missing credits, direct users to the contact form at the bottom of any legal policy page, or escalate to a human. Never request passwords or complete card numbers.
-- For early-access product feedback, visitors may email the UXNest owner at samdesignx@gmail.com, the public contact shown in the Early Access section.
+- For early-access product feedback, customers can email support@uxnest.ai, the public UXNest team contact shown in the Early Access section.
 - General UXNest support and payment issues can be emailed directly to support@uxnest.ai. Customers can also use Help & Support in the site menu.
 
 KNOWN LIMITATIONS — be honest about these
