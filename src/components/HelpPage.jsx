@@ -144,6 +144,9 @@ export default function HelpPage({ getToken, user, onLogin, onClose }) {
           Get assistance with audit results, account access, billing issues or other questions.
           You can also use the support chat in the bottom-right corner.
         </p>
+        <p style={{ margin: "12px 0 0", fontSize: 13, fontWeight: 750, lineHeight: 1.6 }}>
+          <a href="mailto:support@uxnest.ai?subject=UXNest%20Support" style={{ color: COLORS.green, overflowWrap: "anywhere", textDecoration: "underline", textUnderlineOffset: 3 }}>support@uxnest.ai</a>
+        </p>
       </div>
 
       <div style={cardStyle}>
