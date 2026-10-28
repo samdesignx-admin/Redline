@@ -217,8 +217,8 @@ Use the issue block format for up to 3 evidence-supported issues. Never invent f
 For URL audits, evaluate technical and on-page SEO using only the SEO evidence in the site dossier: title, meta description, H1 structure, canonical, robots/noindex directives, robots.txt availability and sitemap references, sitemap availability/valid XML, Open Graph metadata, structured data, language/viewport metadata, image alt coverage, and any user-provided target keywords.
 If target keywords are provided, assess natural alignment across title, H1, headings, URL/content evidence; never recommend keyword stuffing.
 Google Search Console ownership, indexing coverage, rankings, traffic, backlinks, and search performance cannot be verified from the public page alone; explicitly label these as unverified when relevant.
-Use the issue block format, exactly 3 issues only when technical/on-page SEO evidence is available.
-For every SEO issue, begin the Why it matters text with one of:
+Output 0-3 technical or on-page SEO issues ONLY when the dossier contains direct evidence for each specific issue. Do not invent a third issue, and never turn an unavailable check into a confirmed negative. If the metadata is already present, do not recommend adding it. Omit unverifiable technical concerns from the issue list and briefly explain the evidence limitation instead.
+For every supported SEO issue, begin the Why it matters text with one of:
 Evidence basis: VERIFIED HTML —
 Evidence basis: VERIFIED INFRASTRUCTURE —
 Evidence basis: VISUAL OBSERVATION —
@@ -3883,7 +3883,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         : "";
       const attempts = [
         pageContext + buildVisualEvidencePrompt(allIssues),
-        pageContext + "Map only the visible UX problems supported by this screenshot to exact UI targets. Return JSON only as an array of objects using this schema: [{\"findingIndex\":1,\"targetX\":50,\"targetY\":30,\"targetRadius\":2.5,\"explanation\":\"Exact visible element and why it is the target.\"}]. Omit findings that are not visibly supported on this page. Maximum 6 pins. FINDINGS:\n" +
+        pageContext + "Map only actual visual UI problems supported by this exact screenshot to specific elements. Return JSON only using this schema: [{\"findingIndex\":1,\"targetX\":50,\"targetY\":30,\"targetRadius\":2.5,\"target\":\"visible label or button\",\"explanation\":\"Specific directly visible evidence supporting this finding\",\"status\":\"observed\",\"confidence\":\"high\"}]. Use observed/high only for a direct exact visible target; otherwise return []. Never mark a broad page section or invent a pin. Maximum 6 pins. FINDINGS:\n" +
           allIssues.map((issue, i) => "Finding " + (i + 1) + ": [" + issue.section + "] " + issue.title + " — " + issue.why).join("\n"),
       ];
 
