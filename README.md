@@ -3,7 +3,7 @@
 AI-powered UX audit tool. Upload screenshots/PDFs or enter a website URL and
 get a structured audit (Nielsen heuristics, WCAG, trust, conversion, cognitive
 load) styled as feedback from a senior UX design director — including a
-12-slide presentation deck.
+presentation deck with 13 core slides plus optional evidence pages.
 
 ## Stack
 - React + Vite frontend (single-component app: `src/UxnestApp.jsx`)
@@ -24,7 +24,7 @@ npm run dev            # frontend only
 
 ## Known prototype limitations (backend work pending)
 - Auth/history use in-browser fallbacks — replace with Supabase or similar
-- Email report opens a mailto: draft — real delivery needs Resend/SendGrid
+- Email report opens a mailto: draft; full PDF exports are downloaded separately (automated attachment sending is not yet available)
 - Legal policies are now published (Terms, Privacy, Refunds, AI/Accessibility disclaimer); confirm the legal operator identity and obtain counsel review before public paid launch
 - Rate limiting in `api/audit.js` is in-memory per instance — add Redis
   (e.g. Upstash) before public launch
