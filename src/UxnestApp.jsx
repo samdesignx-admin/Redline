@@ -1684,6 +1684,62 @@ function StepRow({ step, state, index }) {
   );
 }
 
+/* Decorative UXNest bird and nest, shown while generating a report. */
+function AuditBirdAnimation() {
+  return (
+    <div className="uxn-bird-loading-scene" aria-hidden="true">
+      <svg viewBox="0 0 340 180" xmlns="http://www.w3.org/2000/svg" focusable="false">
+        <defs>
+          <linearGradient id="uxnest-feather-gradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#28C898"/>
+            <stop offset="100%" stopColor="#087D65"/>
+          </linearGradient>
+          <linearGradient id="uxnest-nest-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#D7A578"/>
+            <stop offset="100%" stopColor="#996946"/>
+          </linearGradient>
+        </defs>
+        <g fill="#51C995">
+          <circle className="bird-sparkle" cx="73" cy="61" r="3.6"/>
+          <circle className="bird-sparkle two" cx="273" cy="65" r="3.2"/>
+          <circle className="bird-sparkle three" cx="89" cy="110" r="2.7"/>
+        </g>
+        <path d="M270 105v12m-6-6h12M79 81v10m-5-5h10" stroke="#A2DEC0" strokeWidth="2" strokeLinecap="round" opacity=".85"/>
+        <ellipse cx="170" cy="154" rx="83" ry="8" fill="#178361" opacity=".08"/>
+        <g>
+          <path d="M114 146q-10-25-28-23 6 20 28 23" fill="#68C591"/>
+          <path d="M112 142q-23-15-30-3 14 11 30 3" fill="#2BAB72"/>
+          <path d="M226 146q10-25 28-23-6 20-28 23" fill="#68C591"/>
+          <path d="M228 142q23-15 30-3-14 11-30 3" fill="#2BAB72"/>
+        </g>
+        <g className="bird-nest">
+          <path d="M108 129Q170 158 232 129Q224 157 170 162Q116 157 108 129Z" fill="url(#uxnest-nest-gradient)"/>
+          <path d="M108 130Q169 149 232 129" stroke="#885C3E" strokeWidth="6" strokeLinecap="round" fill="none"/>
+          <path d="M115 137Q170 159 224 138M130 146Q170 157 210 145M140 153Q170 141 204 153" stroke="#EAC098" strokeWidth="3" strokeLinecap="round" opacity=".82" fill="none"/>
+        </g>
+        <g className="bird-body">
+          <path d="M143 104q-31 0-42-18 21 5 36 2-10-15-13-24 26 15 34 35Z" fill="#0C8D76"/>
+          <g className="bird-back-wing">
+            <path d="M150 99q-25-24-27-56 30 11 45 50Z" fill="#65D8A7"/>
+            <path d="M152 96q-15-23-19-39" stroke="#1C9B78" strokeWidth="2" fill="none"/>
+          </g>
+          <path d="M130 97q3-21 29-20 26 3 22 27-3 22-22 22-20-1-26-14-4-9-3-15Z" fill="url(#uxnest-feather-gradient)"/>
+          <path d="M154 117q14 2 20-11 4 13-8 19-10 3-16-5Z" fill="#A8F0C4" opacity=".9"/>
+          <circle cx="173" cy="80" r="20" fill="url(#uxnest-feather-gradient)"/>
+          <circle cx="184" cy="77" r="2.6" fill="#063C38"/>
+          <circle cx="185" cy="76.2" r=".85" fill="white"/>
+          <path d="M191 82l18 5-18 6q6-7 0-11Z" fill="#E5AA60"/>
+          <g className="bird-wing">
+            <path d="M149 91q-25-24-15-58 27 17 35 56 0 16-16 15Z" fill="#16A779"/>
+            <path d="M153 92q-9-25-13-41m18 42q-6-23-11-31" stroke="#95E7B9" strokeWidth="2.5" strokeLinecap="round" opacity=".9" fill="none"/>
+          </g>
+          <path d="M155 123l-2 8m13-7 2 7" stroke="#AC7950" strokeWidth="2.5" strokeLinecap="round"/>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 function LoadingScreen({ thumbs, progress, onCancel }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -1702,7 +1758,13 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
   const pct = Math.round(frac * 100);
 
   return (
-    <div style={{ maxWidth: 440, margin: "34px auto", textAlign: "center", padding: "0 16px" }}>
+    <div className="uxn-report-loading" role="region" aria-label="Audit in progress">
+      <AuditBirdAnimation />
+      <div className="uxn-report-loading__intro">
+        <div className="uxn-report-loading__eyebrow">THE NEST IS AT WORK</div>
+        <h2>Your insights are taking flight</h2>
+        <p>Our little bird is gathering the details for your UX report.</p>
+      </div>
       {thumbs.length > 0 && (
         <div style={{ position: "relative", display: "flex", justifyContent: "center", gap: 8, marginBottom: 20, overflow: "hidden", padding: "2px 0" }}>
           {thumbs.slice(0, 5).map((img) => (
@@ -1720,9 +1782,8 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
           <div
             style={{
               height: "100%", width: `${pct}%`, borderRadius: 99,
-              background: `repeating-linear-gradient(45deg, ${C.gold}, ${C.gold} 8px, #C4564A 8px, #C4564A 16px)`,
-              backgroundSize: "24px 24px",
-              animation: "stripeSlide 0.9s linear infinite",
+              background: "linear-gradient(90deg, #07865E, #20C18B)",
+              boxShadow: "0 0 12px rgba(14,157,110,.25)",
               transition: "width 800ms cubic-bezier(.2,.8,.2,1)",
             }}
           />
@@ -1730,7 +1791,7 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
         <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.muted }}>{formatElapsed(elapsed)}</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: C.gold }}>{pct}%</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, fontWeight: 750, color: "#0C8A63" }}>{pct}%</span>
       </div>
 
       {/* Step checklist */}
@@ -1746,7 +1807,7 @@ function LoadingScreen({ thumbs, progress, onCancel }) {
       </div>
 
       {progress.status && (
-        <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: C.high, marginBottom: 6 }}>
+        <div role="status" aria-live="polite" style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: "#0E8464", marginBottom: 6 }}>
           {progress.status}
         </div>
       )}
@@ -4280,6 +4341,77 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       <style>{`
         ${FONT_IMPORT}
         * { box-sizing: border-box; }
+
+
+        /* Animated UXNest bird during report generation. */
+        .uxn-report-loading { max-width: 440px; margin: 16px auto 34px; text-align: center; padding: 0 16px; }
+        .uxn-bird-loading-scene {
+          max-width: 340px; width: 100%; height: 180px; margin: 0 auto;
+          overflow: hidden; border-radius: 26px;
+          background: radial-gradient(ellipse at 50% 57%, #DFF8E9 0%, #EFFBF4 49%, transparent 79%);
+        }
+        .uxn-bird-loading-scene svg { display: block; width: 100%; height: 100%; }
+        .uxn-bird-loading-scene .bird-body {
+          transform-box: fill-box; transform-origin: 50% 80%;
+          animation: uxnest-bird-hover 3s ease-in-out infinite;
+        }
+        .uxn-bird-loading-scene .bird-wing {
+          transform-box: fill-box; transform-origin: 82% 85%;
+          animation: uxnest-bird-flap .65s ease-in-out infinite alternate;
+        }
+        .uxn-bird-loading-scene .bird-back-wing {
+          transform-box: fill-box; transform-origin: 75% 84%;
+          animation: uxnest-bird-flap-back .65s ease-in-out infinite alternate;
+        }
+        .uxn-bird-loading-scene .bird-nest {
+          transform-box: fill-box; transform-origin: center bottom;
+          animation: uxnest-nest-sway 4.2s ease-in-out infinite;
+        }
+        .uxn-bird-loading-scene .bird-sparkle { animation: uxnest-sparkle 3s ease-in-out infinite; }
+        .uxn-bird-loading-scene .bird-sparkle.two { animation-delay: -1s; }
+        .uxn-bird-loading-scene .bird-sparkle.three { animation-delay: -2s; }
+        .uxn-report-loading__intro { max-width: 350px; margin: -6px auto 19px; }
+        .uxn-report-loading__eyebrow {
+          font: 800 10px "IBM Plex Mono",monospace; letter-spacing: 1.5px;
+          color: #0D8964; margin-bottom: 8px;
+        }
+        .uxn-report-loading__intro h2 {
+          font: 850 clamp(20px, 5vw, 24px)/1.25 "Plus Jakarta Sans","Inter",sans-serif;
+          color: #113E32; letter-spacing: -.5px; margin: 0 0 7px;
+        }
+        .uxn-report-loading__intro p { color: #547669; font-size: 12.5px; line-height: 1.6; margin: 0; }
+        @keyframes uxnest-bird-hover {
+          0%, 100% { transform: translateY(0) rotate(-2deg); }
+          50% { transform: translateY(-9px) rotate(2deg); }
+        }
+        @keyframes uxnest-bird-flap {
+          from { transform: rotate(-33deg); }
+          to { transform: rotate(26deg); }
+        }
+        @keyframes uxnest-bird-flap-back {
+          from { transform: rotate(19deg); }
+          to { transform: rotate(-23deg); }
+        }
+        @keyframes uxnest-nest-sway {
+          0%, 100% { transform: rotate(-1deg); }
+          50% { transform: rotate(1deg); }
+        }
+        @keyframes uxnest-sparkle {
+          0%, 100% { transform: translateY(0) scale(.8); opacity: .35; }
+          50% { transform: translateY(-12px) scale(1.15); opacity: .9; }
+        }
+        @media (max-width: 480px) {
+          .uxn-report-loading { margin-top: 5px; padding: 0 9px; }
+          .uxn-bird-loading-scene { height: 154px; }
+          .uxn-report-loading__intro { margin-bottom: 16px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .uxn-bird-loading-scene .bird-body,
+          .uxn-bird-loading-scene .bird-wing,
+          .uxn-bird-loading-scene .bird-back-wing,
+          .uxn-bird-loading-scene .bird-nest,
+          .uxn-bird-loading-scene .bird-sparkle { animation: none !important; }
+        }
 
         /* Dark full-width footer: clear hierarchy on desktop and mobile. */
         .uxn-footer {
