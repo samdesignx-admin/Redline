@@ -1244,7 +1244,7 @@ function LegalContactForm({ pageKey }) {
   return (
     <section style={{ marginTop: 28, border: "1px solid #CBE3D9", background: "#F2FAF6", borderRadius: 16, padding: "22px 18px" }} aria-label="Contact UXNest">
       <h3 style={{ color: C.text, fontSize: 17, margin: "0 0 8px", fontWeight: 800 }}>Questions or data requests?</h3>
-      <p style={{ color: C.textDim, lineHeight: 1.65, fontSize: 13.5, marginTop: 0 }}>Reach the UXNest team about privacy access or deletion, legal questions, a billing issue or an audit problem. Do not include passwords or payment card numbers. Account-related requests may require verification.</p>
+      <p style={{ color: C.textDim, lineHeight: 1.65, fontSize: 13.5, marginTop: 0 }}>Reach the UXNest team about privacy access or deletion, legal questions, a billing issue or an audit problem. Do not include passwords or payment card numbers. Account-related requests may require verification. You can also email <a href="mailto:support@uxnest.ai?subject=UXNest%20Legal%20or%20Privacy%20Request" style={{ color: "#0B7958", fontWeight: 750, textDecoration: "underline" }}>support@uxnest.ai</a>.</p>
       <form onSubmit={sendRequest} style={{ display: "grid", gap: 12 }}>
         <label style={{ display: "grid", gap: 5, color: C.text, fontSize: 13, fontWeight: 650 }}>
           Your email address
