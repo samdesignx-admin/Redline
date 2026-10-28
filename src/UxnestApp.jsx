@@ -381,39 +381,6 @@ ${batchSections}
 Begin now.`;
 }
 
-function buildPreviewPrompt(url) {
-  return `You are a Senior UX Design Director. Use web search to open ${url} once and skim it. Be fast — a single fetch is enough.
-
-Then output ONLY this, with no preamble and no extra sections:
-
-SCORE: <0-100 integer>
-ASSESSMENT: <one of: Excellent, Good, Average, Poor>
-SUMMARY: <one sentence, max 25 words, on the overall UX quality>
-ISSUE: <short title> | <severity: Critical|High|Medium|Low> | <one sentence on why it matters, max 20 words>
-ISSUE: <short title> | <severity> | <why it matters>
-ISSUE: <short title> | <severity> | <why it matters>
-
-Exactly three ISSUE lines, ranked by impact. Be specific to this page, not generic.`;
-}
-
-function parsePreview(raw) {
-  const t = (raw || "").replace(/\r\n/g, "\n");
-  const scoreM = t.match(/SCORE:\s*(\d+)/i);
-  const assessM = t.match(/ASSESSMENT:\s*(Excellent|Good|Average|Poor)/i);
-  const sumM = t.match(/SUMMARY:\s*(.+)/i);
-  const issues = [...t.matchAll(/ISSUE:\s*([^|\n]+)\|([^|\n]+)\|([^\n]+)/gi)].map((m) => ({
-    title: m[1].trim(),
-    severity: severityFor(m[2]),
-    why: m[3].trim(),
-  }));
-  return {
-    score: scoreM ? Number(scoreM[1]) : null,
-    assessment: assessM ? assessM[1] : null,
-    summary: sumM ? sumM[1].trim() : "",
-    issues: issues.slice(0, 3),
-  };
-}
-
 const EXPLORATION_PROMPT = (url, navLimit) => `Use your web search/fetch capability to explore ${url} and up to ${navLimit} of its most important main-navigation destinations. SPEED IS THE PRIORITY: open the homepage and at most two additional pages total. Do not retry failed pages. Do not follow secondary links. Stop exploring once you have enough information to describe the core experience.
 
 First, output a line listing every page URL you successfully opened, in this exact format:
@@ -2857,142 +2824,43 @@ function SectionKicker({ children, onDark }) {
   return <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 12.5, letterSpacing: 2, color: onDark ? C.now : C.gold, marginBottom: 14, textTransform: "uppercase" }}>{children}</div>;
 }
 
-function InstantPreview({ onSignup, isLoggedIn }) {
-  const [url, setUrl] = useState("");
-  const [state, setState] = useState("idle"); // idle | running | done | error
-  const [result, setResult] = useState(null);
-  const [message, setMessage] = useState("");
-
-  const run = async () => {
-    let v = url.trim();
-    if (!v) return;
-    if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
-    try {
-      const u = new URL(v);
-      if (!u.hostname.includes(".")) throw new Error();
-    } catch {
-      setMessage("That doesn't look like a valid website address.");
-      setState("error");
-      return;
-    }
-    setState("running");
-    setMessage("");
-    try {
-      const r = await fetch("/api/audit", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          max_tokens: 700,
-          messages: [{ role: "user", content: [{ type: "text", text: buildPreviewPrompt(v) }] }],
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error?.message || data.error || "Preview failed");
-      const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
-      const parsed = parsePreview(text);
-      if (parsed.score == null && parsed.issues.length === 0) throw new Error("Couldn't read that page — it may block automated access.");
-      setResult({ ...parsed, url: v });
-      setState("done");
-    } catch (e) {
-      setMessage(e.message || "Something went wrong. Please try again.");
-      setState("error");
-    }
-  };
-
-  const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
-
-  return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, maxWidth: 560, margin: "0 auto", boxShadow: "0 8px 26px rgba(18,48,43,0.08)" }}>
-      <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 17, color: C.text, marginBottom: 4 }}>Try it now — free, no account</div>
-      <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 14 }}>Paste a URL for an instant score and your top three issues.</div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && state !== "running" && run()}
-          placeholder="example.com"
-          style={{ ...inputStyle, flex: 1, minWidth: 180 }}
-        />
-        <button
-          onClick={run}
-          disabled={state === "running" || !url.trim()}
-          style={{ background: url.trim() && state !== "running" ? C.now : C.surfaceAlt, color: url.trim() && state !== "running" ? C.dark : C.muted, border: "none", borderRadius: 999, padding: "12px 22px", fontSize: 14, fontWeight: 700, cursor: state === "running" ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 7 }}
-        >
-          {state === "running" ? <Loader2 size={15} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={15} />}
-          {state === "running" ? "Analyzing…" : "Analyze"}
-        </button>
-      </div>
-
-      {state === "error" && <div style={{ marginTop: 12, fontSize: 12.5, color: C.critical }}>{message}</div>}
-
-      {state === "running" && (
-        <div style={{ marginTop: 14, fontSize: 12.5, color: C.muted }}>Reading the page and scoring it — about 15 seconds.</div>
-      )}
-
-      {state === "done" && result && (
-        <div style={{ marginTop: 18, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 16, textAlign: "left" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 40, color: scoreColor(result.score ?? 0), lineHeight: 1 }}>{result.score ?? "—"}</span>
-            <span style={{ fontSize: 14, color: C.muted }}>/100 · {result.assessment || "Unrated"}</span>
-          </div>
-          {result.summary && <p style={{ fontSize: 13.5, color: C.textDim, lineHeight: 1.55, margin: "0 0 14px" }}>{result.summary}</p>}
-
-          {result.issues.map((iss, i) => {
-            const sev = SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium;
-            return (
-              <div key={i} style={{ borderLeft: `3px solid ${sev.color}`, background: C.bg, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start", marginBottom: 3 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13.5, color: C.text }}>{iss.title}</span>
-                  <SeverityBadge severity={iss.severity} />
-                </div>
-                <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.5 }}>{iss.why}</div>
-              </div>
-            );
-          })}
-
-          <div style={{ background: C.goldSoft, borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: C.text, marginBottom: 4 }}>That's the preview. The full audit adds:</div>
-            <div style={{ fontSize: 12.5, color: C.textDim, lineHeight: 1.7, marginBottom: 12 }}>
-              Seven analysis areas (SEO when verifiable) · evidence-based findings · Top 10 ranked improvements · quick wins and strategy · five-score scorecard · PDF and 12-slide deck · screenshots, PDFs and website URLs
-            </div>
-            <button onClick={onSignup} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "11px 20px", fontSize: 13.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}>
-              {isLoggedIn ? "Run the full audit" : "Get the full report — free"} <ArrowRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
   const h2 = { fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 34, letterSpacing: -0.8, color: C.text, margin: "0 0 10px 0", lineHeight: 1.2 };
   const sect = { padding: "44px 0", textAlign: "center" };
   return (
     <div>
-      {/* Hero - full-bleed dark band */}
-      <div style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "56px 0 64px" }}>
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 18px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 28, alignItems: "center" }}>
-          <div style={{ textAlign: "left" }}>
-            <SectionKicker onDark>AI-POWERED UX &amp; PRODUCT TOOLS</SectionKicker>
-            <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 44, color: "#FFFFFF", margin: "0 0 16px 0", lineHeight: 1.08, letterSpacing: -1 }}>
-              AI-powered tools for better digital experiences.
-            </h1>
-            <p style={{ color: "#BFD8D2", fontSize: 16, lineHeight: 1.6, margin: "0 0 24px 0", maxWidth: 420 }}>
-              UXNest is a growing suite of AI-powered tools for research, auditing, analysis, and product design. Start with a comprehensive UX Audit today.
-            </p>
-            <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "15px 30px", fontSize: 15.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-              {isLoggedIn ? "Start Free Audit" : "Sign Up & Start Free"} <ArrowRight size={16} />
-            </button>
-            <div style={{ fontSize: 12.5, color: "#8FB3AB", marginTop: 14 }}>Instant preview, no account · Full report free after signup</div>
+      {/* Hero: direct route into the complete free audit. No teaser preview. */}
+      <section aria-labelledby="uxnest-hero-title" style={{ position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", overflow: "hidden", background: `linear-gradient(132deg, ${C.dark} 0%, ${C.darkAlt} 72%, #0C5948 100%)`, padding: "clamp(52px, 9vw, 84px) 0 70px" }}>
+        <div style={{ position: "absolute", width: 350, height: 350, borderRadius: "50%", right: "-140px", top: "-160px", background: "radial-gradient(circle, rgba(29,197,133,.14), transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative", maxWidth: 820, margin: "0 auto", padding: "0 22px", textAlign: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(44,207,139,.12)", border: "1px solid rgba(124,230,177,.28)", borderRadius: 999, padding: "8px 13px", color: "#9FEBC2", fontSize: 11, fontWeight: 850, letterSpacing: 1.15, marginBottom: 22 }}>
+            <Sparkles size={15} strokeWidth={2} /> AI-POWERED UX INTELLIGENCE
           </div>
-          <div>
-            <InstantPreview onSignup={onStart} isLoggedIn={isLoggedIn} />
+          <h1 id="uxnest-hero-title" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 850, fontSize: "clamp(34px, 6.5vw, 56px)", color: "#FFFFFF", margin: "0 auto 16px", maxWidth: 750, lineHeight: 1.1, letterSpacing: "-1.5px" }}>
+            Your first complete UX audit is free.
+          </h1>
+          <p style={{ color: "#C7E4D8", fontSize: "clamp(15px, 2.3vw, 17px)", lineHeight: 1.7, margin: "0 auto 25px", maxWidth: 640 }}>
+            Uncover usability friction, design issues, accessibility concerns, conversion opportunities, and SEO signals when verifiable.
+            Nest Audit turns evidence into prioritized recommendations and shareable reports.
+          </p>
+          <button onClick={onStart} style={{ background: "linear-gradient(110deg, #79EEB3, #36D997)", color: "#0C3F32", border: "none", borderRadius: 999, padding: "16px 30px", fontSize: 16, fontWeight: 850, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 10, boxShadow: "0 8px 24px rgba(3,38,28,.24)" }}>
+            {isLoggedIn ? "Start a new audit" : "Start my free audit"} <ArrowRight size={18} />
+          </button>
+          <p style={{ color: "#B6D8C9", fontSize: 12.5, lineHeight: 1.7, margin: "15px auto 0" }}>
+            One completed audit free per account · No credit card required · $5 per additional audit during beta
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10, marginTop: 25 }}>
+            {["Website URLs", "Screenshots", "PDF uploads"].map((item) => (
+              <span key={item} style={{ background: "rgba(255,255,255,.065)", border: "1px solid rgba(181,235,211,.2)", borderRadius: 999, padding: "8px 13px", color: "#D7EEE4", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Check size={13} color="#7BE9AD" /> {item}
+              </span>
+            ))}
           </div>
+          <p style={{ color: "#91BCAE", fontSize: 12, lineHeight: 1.6, margin: "25px auto 0", maxWidth: 590 }}>
+            Nest Audit is available now. UXNest's broader research, design, strategy, and testing tools are coming soon.
+          </p>
         </div>
-      </div>
+      </section>
 
       {/* Features */}
       <div id="features" style={{ ...sect, scrollMarginTop: 96 }}>
@@ -3099,7 +2967,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
           ))}
         </div>
         <button onClick={onStart} style={{ background: C.now, color: C.dark, border: "none", borderRadius: 999, padding: "13px 26px", fontSize: 14.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
-          {isLoggedIn ? "Start an audit" : "Sign Up & Start Free"} <ArrowRight size={15} />
+          {isLoggedIn ? "Start an audit" : "Get my free audit"} <ArrowRight size={15} />
         </button>
       </div>
 
