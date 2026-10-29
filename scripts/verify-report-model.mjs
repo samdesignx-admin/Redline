@@ -21,7 +21,10 @@ const report = normalizeReportModel({
   ],
 });
 
-assert.equal(report.modelVersion, 5);
+assert.equal(report.modelVersion, 7);
+assert.equal(report.scoreCoverage.complete, false);
+assert.equal(report.summary.score, null);
+assert.equal(report.scorecard.visual, null);
 assert.equal(report.findings.length, 2);
 assert.equal(report.evidence.length, 2);
 assert.equal(report.evidenceByFinding["F-001"].length, 1);
@@ -31,4 +34,18 @@ assert.equal(report.scoringEvidence.length, 2);
 
 const index = buildEvidenceIndex(report.evidence, report.findings);
 assert.deepEqual(index.valid.map((item) => item.findingId), ["F-001", "F-002"]);
-console.log("Canonical report-model evidence checks passed.");
+const fullyAssessed = normalizeReportModel({
+  summary: { score: 95, assessment: "Excellent" },
+  usability: { issues: [{ title: "Navigation ambiguity" }] },
+  accessibility: { intro: "No material accessibility issues identified from the available evidence.", issues: [] },
+  visual: { issues: [{ title: "Typography lacks hierarchy" }] },
+  trust: { issues: [{ title: "Missing transparent policy" }] },
+  conversion: { issues: [{ title: "Form friction" }] },
+  scorecard: { usability: 70, accessibility: 80, visual: 60, trust: 90, conversion: 75, overall: 95 },
+});
+assert.equal(fullyAssessed.scoreCoverage.complete, true);
+assert.equal(fullyAssessed.overallScore, 75);
+assert.equal(fullyAssessed.summary.score, 75);
+assert.equal(fullyAssessed.scorecard.overall, 75);
+
+console.log("Canonical report-model completeness, scoring and evidence checks passed.");
