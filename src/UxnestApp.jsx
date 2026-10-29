@@ -2417,31 +2417,31 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
         <div style={{ minHeight: 0, overflow: "hidden", borderRadius: "4mm", border: `0.35mm solid ${T.border}`, background: T.surface, boxShadow: T.cardShadow }}>
           <EvidenceCrop screenshot={screenshot} cx={item.cx} cy={item.cy} radius={item.radius} alt={`AI-suggested detail for ${title}`} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "3mm", minHeight: 0, minWidth: 0 }}>
-          <div style={{ padding: "4mm", borderRadius: "3mm", background: T.soft, border: `0.3mm solid ${T.border}` }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2mm", minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ padding: "3mm", borderRadius: "3mm", background: T.soft, border: `0.3mm solid ${T.border}` }}>
             <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, marginBottom: "2mm", fontWeight: 700 }}>VISIBLE ELEMENT</div>
-            <div style={{ fontSize: "11pt", fontWeight: 800, color: T.text, lineHeight: 1.35, marginBottom: "2mm", overflowWrap: "anywhere" }}>{clip(item.target || title, 120)}</div>
-            <div style={{ fontSize: "9.6pt", lineHeight: 1.45, color: T.textDim, overflowWrap: "anywhere" }}>{clip(item.explanation, 185)}</div>
+            <div style={{ fontSize: "10pt", fontWeight: 800, color: T.text, lineHeight: 1.35, marginBottom: "2mm", overflowWrap: "anywhere" }}>{clip(item.target || title, 120)}</div>
+            <div style={{ fontSize: "9.1pt", lineHeight: 1.34, color: T.textDim, overflowWrap: "anywhere" }}>{clip(item.explanation, 150)}</div>
           </div>
 
           {issue?.why && (
-            <div style={{ padding: "3mm 4mm", borderRadius: "3mm", border: `0.3mm solid ${T.border}`, background: T.surface }}>
+            <div style={{ padding: "3mm", borderRadius: "3mm", border: `0.3mm solid ${T.border}`, background: T.surface }}>
               <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, fontWeight: 700, marginBottom: "1.5mm" }}>WHY IT MATTERS</div>
-              <div style={{ fontSize: "10pt", lineHeight: 1.45, color: T.textDim, overflowWrap: "anywhere" }}>{clip(issue.why, 195)}</div>
+              <div style={{ fontSize: "9.1pt", lineHeight: 1.36, color: T.textDim, overflowWrap: "anywhere" }}>{clip(issue.why, 158)}</div>
             </div>
           )}
 
           {issue?.recommendation && (
-            <div style={{ marginTop: "auto", padding: "4mm", borderRadius: "3mm", border: `0.35mm solid ${T.primary}`, background: T.surface }}>
+            <div style={{ marginTop: "auto", padding: "3mm", borderRadius: "3mm", border: `0.35mm solid ${T.primary}`, background: T.surface }}>
               <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "8pt", color: T.primary, letterSpacing: .7, fontWeight: 700, marginBottom: "1.5mm" }}>SUGGESTED NEXT STEP</div>
-              <div style={{ fontSize: "10.5pt", lineHeight: 1.45, color: T.text, overflowWrap: "anywhere" }}>{clip(issue.recommendation, 210)}</div>
+              <div style={{ fontSize: "9.2pt", lineHeight: 1.36, color: T.text, overflowWrap: "anywhere" }}>{clip(issue.recommendation, 175)}</div>
             </div>
           )}
         </div>
       </div>
 
-      <p style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: "7pt", color: T.muted, lineHeight: 1.35, margin: "0 0 8mm", maxWidth: "240mm" }}>
-        Evidence crop and coordinates are AI-estimated, not independently verified. Check the live interface before acting; full finding text appears in the earlier section. Severity: {severity}.
+      <p style={{ position: "absolute", left: "16mm", right: "16mm", bottom: "15mm", fontFamily: "'IBM Plex Mono',monospace", fontSize: "6.7pt", color: T.muted, lineHeight: 1.3, margin: 0, maxHeight: "7mm", overflow: "hidden", overflowWrap: "break-word" }}>
+        AI-suggested crop; exact coordinates have not been manually verified. Review the live page before acting. Full finding text appears in the earlier section. Severity: {severity}.
       </p>
       <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
