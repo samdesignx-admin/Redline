@@ -22,23 +22,34 @@ function parseIssues(block) {
   const re =
     /Issue:\s*([\s\S]+?)\nSeverity:\s*([\s\S]+?)\nWhy it matters:\s*([\s\S]+?)\nRecommendation:\s*([\s\S]+?)(?=\n+Issue:|\s*$)/g;
   const issues = [];
+  const verificationNotes = [];
   let m;
   while ((m = re.exec(content)) !== null) {
     const whyRaw = m[3].trim();
     const evidenceM = whyRaw.match(/^Evidence basis:\s*(VERIFIED HTML|VERIFIED INFRASTRUCTURE|VISUAL OBSERVATION|UNVERIFIED)\s*[—-]\s*/i);
     const evidenceBasis = evidenceM ? evidenceM[1].toUpperCase() : null;
     const why = evidenceM ? whyRaw.slice(evidenceM[0].length).trim() : whyRaw;
+
+    // Some models append an unbounded "Verification limitation" paragraph
+    // after the final issue. That is report-level context, NOT part of the
+    // last recommendation. Keeping it inside a card caused PDF overflow.
+    const rawRecommendation = m[4].trim();
+    const noteMatch = /\bVerification (?:limitation|limitations|note|notes|context):/i.exec(rawRecommendation);
+    const recommendation = noteMatch
+      ? rawRecommendation.slice(0, noteMatch.index).trim()
+      : rawRecommendation;
+    if (noteMatch) verificationNotes.push(rawRecommendation.slice(noteMatch.index).trim());
     issues.push({
       title: m[1].trim().replace(/^\*+|\*+$/g, ""),
       severity: severityFor(m[2]),
       why,
-      recommendation: m[4].trim(),
+      recommendation,
       evidenceBasis,
     });
   }
   const introEnd = content.search(/Issue:/);
   const intro = introEnd > 0 ? content.slice(0, introEnd).trim() : "";
-  return { intro, issues };
+  return { intro, issues, verificationNotes };
 }
 
 function parseNumberedList(text) {
