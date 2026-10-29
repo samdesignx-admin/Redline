@@ -46,6 +46,7 @@ const fullyAssessed = normalizeReportModel({
 assert.equal(fullyAssessed.scoreCoverage.complete, true);
 assert.equal(fullyAssessed.overallScore, 75);
 assert.equal(fullyAssessed.summary.score, 75);
+assert.equal(fullyAssessed.summary.assessment, "Good");
 assert.equal(fullyAssessed.scorecard.overall, 75);
 
 console.log("Canonical report-model completeness, scoring and evidence checks passed.");
