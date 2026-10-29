@@ -45,12 +45,43 @@ function normalizeReportModel(report) {
     findingNumber += issues.length;
   }
   const scorecard = normalized.scorecard || {};
-  normalized.dimensions = DIMENSION_KEYS.map((key) => ({ ...DIMENSION_META[key], score: scorecard[key] ?? null }));
+  // A number assigned by the model without any accompanying findings or
+  // explicit "no material issues" assessment is not a defensible score.
+  // Mark such sections N/A rather than silently portraying them as tested.
+  normalized.dimensions = DIMENSION_KEYS.map((key) => {
+    const data = normalized[key] || {};
+    const observedIssues = Array.isArray(data.issues) ? data.issues.length : 0;
+    const explicitlyAssessedWithoutIssues =
+      /no material .*issues? (?:were )?(?:identified|found) from the available evidence/i.test(String(data.intro || ""));
+    const assessed = observedIssues > 0 || explicitlyAssessedWithoutIssues;
+    const raw = scorecard[key];
+    const parsed = raw == null || raw === "" ? null : Number(raw);
+    const score = assessed && Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+      ? Math.round(parsed) : null;
+    return { ...DIMENSION_META[key], score, assessed, findingCount: observedIssues };
+  });
   normalized.findings = FINDING_SECTION_ORDER.flatMap((section) => normalized[section]?.issues || []);
-  const dimensionScores = normalized.dimensions.map((dimension) => Number(dimension.score)).filter((score) => Number.isFinite(score));
-  normalized.overallScore = dimensionScores.length ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length) : null;
-  normalized.summary = { ...(normalized.summary || {}), score: normalized.overallScore };
-  normalized.scorecard = { ...scorecard, overall: normalized.overallScore };
+  const dimensionScores = normalized.dimensions
+    .filter((dimension) => dimension.score !== null)
+    .map((dimension) => dimension.score);
+  normalized.scoreCoverage = {
+    assessed: dimensionScores.length,
+    total: DIMENSION_KEYS.length,
+    complete: dimensionScores.length === DIMENSION_KEYS.length,
+  };
+  normalized.overallScore = dimensionScores.length
+    ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length)
+    : null;
+  normalized.summary = {
+    ...(normalized.summary || {}),
+    score: normalized.overallScore,
+    assessment: normalized.overallScore == null ? "Unrated" : normalized.summary?.assessment,
+  };
+  normalized.scorecard = {
+    ...scorecard,
+    ...Object.fromEntries(normalized.dimensions.map(({ id, score }) => [id, score])),
+    overall: normalized.overallScore,
+  };
 
   const evidence = normalizeEvidenceCollection(normalized.evidence || []);
   const evidenceIndex = buildEvidenceIndex(evidence, normalized.findings);
@@ -58,7 +89,7 @@ function normalizeReportModel(report) {
   normalized.evidenceByFinding = evidenceIndex.byFinding;
   normalized.scoringEvidence = evidenceIndex.scoring;
   normalized.traceability = buildTraceability(normalized.findings);
-  normalized.modelVersion = 5;
+  normalized.modelVersion = 6;
   return normalized;
 }
 
