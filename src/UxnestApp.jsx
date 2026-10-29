@@ -3666,6 +3666,19 @@ export default function UxnestApp() {
     return fullText;
   }
 
+  // Every generated batch must contain the sections it was assigned. A
+  // syntactically valid but incomplete AI response is not a complete audit.
+  function expectedBatchSections(template) {
+    return String(template || "").split(/(?=^#\\s+)/gm)
+      .map((section) => ({ heading: /^#\\s+(.+)\\s*$/m.exec(section)?.[1]?.trim() || "", spec: section.trim() }))
+      .filter((section) => section.heading);
+  }
+  function missingBatchSections(template, response) {
+    const normalized = normalizeReportText(String(response || ""));
+    const emitted = new Set([...normalized.matchAll(/^#\\s+(.+?)\\s*$/gm)].map((m) => m[1].trim().toLowerCase()));
+    return expectedBatchSections(template).filter(({ heading }) => !emitted.has(heading.toLowerCase()));
+  }
+
   /* Run report batches concurrently but throttled: at most 2 in flight, with
      staggered starts. Firing all 4 simultaneously (each carrying images or a
      web-search tool) can overwhelm the artifact fetch bridge on mobile and
@@ -3694,12 +3707,37 @@ export default function UxnestApp() {
           { type: "text", text: buildPromptForBatch(batchList[i]) },
         ];
         try {
-          const text = await runWithContinuation(
+          let text = await runWithContinuation(
             [{ role: "user", content }],
             tools,
             undefined,
             `report-section-${i + 1}`
           );
+          let missing = missingBatchSections(batchList[i], text);
+          if (missing.length) {
+            // Repair only missing sections; reuse the same source evidence,
+            // but do not allow fabricated or blank placeholder sections.
+            setRunProgress((p) => ({ ...p, status: `Completing ${missing.length} missing analysis section${missing.length === 1 ? "" : "s"}…` }));
+            const repairSpec = missing.map((section) => section.spec).join("\n\n");
+            const repairContent = [
+              ...sharedContent,
+              { type: "text", text: buildPromptForBatch(repairSpec) +
+                "\nIMPORTANT: A previous partial answer omitted these sections. Write EVERY requested section with its correct # heading. Include evidence-grounded findings or a substantive reason it cannot be assessed. Do not invent observations to fill a quota." },
+            ];
+            const repaired = await runWithContinuation(
+              [{ role: "user", content: repairContent }],
+              tools,
+              undefined,
+              `repair-section-${i + 1}`
+            );
+            text = [text, repaired].filter(Boolean).join("\n\n");
+            missing = missingBatchSections(batchList[i], text);
+          }
+          if (missing.length) {
+            const err = new Error(`Report generation was incomplete: ${missing.map((item) => item.heading).join(", ")}. No audit credit was used. Please retry.`);
+            err.code = "AUDIT_INCOMPLETE";
+            throw err;
+          }
           results[i] = { status: "fulfilled", value: text };
         } catch (e) {
           results[i] = { status: "rejected", reason: e };
@@ -3720,20 +3758,24 @@ export default function UxnestApp() {
     const combined = texts.join("\n\n");
 
     const deadlined = failures.find((f) => f.reason && f.reason.message === "DEADLINE");
-    if (deadlined && !combined.trim()) throw deadlined.reason;
-    if (deadlined) {
-      // Time ran out but some batches finished — show what we have.
-      setError("Time limit reached before every section finished — showing the completed parts below. Re-run to fill the gaps.");
-      return combined;
+    if (deadlined) throw deadlined.reason;
+    if (failures.length) {
+      // Never present a partial report as a paid completed audit. Credits
+      // are only consumed when a validated report is subsequently saved.
+      const cause = failures[0]?.reason;
+      const error = new Error(cause?.code === "AUDIT_INCOMPLETE"
+        ? cause.message
+        : "One or more report sections could not be completed. No audit credit was used. Please retry.");
+      error.code = "AUDIT_INCOMPLETE";
+      throw error;
     }
+    if (!combined.trim()) throw new Error("The review came back empty.");
 
-    if (!combined.trim()) {
-      const firstErr = failures[0];
-      throw new Error((firstErr && firstErr.reason && firstErr.reason.message) || "The review came back empty.");
-    }
-    if (failures.length > 0) {
-      // Partial success: show what we have, but tell the user.
-      setError(`${failures.length} of ${batchList.length} report sections failed to generate — the rest are shown below. Re-run to fill the gaps.`);
+    const allMissing = batchList.flatMap((batch) => missingBatchSections(batch, combined));
+    if (allMissing.length) {
+      const error = new Error("Missing report sections: " + allMissing.map((s) => s.heading).join(", ") + ". No audit credit was used.");
+      error.code = "AUDIT_INCOMPLETE";
+      throw error;
     }
     return combined;
   }
@@ -3961,6 +4003,15 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
       const text = which === "url" ? await executeUrlAudit() : await executeFilesAudit();
       if (!text || !text.trim()) throw new Error("The review came back empty.");
       const parsed = parseReport(text);
+      // All five scored dimensions must have actual findings or an explicit
+      // evidence-grounded assessment before we call this a full audit.
+      if (!parsed?.scoreCoverage?.complete || parsed.summary?.score == null) {
+        const uncovered = (parsed?.dimensions || []).filter((item) => !item.assessed || item.score == null).map((item) => item.label);
+        const error = new Error("Audit incomplete: " + (uncovered.length ? uncovered.join(", ") : "the scorecard") +
+          " could not be assessed reliably. No audit credit was used. Please retry or upload clearer screenshots.");
+        error.code = "AUDIT_INCOMPLETE";
+        throw error;
+      }
       const evidenceScreenshots = auditScreenshotsRef.current.length
         ? auditScreenshotsRef.current
         : (auditScreenshotRef.current ? [{ url: urlInput.trim(), screenshot: auditScreenshotRef.current }] : []);
@@ -4009,6 +4060,8 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
         setError("The audit hit the 5-minute limit before producing anything usable. The service may be under heavy load — try again shortly, or reduce the number of screens per run.");
       } else if (e && e.code === "AUDIT_ENVIRONMENT_BLOCKED") {
         setError("⚠️ Audit incomplete — this website blocked UXNest's audit environment. This does not mean the website is inaccessible to normal visitors, so we did not generate UX scores. Try again later, use a specific public page, or upload screenshots for a visual audit.");
+      } else if (e && e.code === "AUDIT_INCOMPLETE") {
+        setError(e.message || "The report was incomplete, so no audit credit was used. Try again or upload screenshots.");
       } else if (e && e.code === "AUDIT_INSUFFICIENT_EVIDENCE") {
         const detail = e.evidenceReason ? ` Reason: ${e.evidenceReason}` : "";
         setError(`We couldn't complete this audit because UXNest couldn't verify enough public website content. We won't generate a score based on guesses.${detail} Try a specific public page, retry later, or upload screenshots instead.`);
