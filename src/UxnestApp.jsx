@@ -2287,6 +2287,83 @@ function SevChip({ severity }) {
   );
 }
 
+// Keep long finding copy in continuation slides instead of allowing text to
+// collide with the deck footer or silently cutting it off.
+const ISSUE_SLIDE_WHY_LIMIT = 245;
+const ISSUE_SLIDE_REC_LIMIT = 230;
+function shortSlideText(value, limit) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= limit) return text;
+  const pos = text.lastIndexOf(" ", limit - 2);
+  return text.slice(0, pos > limit * 0.7 ? pos : limit - 2) + "…";
+}
+function splitSlideText(value, maxChars = 480) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return [];
+  const chunks = [];
+  let chunk = "";
+  for (const word of text.split(" ")) {
+    if (!word) continue;
+    if (chunk && chunk.length + word.length + 1 > maxChars) {
+      chunks.push(chunk);
+      chunk = "";
+    }
+    if (word.length > maxChars) {
+      if (chunk) chunks.push(chunk);
+      for (let i = 0; i < word.length; i += maxChars) chunks.push(word.slice(i, i + maxChars));
+      chunk = "";
+    } else {
+      chunk = chunk ? chunk + " " + word : word;
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+function FindingContinuationSlide({ item, n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
+  const cards = [
+    { label: "WHY IT MATTERS", value: item.why },
+    { label: "RECOMMENDED IMPROVEMENT", value: item.recommendation },
+  ];
+  return (
+    <div className="deck-slide" style={{ ...SLIDE.page, paddingBottom: "19mm", background: T.background, color: T.text, borderColor: T.border }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Detailed Finding · {item.section}</div>
+      <h2 style={{ ...SLIDE.title, fontSize: "21pt", lineHeight: 1.12, maxHeight: "23mm", overflow: "hidden", color: T.text, overflowWrap: "anywhere" }}>{item.title}</h2>
+      <div style={{ ...SLIDE.rule, width: "30mm", background: "linear-gradient(90deg, " + T.primary + ", " + T.accent + ")" }} />
+      <p style={{ color: T.muted, fontSize: "9pt", margin: "0 0 6mm" }}>Extended explanation · part {item.part} of {item.parts}. Read with the corresponding findings slide.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6mm", flex: 1, minHeight: 0 }}>
+        {cards.map(({ label, value }) => (
+          <section key={label} style={{ background: T.surface, border: "0.4mm solid " + T.border, borderRadius: "3mm", padding: "6mm", minWidth: 0 }}>
+            <h3 style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "8pt", fontWeight: 800, color: T.primary, letterSpacing: .6, margin: "0 0 5mm" }}>{label}</h3>
+            <p style={{ fontSize: "10.5pt", lineHeight: 1.55, color: T.text, margin: 0, overflowWrap: "anywhere" }}>{value || "Continued on another page."}</p>
+          </section>
+        ))}
+      </div>
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
+    </div>
+  );
+}
+
+function SeoVerificationSlide({ note, part, parts, n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
+  const T = theme || REPORT_THEME_FALLBACK;
+  return (
+    <div className="deck-slide" style={{ ...SLIDE.page, paddingBottom: "19mm", background: T.background, color: T.text, borderColor: T.border }}>
+      <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Evidence Scope</div>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontSize: "26pt" }}>SEO Verification Notes</h2>
+      <div style={{ ...SLIDE.rule, background: "linear-gradient(90deg, " + T.primary + ", " + T.accent + ")" }} />
+      <section style={{ maxWidth: "245mm", background: T.surface, border: "0.4mm solid " + T.border, borderRadius: "4mm", padding: "7mm", flex: 1 }}>
+        <h3 style={{ fontSize: "10pt", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 800, color: T.primary, margin: "0 0 5mm" }}>VERIFIED AND NOT VERIFIED · PART {part} OF {parts}</h3>
+        <p style={{ fontSize: "11pt", lineHeight: 1.65, margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: T.text }}>{note}</p>
+      </section>
+      <p style={{ fontSize: "8pt", lineHeight: 1.4, color: T.muted, margin: "5mm 0 0" }}>
+        Public evidence only; indexing coverage, search rankings, traffic and backlinks require separate tools or owner access.
+      </p>
+      <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
+    </div>
+  );
+}
+
 function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_THEME_FALLBACK }) {
   const T = theme || REPORT_THEME_FALLBACK;
   const issues = data.issues.slice(0, 3);
@@ -2303,7 +2380,7 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
           <div key={i} style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "5mm" : "4.5mm", display: "flex", flexDirection: "column", gap: "2.5mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: `${10.8 * (T.titleScale || 1)}pt`, lineHeight: 1.22, color: T.text, overflowWrap: "anywhere" }}>{iss.title}</div>
+                <div style={{ fontWeight: 800, fontSize: `${10.8 * (T.titleScale || 1)}pt`, lineHeight: 1.22, color: T.text, overflowWrap: "anywhere" }}>{shortSlideText(iss.title, 105)}</div>
                 {iss.evidenceBasis && <div style={{ marginTop: "1.5mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.4pt", letterSpacing: .5, color: T.primary }}>
                   EVIDENCE: {iss.evidenceBasis}
                 </div>}
@@ -2312,14 +2389,17 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
-              <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.textDim, overflowWrap: "break-word" }}>{iss.why}</div>
+              <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.textDim, overflowWrap: "break-word" }}>{shortSlideText(iss.why, ISSUE_SLIDE_WHY_LIMIT)}</div>
             </div>
             <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${T.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
               <SlideIconBadge icon={Check} size={12} theme={T} />
               <div>
                 <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.primary, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
-                <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.text, overflowWrap: "break-word" }}>{iss.recommendation}</div>
+                <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.text, overflowWrap: "break-word" }}>{shortSlideText(iss.recommendation, ISSUE_SLIDE_REC_LIMIT)}</div>
               </div>
+              {(String(iss.why || "").length > ISSUE_SLIDE_WHY_LIMIT || String(iss.recommendation || "").length > ISSUE_SLIDE_REC_LIMIT) && (
+                <div style={{ marginTop: "1.5mm", color: T.primary, fontWeight: 750, fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.4pt" }}>CONTINUED IN DETAILED FINDINGS</div>
+              )}
             </div>
           </div>
         ))}
