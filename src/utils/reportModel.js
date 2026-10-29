@@ -78,10 +78,16 @@ function normalizeReportModel(report) {
   normalized.overallScore = normalized.scoreCoverage.complete
     ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length)
     : null;
+  const scoreAssessment = normalized.overallScore == null
+    ? "Incomplete"
+    : normalized.overallScore >= 80 ? "Excellent"
+      : normalized.overallScore >= 60 ? "Good"
+        : normalized.overallScore >= 40 ? "Average" : "Poor";
   normalized.summary = {
     ...(normalized.summary || {}),
     score: normalized.overallScore,
-    assessment: normalized.overallScore == null ? "Incomplete" : normalized.summary?.assessment,
+    // A model-supplied adjective must agree with the final normalized score.
+    assessment: scoreAssessment,
   };
   normalized.scorecard = {
     ...scorecard,
