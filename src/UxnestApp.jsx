@@ -2280,7 +2280,7 @@ function SlideFooter({ n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
 function SevChip({ severity }) {
   const s = SEVERITY_STYLES[severity] || SEVERITY_STYLES.Medium;
   return (
-    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "7.5pt", color: s.color, background: s.bg, border: `1px solid ${s.color}55`, borderRadius: 99, padding: "1mm 3mm", whiteSpace: "nowrap" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono', monospace", fontSize: "7pt", color: s.color, background: s.bg, border: `1px solid ${s.color}55`, borderRadius: 99, padding: "1mm 2.5mm", whiteSpace: "nowrap" }}>
       {severity.toUpperCase()}
     </span>
   );
@@ -2289,19 +2289,20 @@ function SevChip({ severity }) {
 function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_THEME_FALLBACK }) {
   const T = theme || REPORT_THEME_FALLBACK;
   const issues = data.issues.slice(0, 3);
+  const isSeo = title.toLowerCase().includes("seo");
   return (
-    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+    <div className="deck-slide" style={{ ...SLIDE.page, paddingBottom: isSeo ? "27mm" : "19mm", background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
       <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border, borderRadius: `${Math.min(T.radius || 14, 18)}px` }}>Findings</div>
       <h2 style={{ ...SLIDE.title, color: T.text, fontWeight: T.titleWeight || 800, fontSize: `${28 * (T.titleScale || 1)}pt`, letterSpacing: T.letterSpacing || "-0.8pt" }}>{title}</h2>
       <div style={{ ...SLIDE.rule, width: T.personality === "minimal" ? "22mm" : T.personality === "bold" ? "40mm" : "30mm", height: T.personality === "bold" ? "1.6mm" : "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, borderRadius: `${Math.max(2, Math.min(T.radius || 14, 18))}px` }} />
       {data.intro && <div style={{ marginBottom: "4mm", padding: "3mm 4mm", borderRadius: `${Math.min(T.radius || 14, 16)}px`, background: T.soft, border: `0.3mm solid ${T.border}`, color: T.textDim, fontSize: "8.5pt", lineHeight: 1.4 }}>{data.intro}</div>}
-      <div style={{ display: "flex", gap: "6mm", flex: 1 }}>
-        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>{title === "Cognitive Load" ? "No material cognitive-load issues identified from the available evidence." : `No ${title.toLowerCase()} findings were generated for this audit. Treat this section as incomplete, not as evidence that no issues exist.`}</p>}
+      <div style={{ display: "flex", gap: "5mm", flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {issues.length === 0 && <p style={{ color: C.muted, fontStyle: "italic" }}>{title === "Cognitive Load" ? "No material cognitive-load issues identified from the available evidence." : `Not assessed: no evidence-supported ${title.toLowerCase()} findings were generated. This section cannot support a category score without further evidence.`}</p>}
         {issues.map((iss, i) => (
-          <div key={i} style={{ flex: 1, background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "6.5mm" : "6mm", display: "flex", flexDirection: "column", gap: "3mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
+          <div key={i} style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "hidden", background: T.surface, border: `0.3mm solid ${T.border}`, borderTop: `1.2mm solid ${(SEVERITY_STYLES[iss.severity] || SEVERITY_STYLES.Medium).color}`, borderRadius: `${T.radius || 14}px`, padding: T.density === "assertive" ? "5mm" : "4.5mm", display: "flex", flexDirection: "column", gap: "2.5mm", boxShadow: T.cardShadow || "0 2mm 6mm rgba(30,43,40,0.05)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: `${12 * (T.titleScale || 1)}pt`, lineHeight: 1.25, color: T.text }}>{iss.title}</div>
+                <div style={{ fontWeight: 800, fontSize: `${10.8 * (T.titleScale || 1)}pt`, lineHeight: 1.22, color: T.text, overflowWrap: "anywhere" }}>{iss.title}</div>
                 {iss.evidenceBasis && <div style={{ marginTop: "1.5mm", fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.4pt", letterSpacing: .5, color: T.primary }}>
                   EVIDENCE: {iss.evidenceBasis}
                 </div>}
@@ -2310,18 +2311,23 @@ function IssueSlide({ title, data, n, total, sourceLabel, icon, theme = REPORT_T
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.muted, marginBottom: "1mm", textTransform: "uppercase" }}>Why it matters</div>
-              <div style={{ fontSize: "9pt", lineHeight: 1.45, color: T.textDim }}>{iss.why}</div>
+              <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.textDim, overflowWrap: "break-word" }}>{iss.why}</div>
             </div>
             <div style={{ marginTop: "auto", borderTop: `0.3mm solid ${T.border}`, paddingTop: "3mm", display: "flex", gap: "3mm", alignItems: "flex-start" }}>
               <SlideIconBadge icon={Check} size={12} theme={T} />
               <div>
                 <div style={{ fontWeight: 800, fontSize: "8pt", letterSpacing: 0.5, color: T.primary, marginBottom: "1mm", textTransform: "uppercase" }}>Recommendation</div>
-                <div style={{ fontSize: "9pt", lineHeight: 1.4, color: T.text }}>{iss.recommendation}</div>
+                <div style={{ fontSize: "8.8pt", lineHeight: 1.35, color: T.text, overflowWrap: "break-word" }}>{iss.recommendation}</div>
               </div>
             </div>
           </div>
         ))}
       </div>
+      {isSeo && (
+        <p style={{ position: "absolute", left: "16mm", right: "16mm", bottom: "14mm", margin: 0, padding: "1.5mm 0", borderTop: `0.2mm solid ${T.border}`, fontFamily: "'IBM Plex Mono', monospace", fontSize: "6.8pt", lineHeight: 1.3, color: T.muted }}>
+          Scope: Public HTML and infrastructure observations only. Search Console, indexing coverage, ranking, traffic, and backlinks were not independently tested.
+        </p>
+      )}
       <SlideFooter n={n} total={total} sourceLabel={sourceLabel} theme={T} />
     </div>
   );
