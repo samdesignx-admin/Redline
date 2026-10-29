@@ -15,8 +15,8 @@ const report = normalizeReportModel({
   cognitive: { issues: [] },
   scorecard: { usability: 70, accessibility: 80, visual: 75, trust: 72, conversion: 68 },
   evidence: [
-    { id: "E-01", findingId: "F-001", x: 18, y: 22, target: "nav", explanation: "Primary navigation", status: "observed", confidence: "high" },
-    { id: "E-02", findingId: "F-002", x: 44, y: 55, target: "search", explanation: "Search control", status: "observed", confidence: "high" },
+    { id: "E-01", findingId: "F-001", x: 18, y: 22, target: "Primary navigation menu label", explanation: "Primary navigation", status: "observed", confidence: "high" },
+    { id: "E-02", findingId: "F-002", x: 44, y: 55, target: "Search input text field", explanation: "Search control", status: "observed", confidence: "high" },
     { id: "E-03", findingId: "F-999", x: 80, y: 80, target: "unknown", explanation: "Should be rejected" },
   ],
 });
