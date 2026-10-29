@@ -2548,7 +2548,26 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
     item?.confidence === "high" && ["observed", "visual-only"].includes(item.status)
     && Number.isFinite(Number(item.cx)) && Number.isFinite(Number(item.cy))
     && String(item.target || "").trim());
-  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot ? verifiedVisualEvidence.length : 0);
+  const seoNotes = Array.isArray(seo?.verificationNotes) ? seo.verificationNotes.filter(Boolean) : [];
+  const seoNotePages = seoNotes.flatMap((note) => splitSlideText(note, 650));
+  const longIssuePages = [
+    ["Usability", usability], ["Visual Design", visual], ["Accessibility", accessibility],
+    ["SEO & Search Visibility", seo], ["Trust & Credibility", trust], ["Conversion", conversion],
+    ["Cognitive Load", cognitive],
+  ].flatMap(([section, data]) => (data?.issues || []).flatMap((issue) => {
+    const why = String(issue.why || "");
+    const recommendation = String(issue.recommendation || "");
+    if (why.length <= ISSUE_SLIDE_WHY_LIMIT && recommendation.length <= ISSUE_SLIDE_REC_LIMIT) return [];
+    const whyParts = splitSlideText(why, 480);
+    const recommendationParts = splitSlideText(recommendation, 480);
+    const parts = Math.max(whyParts.length, recommendationParts.length, 1);
+    return Array.from({ length: parts }, (_, index) => ({
+      section, title: issue.title, why: whyParts[index] || "",
+      recommendation: recommendationParts[index] || "",
+      part: index + 1, parts,
+    }));
+  }));
+  const TOTAL = 13 + (hasScreenshots ? 1 : 0) + (auditScreenshot ? verifiedVisualEvidence.length : 0) + seoNotePages.length + longIssuePages.length;
   let n = 0;
   const next = () => ++n;
 
@@ -2616,6 +2635,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
       <IssueSlide icon={Palette} title="Visual Design" data={visual} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={A11yIcon} title="Accessibility" data={accessibility} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={Search} title="SEO & Search Visibility" data={seo} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      {seoNotePages.map((note, index) => (
+        <SeoVerificationSlide key={"scope-" + index} note={note} part={index + 1} parts={seoNotePages.length} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      ))}
       <IssueSlide icon={ShieldCheck} title="Trust & Credibility" data={trust} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={TrendingUp} title="Conversion" data={conversion} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       <IssueSlide icon={Brain} title="Cognitive Load" data={cognitive} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
@@ -2702,6 +2724,11 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         </p>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
+
+      {/* Full wording for any finding too long for a three-column overview. */}
+      {longIssuePages.map((item, index) => (
+        <FindingContinuationSlide key={"finding-continuation-" + index} item={item} n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
+      ))}
 
       {/* Focused visual evidence — one finding per slide so the UI is readable at presentation size */}
       {auditScreenshot && verifiedVisualEvidence.length > 0 && (() => {
