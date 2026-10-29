@@ -51,8 +51,12 @@ function normalizeReportModel(report) {
   normalized.dimensions = DIMENSION_KEYS.map((key) => {
     const data = normalized[key] || {};
     const observedIssues = Array.isArray(data.issues) ? data.issues.length : 0;
+    const note = String(data.intro || "").toLowerCase();
+    // A scored, clean section still needs an explicit evidence-based
+    // assessment; omission is never treated as a zero-finding success.
     const explicitlyAssessedWithoutIssues =
-      /no material .*issues? (?:were )?(?:identified|found) from the available evidence/i.test(String(data.intro || ""));
+      /\bno\s+(?:(?:additional|material|significant|verified|substantial|notable|major)\s+){0,4}(?:[\w-]+\s+){0,3}(?:issues?|findings?|problems?|concerns?)\b.{0,110}\b(?:identified|observed|detected|found|evident)\b/i.test(note) ||
+      /\b(?:no issues? to report|no material concerns|no significant findings)\b/i.test(note);
     const assessed = observedIssues > 0 || explicitlyAssessedWithoutIssues;
     const raw = scorecard[key];
     const parsed = raw == null || raw === "" ? null : Number(raw);
@@ -69,13 +73,15 @@ function normalizeReportModel(report) {
     total: DIMENSION_KEYS.length,
     complete: dimensionScores.length === DIMENSION_KEYS.length,
   };
-  normalized.overallScore = dimensionScores.length
+  // A numerical overall UX score is meaningful only if all five scored
+  // dimensions were assessed; partial-coverage averages mislead buyers.
+  normalized.overallScore = normalized.scoreCoverage.complete
     ? Math.round(dimensionScores.reduce((sum, score) => sum + score, 0) / dimensionScores.length)
     : null;
   normalized.summary = {
     ...(normalized.summary || {}),
     score: normalized.overallScore,
-    assessment: normalized.overallScore == null ? "Unrated" : normalized.summary?.assessment,
+    assessment: normalized.overallScore == null ? "Incomplete" : normalized.summary?.assessment,
   };
   normalized.scorecard = {
     ...scorecard,
@@ -89,7 +95,7 @@ function normalizeReportModel(report) {
   normalized.evidenceByFinding = evidenceIndex.byFinding;
   normalized.scoringEvidence = evidenceIndex.scoring;
   normalized.traceability = buildTraceability(normalized.findings);
-  normalized.modelVersion = 6;
+  normalized.modelVersion = 7;
   return normalized;
 }
 
