@@ -2272,8 +2272,8 @@ function SlideIconBadge({ icon: Icon, size = 14, theme = REPORT_THEME_FALLBACK }
 function SlideFooter({ n, total, sourceLabel, theme = REPORT_THEME_FALLBACK }) {
   return (
     <div style={{ ...SLIDE.footer, color: theme.muted, borderTopColor: theme.border }}>
-      <span>NEST AUDIT · {sourceLabel}</span>
-      <span>{n} / {total}</span>
+      <span style={{ minWidth: 0, maxWidth: "75%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 1 }}>NEST AUDIT · {sourceLabel}</span>
+      <span style={{ whiteSpace: "nowrap", flexShrink: 0, textAlign: "right" }}>{n} / {total}</span>
     </div>
   );
 }
@@ -2349,14 +2349,13 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
         const width = image.naturalWidth || image.width;
         const height = image.naturalHeight || image.height;
         if (!width || !height) return;
-        // Use a broad contextual crop rather than magnifying a tiny region.
-        // The full page remains visible above; this crop is supplemental detail.
-        const span = Math.max(24, Math.min(38, Number(radius || 2.5) * 8));
-        const cropW = Math.min(width, Math.max(320, Math.round(width * span / 100)));
-        const cropH = Math.min(height, Math.max(220, Math.round(height * span / 100)));
-        const centerX = width * Number(cx || 50) / 100;
-        const centerY = height * Number(cy || 50) / 100;
-        const sx = Math.max(0, Math.min(width - cropW, Math.round(centerX - cropW / 2)));
+        // Keep the full screenshot width while zooming vertically around the
+        // nominated target. Narrow horizontal crops cut words in half when an
+        // AI target is on a long heading near the viewport edge.
+        const cropW = width;
+        const cropH = Math.min(height, Math.max(260, Math.round(width * 0.62)));
+        const centerY = height * (Number.isFinite(Number(cy)) ? Number(cy) : 50) / 100;
+        const sx = 0;
         const sy = Math.max(0, Math.min(height - cropH, Math.round(centerY - cropH / 2)));
         const canvas = document.createElement("canvas");
         // Avoid enlarging small screenshot crops more than 2x; interpolation softens UI text.
@@ -2385,7 +2384,7 @@ function EvidenceCrop({ screenshot, cx, cy, radius, alt }) {
       <div style={{ position: "relative", minHeight: 0, overflow: "hidden", background: "#F8FCF9", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <img src={crop || screenshot} alt={alt} style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }} />
         <span style={{ position: "absolute", bottom: "2mm", left: "3mm", borderRadius: "2mm", padding: "1.3mm 2.5mm", color: "#FFFFFF", background: "rgba(8,57,42,.9)", fontFamily: "'IBM Plex Mono',monospace", fontSize: "7.5pt" }}>
-          TARGET DETAIL · AI-SUGGESTED CROP
+          TARGET DETAIL · FULL-WIDTH CROP
         </span>
       </div>
       <div style={{ position: "relative", minHeight: 0, overflow: "hidden", borderTop: "0.3mm solid #D9E5DE", background: "#E9F2ED", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2409,9 +2408,9 @@ function EvidenceFocusSlide({ screenshot, item, index, n, total, sourceLabel, is
   };
   const title = clip(item.issueTitle || issue?.title || "Visual finding", 98);
   return (
-    <div className="deck-slide" style={{ ...SLIDE.page, background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
+    <div className="deck-slide" style={{ ...SLIDE.page, paddingBottom: "25mm", background: T.background, color: T.text, borderColor: T.border, boxShadow: `inset 0 3mm 0 ${T.soft}` }}>
       <div style={{ ...SLIDE.kicker, color: T.primary, background: T.soft, borderColor: T.border }}>Visual Evidence · Finding {index + 1}</div>
-      <h2 style={{ ...SLIDE.title, color: T.text, fontSize: "21pt", lineHeight: 1.16, letterSpacing: "-.4pt", marginBottom: "3mm", maxHeight: "16mm", overflow: "hidden" }}>{title}</h2>
+      <h2 style={{ ...SLIDE.title, color: T.text, fontSize: "20pt", lineHeight: 1.13, letterSpacing: "-.5pt", marginBottom: "3mm", maxHeight: "19mm", overflow: "hidden", overflowWrap: "anywhere" }}>{title}</h2>
       <div style={{ ...SLIDE.rule, width: "27mm", height: "1mm", background: `linear-gradient(90deg, ${T.primary}, ${T.accent})`, marginBottom: "5mm" }} />
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.05fr)", gap: "6mm", flex: 1, minHeight: 0, marginBottom: "3mm" }}>
@@ -2453,7 +2452,16 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
   if (!report) return null;
   const T = theme || REPORT_THEME_FALLBACK;
   const { summary, usability, visual, accessibility, seo = { intro: "", issues: [] }, trust, conversion, cognitive, aiRecommendations, top10, quickWins, strategic, scorecard } = report;
-  const sourceLabel = source && source.mode === "url" && source.url ? source.url.replace(/^https?:\/\//, "").toUpperCase() : "SCREEN REVIEW";
+  const sourceLabel = (() => {
+    if (!source || source.mode !== "url" || !source.url) return "SCREEN REVIEW";
+    try {
+      // Use a stable, short hostname on the cover and footer. Full page URLs
+      // are documented separately under Pages Reviewed.
+      return new URL(source.url).hostname.replace(/^www\./i, "").toUpperCase().slice(0, 48);
+    } catch {
+      return String(source.url).replace(/^https?:\/\//i, "").split("/")[0].toUpperCase().slice(0, 48);
+    }
+  })();
   const scoreColor = (v) => (v >= 80 ? C.low : v >= 60 ? C.medium : v >= 40 ? C.high : C.critical);
   const hasScreenshots = auditScreenshots.length > 0 || !!auditScreenshot;
   const verifiedVisualEvidence = (visualEvidence || []).filter((item) =>
@@ -2471,12 +2479,9 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
         <div style={{ position: "absolute", width: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "96mm", height: T.ornament === "bubble" || T.ornament === "blob" ? "110mm" : "62mm", borderRadius: T.ornament === "block" ? "8mm" : T.ornament === "frame" ? "0" : "50%", border: T.ornament === "line" ? "0.5mm solid rgba(255,255,255,0.13)" : "0.5mm solid rgba(255,255,255,0.08)", right: "-25mm", top: "-42mm", transform: T.ornament === "block" ? "rotate(14deg)" : "none" }} />
         <div style={{ position: "absolute", width: T.ornament === "grid" ? "74mm" : "70mm", height: T.ornament === "grid" ? "74mm" : "70mm", borderRadius: T.ornament === "block" ? "7mm" : T.ornament === "frame" ? "0" : "50%", background: T.ornament === "line" ? "transparent" : "rgba(255,255,255,0.035)", border: T.ornament === "grid" ? "0.5mm solid rgba(255,255,255,0.07)" : "none", left: "-18mm", bottom: "-22mm" }} />
         <div style={{ width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, position: "relative", zIndex: 1 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 14, borderRadius: 14, padding: "6px 14px" }}>
-            <BrandLogo size={62} showWordmark={false} />
-            <div style={{ textAlign: "left", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              <div style={{ color: "#FFFFFF", fontWeight: 850, fontSize: 34, lineHeight: 1.1, letterSpacing: "-1.2px" }}>UX<span style={{ color: "#70EDAF" }}>Nest</span></div>
-              <div style={{ color: "#C5E9DA", fontSize: 10.5, fontWeight: 700, letterSpacing: .2, marginTop: 4 }}>AI-Powered UX Intelligence</div>
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, padding: "2mm 3mm", textAlign: "center" }}>
+            <div style={{ color: "#FFFFFF", fontWeight: 850, fontSize: 39, lineHeight: 1.1, letterSpacing: "-1.6px" }}>UX<span style={{ color: "#70EDAF" }}>Nest</span></div>
+            <div style={{ color: "#C5E9DA", fontSize: 11, fontWeight: 700, letterSpacing: .45 }}>AI-Powered UX Intelligence</div>
           </div>
           <div style={{ ...SLIDE.kicker, marginBottom: 0, lineHeight: 1.2, color: C.now, background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)" }}>Senior UX Review · {T.descriptor || "ADAPTIVE SYSTEM"}</div>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: T.titleWeight || 800, fontSize: 58 * (T.titleScale || 1), lineHeight: 1.02, color: "#FFFFFF", whiteSpace: "nowrap", letterSpacing: T.letterSpacing || "-1.5pt" }}>UXNest Audit Report</div>
@@ -2711,7 +2716,9 @@ function addSelectableSlideTextLayer(pdf, slide) {
     pdf.text(text, x, y, {
       renderingMode: "invisible",
       baseline: "top",
-      maxWidth: Math.max(10, Math.min(292 - x, rect.width * xFactor)),
+      // Do not reflow short labels ("MEDIUM", "COSTCO.COM", slide counts)
+      // using an approximate font width. This created broken search text.
+      ...(text.length > 95 ? { maxWidth: Math.max(12, Math.min(292 - x, rect.width * xFactor * 1.12)) } : {}),
     });
     count++;
   }
