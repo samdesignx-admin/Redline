@@ -261,7 +261,7 @@ Expected Business Benefit: <max 12 words>
 (continue with only evidence-supported recommendations, up to item 10)`,
 
   `# Final Scorecard
-Use the findings and evidence from the preceding audit sections to assign indicative numeric scores. These are AI estimates, not independent measurements. Never treat unverified details as proven failures. The overall score is holistic and not necessarily the simple average of the five scored categories. Do not leave placeholders.
+Use the findings and evidence from the preceding audit sections to assign indicative numeric scores. These are AI estimates, not independent measurements. Never treat unverified details as proven failures. The overall score is the equal-weight arithmetic average of the five scored categories, rounded, but must not be reported unless all five categories have evidence-grounded scores. Do not leave placeholders.
 Usability: <0-100 integer>
 Accessibility: <0-100 integer>
 Visual Design: <0-100 integer>
@@ -2066,7 +2066,7 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
             <ScoreBar label="Overall UX Score" value={scorecard.overall} />
             {report.scoreCoverage && !report.scoreCoverage.complete && <p style={{ fontWeight: 750, color: "#825500", fontSize: 12, margin: "9px 0" }}>Provisional score: {report.scoreCoverage.assessed} of {report.scoreCoverage.total} categories assessed; the remaining categories need more evidence.</p>}
             <p style={{ margin: "15px 0 0", padding: "11px 13px", borderRadius: 10, background: "#EDF9F2", color: "#376957", fontSize: 12, lineHeight: 1.6 }}>
-              <strong>How scoring works:</strong> Scores are indicative AI estimates based on available evidence, not independently measured performance or compliance results. Only categories with supporting assessment evidence receive scores; unavailable categories show Not assessed. Overall is the arithmetic mean of assessed categories and is provisional when coverage is incomplete. SEO and cognitive load are evaluated separately; unverified behaviors require manual testing.
+              <strong>How scoring works:</strong> Scores are indicative AI estimates based on available evidence, not independently measured performance or compliance results. Only categories with supporting assessment evidence receive scores; unavailable categories show Not assessed. An overall score appears only when all five categories are assessed, and is their rounded equal-weight average. An incomplete report is not given an overall score. SEO and cognitive load are evaluated separately; unverified behaviors require manual testing.
             </p>
             <div style={{ marginTop: 18, padding: "14px 16px", background: C.surfaceAlt, borderRadius: 10, border: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -2723,7 +2723,7 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
           ))}
         </div>
         <p style={{ fontSize: "8.6pt", lineHeight: 1.5, color: T.textDim, margin: "2mm 0 9mm 0", maxWidth: "230mm" }}>
-          These are indicative AI scores, not independent compliance results. Only assessed categories receive numeric scores; missing evidence is marked N/A. Overall is the arithmetic average of scored categories and remains provisional when coverage is incomplete. SEO and cognitive load are reviewed separately. Validate untested behaviors independently.
+          These are indicative AI scores, not independent compliance results. Only assessed categories receive numeric scores; missing evidence is marked N/A. Overall is the rounded arithmetic average of all five scored categories; if any category is unassessed, no overall score is reported. SEO and cognitive load are reviewed separately. Validate untested behaviors independently.
         </p>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
