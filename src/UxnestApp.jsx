@@ -1911,7 +1911,7 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
                 <div style={{ flex: 1, height: 7, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${v ?? 0}%`, background: C.gold, borderRadius: 99 }} />
                 </div>
-                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 13, color: C.text, width: 26, textAlign: "right", flexShrink: 0 }}>{v ?? "—"}</span>
+                <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: v == null ? 10 : 13, color: v == null ? C.muted : C.text, width: 34, textAlign: "right", flexShrink: 0 }}>{v == null ? "N/A" : v}</span>
               </div>
             ))}
           </div>
@@ -2061,8 +2061,9 @@ function ReportScreen({ report, images, source, auditedPages = [], auditScreensh
             <ScoreBar label="Conversion" value={scorecard.conversion} />
             <div style={{ height: 1, background: C.border, margin: "14px 0" }} />
             <ScoreBar label="Overall UX Score" value={scorecard.overall} />
+            {report.scoreCoverage && !report.scoreCoverage.complete && <p style={{ fontWeight: 750, color: "#825500", fontSize: 12, margin: "9px 0" }}>Provisional score: {report.scoreCoverage.assessed} of {report.scoreCoverage.total} categories assessed; the remaining categories need more evidence.</p>}
             <p style={{ margin: "15px 0 0", padding: "11px 13px", borderRadius: 10, background: "#EDF9F2", color: "#376957", fontSize: 12, lineHeight: 1.6 }}>
-              <strong>How scoring works:</strong> Scores are indicative AI estimates based on available evidence, not independently measured performance or compliance results. The five categories above are scored numerically; SEO and cognitive load are evaluated separately. The overall score is holistic, not necessarily an average. Unverified behaviors require manual testing.
+              <strong>How scoring works:</strong> Scores are indicative AI estimates based on available evidence, not independently measured performance or compliance results. Only categories with supporting assessment evidence receive scores; unavailable categories show Not assessed. Overall is the arithmetic mean of assessed categories and is provisional when coverage is incomplete. SEO and cognitive load are evaluated separately; unverified behaviors require manual testing.
             </p>
             <div style={{ marginTop: 18, padding: "14px 16px", background: C.surfaceAlt, borderRadius: 10, border: `1px solid ${C.border}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -2607,12 +2608,12 @@ function DeckSlides({ report, source, auditedPages = [], auditScreenshot = null,
               <div style={{ flex: 1, height: "5mm", background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
                 <div style={{ width: `${v ?? 0}%`, height: "100%", background: scoreColor(v ?? 0), borderRadius: 99 }} />
               </div>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10.5pt", width: "16mm", textAlign: "right" }}>{v ?? "—"}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: "10pt", width: "16mm", textAlign: "right", color: v == null ? T.muted : T.text }}>{v == null ? "N/A" : v}</span>
             </div>
           ))}
         </div>
         <p style={{ fontSize: "8.6pt", lineHeight: 1.5, color: T.textDim, margin: "2mm 0 9mm 0", maxWidth: "230mm" }}>
-          These are indicative AI scores, not independent compliance results. Five categories are scored numerically; SEO and cognitive load receive separate qualitative analysis. Overall is a holistic estimate, not necessarily the average. Validate untested behaviors independently.
+          These are indicative AI scores, not independent compliance results. Only assessed categories receive numeric scores; missing evidence is marked N/A. Overall is the arithmetic average of scored categories and remains provisional when coverage is incomplete. SEO and cognitive load are reviewed separately. Validate untested behaviors independently.
         </p>
         <SlideFooter n={next()} total={TOTAL} sourceLabel={sourceLabel} theme={T} />
       </div>
