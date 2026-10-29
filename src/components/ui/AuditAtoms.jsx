@@ -64,7 +64,7 @@ function ScoreBar({ label, value }) {
     <div style={{ marginBottom: 13 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
         <span style={{ fontSize: 13, color: C.textDim, fontWeight: 500 }}>{label}</span>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, color: C.text }}>{value == null ? "—" : `${value}/100`}</span>
+        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: value == null ? 11 : 13, color: value == null ? C.muted : C.text }}>{value == null ? "Not assessed" : `${value}/100`}</span>
       </div>
       <div style={{ height: 6, background: C.surfaceAlt, borderRadius: 99, overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${v}%`, background: color, borderRadius: 99, transition: "width 900ms cubic-bezier(.2,.8,.2,1)" }} />
