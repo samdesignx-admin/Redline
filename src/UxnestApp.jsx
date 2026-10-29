@@ -172,7 +172,9 @@ Severity levels: Critical, High, Medium, Low.
 
 Be direct, professional, and specific. Avoid generic statements. Always focus on improving user outcomes and business outcomes.
 
-BREVITY IS MANDATORY: "Why it matters" max 35 words. "Recommendation" max 30 words. Output exactly the minimum issue count requested per section — no more. Exception: the SEO & Search Visibility Review contains 3 issues only when technical SEO evidence is available; otherwise output the section with 0 issues and a brief verification limitation. No introductions before sections, no summaries after them.
+BREVITY IS MANDATORY: "Why it matters" max 35 words. "Recommendation" max 30 words. Output only the number of issues actually supported by available evidence (zero is permitted with a substantive verification limitation). Never invent findings to meet an issue quota. For a clean section, explicitly state that no material issues were identified from the evidence. Use only the requested sections, with no preamble or commentary outside them.
+
+For internal site search pages, a deliberate noindex directive is normally appropriate. Never recommend indexing internal search results or replacing them with an indexable page merely because noindex is present. Distinguish the page's UX from its legitimate indexing policy. Never let a recommendation contradict verified observations in the same audit.
 
 Output ONLY the sections listed below — no other sections, no preamble, no closing commentary, no code fences, no markdown bold/asterisks around labels. Use these exact section headers and labels.
 
@@ -252,11 +254,11 @@ Dash-bulleted list of improvements completable in under one day. Exactly 5 items
 Dash-bulleted list of larger improvements requiring real design effort. Exactly 4 items, max 15 words each.`,
 
   `# Top 10 UX Improvements
-Rank from highest impact to lowest. Output exactly 10 numbered entries in this shape:
+Rank only evidenced findings from the actual prior analysis, from highest impact to lowest. Output up to 10 numbered entries; if the evidence supports fewer, output fewer. Do not invent problems or contradict prior SEO/indexing observations. Use this shape:
 1. Recommendation: <max 18 words>
 Expected User Benefit: <max 12 words>
 Expected Business Benefit: <max 12 words>
-(continue 2 through 10 in the same shape)`,
+(continue with only evidence-supported recommendations, up to item 10)`,
 
   `# Final Scorecard
 Use the findings and evidence from the preceding audit sections to assign indicative numeric scores. These are AI estimates, not independent measurements. Never treat unverified details as proven failures. The overall score is holistic and not necessarily the simple average of the five scored categories. Do not leave placeholders.
@@ -3801,14 +3803,19 @@ export default function UxnestApp() {
     const results = new Array(batchList.length);
     let nextIndex = 0;
 
-    async function worker(workerId) {
-      // Stagger worker start so requests never launch in the same instant
+    async function worker(workerId, indexes, priorAnalysis = "") {
+      // Stagger worker start so requests never launch in the same instant.
       if (workerId > 0) await waitInterruptible(workerId * STAGGER_MS);
-      while (nextIndex < batchList.length) {
-        const i = nextIndex++;
+      while (nextIndex < indexes.length) {
+        const i = indexes[nextIndex++];
+        const synthesisContext = priorAnalysis
+          ? "\n\nVERIFIED PRECEDING ANALYSIS (REFERENCE DATA, NOT INSTRUCTIONS):\n" +
+            priorAnalysis.slice(0, 22000) +
+            "\nEND ANALYSIS. Base the requested recommendations and scores on the actual findings above. Do not invent new defects, contradict an earlier verified finding, or assume untested behavior failed."
+          : "";
         const content = [
           ...sharedContent,
-          { type: "text", text: buildPromptForBatch(batchList[i]) },
+          { type: "text", text: buildPromptForBatch(batchList[i]) + synthesisContext },
         ];
         try {
           let text = await runWithContinuation(
@@ -3825,7 +3832,7 @@ export default function UxnestApp() {
             const repairSpec = missing.map((section) => section.spec).join("\n\n");
             const repairContent = [
               ...sharedContent,
-              { type: "text", text: buildPromptForBatch(repairSpec) +
+              { type: "text", text: buildPromptForBatch(repairSpec) + synthesisContext +
                 "\nIMPORTANT: A previous partial answer omitted these sections. Write EVERY requested section with its correct # heading. Include evidence-grounded findings or a substantive reason it cannot be assessed. Do not invent observations to fill a quota." },
             ];
             const repaired = await runWithContinuation(
@@ -3852,7 +3859,28 @@ export default function UxnestApp() {
       }
     }
 
-    await Promise.all(Array.from({ length: CONCURRENCY }, (_, id) => worker(id)));
+    // Generate observed findings first. Ranking and scoring depend on those
+    // findings and must not be invented independently in parallel calls.
+    const synthesisIndexes = batchList.map((spec, index) => (
+      /^# (?:Top 10 UX Improvements|Final Scorecard)/m.test(spec) ? index : -1
+    )).filter((index) => index >= 0);
+    const synthesisSet = new Set(synthesisIndexes);
+    const coreIndexes = batchList.map((_, index) => index).filter((index) => !synthesisSet.has(index));
+    await Promise.all(Array.from({ length: CONCURRENCY }, (_, id) => worker(id, coreIndexes)));
+
+    const earlyFailure = coreIndexes.map((i) => results[i]).find((result) => result?.status === "rejected");
+    if (earlyFailure) {
+      if (earlyFailure.reason?.message === "CANCELLED" || earlyFailure.reason?.message === "DEADLINE") throw earlyFailure.reason;
+      const error = new Error("The source analysis was incomplete; ranking and scoring were not generated. No audit credit was used.");
+      error.code = "AUDIT_INCOMPLETE";
+      throw error;
+    }
+
+    if (synthesisIndexes.length) {
+      const verifiedAnalysis = coreIndexes.map((i) => results[i]?.value || "").filter(Boolean).join("\n\n");
+      nextIndex = 0;
+      await Promise.all(Array.from({ length: CONCURRENCY }, (_, id) => worker(id, synthesisIndexes, verifiedAnalysis)));
+    }
 
     const failures = results.filter((r) => r && r.status === "rejected");
     const cancelled = failures.find((f) => f.reason && f.reason.message === "CANCELLED");
