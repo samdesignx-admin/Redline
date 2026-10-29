@@ -3669,13 +3669,13 @@ export default function UxnestApp() {
   // Every generated batch must contain the sections it was assigned. A
   // syntactically valid but incomplete AI response is not a complete audit.
   function expectedBatchSections(template) {
-    return String(template || "").split(/(?=^#\\s+)/gm)
-      .map((section) => ({ heading: /^#\\s+(.+)\\s*$/m.exec(section)?.[1]?.trim() || "", spec: section.trim() }))
+    return String(template || "").split(/(?=^#\s+)/gm)
+      .map((section) => ({ heading: /^#\s+(.+)\s*$/m.exec(section)?.[1]?.trim() || "", spec: section.trim() }))
       .filter((section) => section.heading);
   }
   function missingBatchSections(template, response) {
     const normalized = normalizeReportText(String(response || ""));
-    const emitted = new Set([...normalized.matchAll(/^#\\s+(.+?)\\s*$/gm)].map((m) => m[1].trim().toLowerCase()));
+    const emitted = new Set([...normalized.matchAll(/^#\s+(.+?)\s*$/gm)].map((m) => m[1].trim().toLowerCase()));
     return expectedBatchSections(template).filter(({ heading }) => !emitted.has(heading.toLowerCase()));
   }
 
