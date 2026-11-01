@@ -83,12 +83,12 @@ export default async function handler(req, res) {
       if (!r.ok) { res.status(401).json({ error: "Google sign-in could not be verified." }); return; }
       const info = await r.json();
       const expectedAud = process.env.GOOGLE_CLIENT_ID;
-      if (expectedAud && info.aud !== expectedAud) {
+      if (!expectedAud || info.aud !== expectedAud) {
         res.status(401).json({ error: "Google sign-in was issued for a different application." });
         return;
       }
       const email = cleanEmail(info.email);
-      if (!isEmail(email) || info.email_verified === "false") {
+      if (!isEmail(email) || (info.email_verified !== true && info.email_verified !== "true")) {
         res.status(401).json({ error: "Google did not return a verified email address." });
         return;
       }
