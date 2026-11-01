@@ -3,7 +3,7 @@
 
 import {
   requireDb, hashPassword, verifyPassword, issueSession, readSession,
-  cleanEmail, isEmail, publicAccount,
+  cleanEmail, isEmail, publicAccount, validateEmailProof,
 } from "./_lib.js";
 
 export const maxDuration = 20;
@@ -34,9 +34,10 @@ export default async function handler(req, res) {
     /* ---------------- Sign up ---------------- */
     if (action === "signup") {
       const email = cleanEmail(req.body.email);
-      const { password, name, company, mobile, emailVerified } = req.body;
+      const { password, name, company, mobile, emailProof } = req.body;
       if (!isEmail(email)) { res.status(400).json({ error: "Enter a valid email address." }); return; }
       if (!password || String(password).length < 6) { res.status(400).json({ error: "Password must be at least 6 characters." }); return; }
+      if (!validateEmailProof(email, emailProof)) { res.status(403).json({ error: "Verify your email before creating an account." }); return; }
 
       const { data: existing } = await db.from("accounts").select("id").eq("email", email).maybeSingle();
       if (existing) { res.status(409).json({ error: "An account with this email already exists — log in instead." }); return; }
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
         company: (company || "").trim(),
         mobile: (mobile || "").trim(),
         password_hash: hashPassword(password),
-        email_verified: !!emailVerified,
+        email_verified: true,
         last_login_at: new Date().toISOString(),
       }).select().single();
       if (error) throw error;
