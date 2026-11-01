@@ -181,8 +181,12 @@ export default async function handler(req, res) {
       return;
     }
     const [purpose, expiresStr, signature] = parts;
+    if (purpose !== "signup" && purpose !== "reset") {
+      res.status(400).json({ error: "Invalid verification purpose" });
+      return;
+    }
     const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
+    if (!/^\\d{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
       res.status(400).json({ error: "That code has expired. Request a new one." });
       return;
     }
