@@ -46,7 +46,7 @@ export default async function handler(req, res) {
         name: (name || "").trim(),
         company: (company || "").trim(),
         mobile: (mobile || "").trim(),
-        password_hash: hashPassword(password),
+        password_hash: await hashPassword(password),
         email_verified: !!emailVerified,
         last_login_at: new Date().toISOString(),
       }).select().single();
@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       const { data } = await db.from("accounts").select("*").eq("email", email).maybeSingle();
       // Same message either way so the endpoint can't be used to discover
       // which email addresses are registered.
-      if (!data || !verifyPassword(password, data.password_hash)) {
+      if (!data || !(await verifyPassword(password, data.password_hash))) {
         res.status(401).json({ error: "Incorrect email or password." });
         return;
       }
