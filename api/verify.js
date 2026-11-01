@@ -219,7 +219,7 @@ export default async function handler(req, res) {
     }
     const [, expiresStr, signature] = parts;
     const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
+    if (!/^[0-9]{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
       res.status(400).json({ error: "That reset code has expired. Request a new one." });
       return;
     }
