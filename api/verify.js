@@ -159,8 +159,8 @@ export default async function handler(req, res) {
         }),
       });
       if (!r.ok) {
-        const detail = await r.text();
-        res.status(502).json({ error: `Couldn't send the verification email. ${detail.slice(0, 200)}` });
+        // Do not expose provider response bodies (which may contain internal details) to clients.
+        res.status(502).json({ error: "Couldn't send the verification email. Please try again later." });
         return;
       }
     } catch (e) {
