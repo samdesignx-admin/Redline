@@ -235,7 +235,7 @@ export default async function handler(req, res) {
       return;
     }
     const { error } = await db.from("accounts").update({
-      password_hash: hashPassword(newPassword),
+      password_hash: await hashPassword(newPassword),
       last_login_at: new Date().toISOString(),
     }).eq("id", account.id);
     if (error) throw error;
