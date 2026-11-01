@@ -12,7 +12,7 @@
 //                     (during testing Resend allows onboarding@resend.dev)
 
 import crypto from "crypto";
-import { requireDb, hashPassword, cleanEmail, isEmail } from "./_lib.js";
+import { requireDb, hashPassword, cleanEmail, isEmail, issueEmailProof } from "./_lib.js";
 
 export const maxDuration = 20;
 
@@ -194,7 +194,7 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "That code isn't right. Check the email and try again." });
       return;
     }
-    res.status(200).json({ verified: true, purpose });
+    res.status(200).json({ verified: true, purpose, ...(purpose === "signup" ? { emailProof: issueEmailProof(cleanEmail) } : {}) });
     return;
   }
 
