@@ -22,7 +22,8 @@ export async function hashPassword(password) {
 }
 
 export async function verifyPassword(password, stored) {
-  if (!stored || !stored.includes(":")) return false;
+  // Reject malformed database values before running the expensive KDF.
+  if (typeof stored !== "string" || !/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(stored)) return false;
   const [salt, hash] = stored.split(":");
   const candidate = (await scryptAsync(String(password), salt, 64)).toString("hex");
   const a = Buffer.from(candidate);
