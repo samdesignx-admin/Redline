@@ -186,7 +186,7 @@ export default async function handler(req, res) {
       return;
     }
     const expires = Number(expiresStr);
-    if (!/^\\d{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
+    if (!/^[0-9]{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
       res.status(400).json({ error: "That code has expired. Request a new one." });
       return;
     }
