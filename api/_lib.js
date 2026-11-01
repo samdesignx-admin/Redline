@@ -90,3 +90,26 @@ export function requireDb(res) {
   }
   return db;
 }
+
+/* ---------------- Verified email proof ---------------- */
+// Issued only after the server verifies the emailed code; valid for 10 minutes.
+export function issueEmailProof(email) {
+  const secret = process.env.VERIFY_SECRET;
+  if (!secret) throw new Error("VERIFY_SECRET is not set");
+  const expires = Date.now() + 10 * 60 * 1000;
+  const payload = `signup:${cleanEmail(email)}:${expires}`;
+  const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return `${expires}.${signature}`;
+}
+
+export function validateEmailProof(email, proof) {
+  const secret = process.env.VERIFY_SECRET;
+  if (!secret || typeof proof !== "string" || proof.length > 100) return false;
+  const parts = proof.split(".");
+  if (parts.length !== 2 || !/^\\d{13}$/.test(parts[0]) || !/^[a-f0-9]{64}$/.test(parts[1])) return false;
+  const expires = Number(parts[0]);
+  if (expires <= Date.now() || expires > Date.now() + 10 * 60 * 1000) return false;
+  const expected = crypto.createHmac("sha256", secret)
+    .update(`signup:${cleanEmail(email)}:${expires}`).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(parts[1], "hex"), Buffer.from(expected, "hex"));
+}
