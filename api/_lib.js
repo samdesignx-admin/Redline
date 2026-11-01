@@ -106,7 +106,7 @@ export function validateEmailProof(email, proof) {
   const secret = process.env.VERIFY_SECRET;
   if (!secret || typeof proof !== "string" || proof.length > 100) return false;
   const parts = proof.split(".");
-  if (parts.length !== 2 || !/^\\d{13}$/.test(parts[0]) || !/^[a-f0-9]{64}$/.test(parts[1])) return false;
+  if (parts.length !== 2 || !/^\d{13}$/.test(parts[0]) || !/^[a-f0-9]{64}$/.test(parts[1])) return false;
   const expires = Number(parts[0]);
   if (expires <= Date.now() || expires > Date.now() + 10 * 60 * 1000) return false;
   const expected = crypto.createHmac("sha256", secret)
