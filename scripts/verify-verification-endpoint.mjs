@@ -28,4 +28,19 @@ const resetToken = `reset.${expiry}.${sign("reset", expiry)}`;
 const reset = await invoke("verify", resetToken);
 assert.equal(reset.statusCode, 200);
 assert.equal(reset.body.emailProof, undefined, "reset must not grant signup proof");
+// Password-reset submissions must reject malformed, expired, and cross-purpose tokens
+// before accessing the database or modifying any account.
+const invokeReset = async (token, suppliedCode = code) => {
+  const res = { statusCode: 200, status(n) { this.statusCode = n; return this; },
+    json(body) { this.body = body; return this; } };
+  await handler({ method: "POST", body: {
+    action: "reset", email, code: suppliedCode, token, newPassword: "NewPassword123!"
+  } }, res);
+  return res;
+};
+assert.equal((await invokeReset(signupToken)).statusCode, 400, "signup code cannot reset password");
+assert.equal((await invokeReset("reset.invalid.token")).statusCode, 400, "malformed expiry rejected");
+assert.equal((await invokeReset(`reset.${Date.now() - 60_000}.${sign("reset", Date.now() - 60_000)}`)).statusCode, 400, "expired reset code rejected");
+assert.equal((await invokeReset(`reset.${farExpiry}.${sign("reset", farExpiry)}`)).statusCode, 400, "far-future reset expiry rejected");
+assert.equal((await invokeReset(resetToken, "000000")).statusCode, 400, "wrong reset code rejected");
 console.log("Verification endpoint regression tests passed");
