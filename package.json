@@ -13,7 +13,7 @@
     "test:report-model": "node scripts/verify-report-model.mjs",
     "test:evidence-render": "node scripts/verify-evidence-render.mjs",
     "test:report-completeness": "node scripts/verify-report-completeness.mjs",
-    "test:auth": "node scripts/verify-password-hashing.mjs && node scripts/verify-email-proof.mjs"
+    "test:auth": "node scripts/verify-password-hashing.mjs && node scripts/verify-email-proof.mjs && node scripts/verify-verification-endpoint.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
