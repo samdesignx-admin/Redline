@@ -238,11 +238,15 @@ export default async function handler(req, res) {
       res.status(404).json({ error: "No account exists with that email address." });
       return;
     }
-    const { error } = await db.from("accounts").update({
+    const { data: updatedAccounts, error } = await db.from("accounts").update({
       password_hash: await hashPassword(newPassword),
       last_login_at: new Date().toISOString(),
-    }).eq("id", account.id);
+    }).eq("id", account.id).select("id");
     if (error) throw error;
+    if (!updatedAccounts || updatedAccounts.length !== 1) {
+      res.status(409).json({ error: "Password reset could not be completed. Please request a new code." });
+      return;
+    }
     res.status(200).json({ reset: true });
     return;
   }
