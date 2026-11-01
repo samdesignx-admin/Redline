@@ -2,6 +2,8 @@
 // uses the Supabase service role key, which bypasses row level security.
 
 import crypto from "crypto";
+import { promisify } from "node:util";
+const scryptAsync = promisify(crypto.scrypt);
 import { createClient } from "@supabase/supabase-js";
 
 export function getDb() {
@@ -13,19 +15,18 @@ export function getDb() {
 
 /* ---------------- Passwords ---------------- */
 // scrypt with a per-user random salt. Stored as "salt:hash".
-export function hashPassword(password) {
+export async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  const hash = (await scryptAsync(String(password), salt, 64)).toString("hex");
   return `${salt}:${hash}`;
 }
 
-export function verifyPassword(password, stored) {
-  if (!stored || !stored.includes(":")) return false;
+export async function verifyPassword(password, stored) {
+  if (typeof stored !== "string" || !/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(stored)) return false;
   const [salt, hash] = stored.split(":");
-  const candidate = crypto.scryptSync(String(password), salt, 64).toString("hex");
-  const a = Buffer.from(candidate);
-  const b = Buffer.from(hash);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const candidate = await scryptAsync(String(password), salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  return crypto.timingSafeEqual(candidate, expected);
 }
 
 /* ---------------- Sessions ---------------- */
@@ -89,4 +90,27 @@ export function requireDb(res) {
     return null;
   }
   return db;
+}
+
+/* ---------------- Verified email proof ---------------- */
+// Issued only after the server verifies the emailed code; valid for 10 minutes.
+export function issueEmailProof(email) {
+  const secret = process.env.VERIFY_SECRET;
+  if (!secret) throw new Error("VERIFY_SECRET is not set");
+  const expires = Date.now() + 10 * 60 * 1000;
+  const payload = `signup:${cleanEmail(email)}:${expires}`;
+  const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return `${expires}.${signature}`;
+}
+
+export function validateEmailProof(email, proof) {
+  const secret = process.env.VERIFY_SECRET;
+  if (!secret || typeof proof !== "string" || proof.length > 100) return false;
+  const parts = proof.split(".");
+  if (parts.length !== 2 || !/^\d{13}$/.test(parts[0]) || !/^[a-f0-9]{64}$/.test(parts[1])) return false;
+  const expires = Number(parts[0]);
+  if (expires <= Date.now() || expires > Date.now() + 10 * 60 * 1000) return false;
+  const expected = crypto.createHmac("sha256", secret)
+    .update(`signup:${cleanEmail(email)}:${expires}`).digest("hex");
+  return crypto.timingSafeEqual(Buffer.from(parts[1], "hex"), Buffer.from(expected, "hex"));
 }

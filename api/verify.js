@@ -12,7 +12,7 @@
 //                     (during testing Resend allows onboarding@resend.dev)
 
 import crypto from "crypto";
-import { requireDb, hashPassword, cleanEmail, isEmail } from "./_lib.js";
+import { requireDb, hashPassword, cleanEmail, isEmail, issueEmailProof } from "./_lib.js";
 
 export const maxDuration = 20;
 
@@ -159,8 +159,8 @@ export default async function handler(req, res) {
         }),
       });
       if (!r.ok) {
-        const detail = await r.text();
-        res.status(502).json({ error: `Couldn't send the verification email. ${detail.slice(0, 200)}` });
+        // Do not expose provider response bodies (which may contain internal details) to clients.
+        res.status(502).json({ error: "Couldn't send the verification email. Please try again later." });
         return;
       }
     } catch (e) {
@@ -181,8 +181,12 @@ export default async function handler(req, res) {
       return;
     }
     const [purpose, expiresStr, signature] = parts;
+    if (purpose !== "signup" && purpose !== "reset") {
+      res.status(400).json({ error: "Invalid verification purpose" });
+      return;
+    }
     const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
+    if (!/^[0-9]{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
       res.status(400).json({ error: "That code has expired. Request a new one." });
       return;
     }
@@ -194,7 +198,7 @@ export default async function handler(req, res) {
       res.status(400).json({ error: "That code isn't right. Check the email and try again." });
       return;
     }
-    res.status(200).json({ verified: true, purpose });
+    res.status(200).json({ verified: true, purpose, ...(purpose === "signup" ? { emailProof: issueEmailProof(cleanEmail) } : {}) });
     return;
   }
 
@@ -215,7 +219,7 @@ export default async function handler(req, res) {
     }
     const [, expiresStr, signature] = parts;
     const expires = Number(expiresStr);
-    if (!expires || Date.now() > expires) {
+    if (!/^[0-9]{13}$/.test(expiresStr) || !expires || Date.now() > expires || expires > Date.now() + CODE_TTL_MS) {
       res.status(400).json({ error: "That reset code has expired. Request a new one." });
       return;
     }
@@ -234,11 +238,15 @@ export default async function handler(req, res) {
       res.status(404).json({ error: "No account exists with that email address." });
       return;
     }
-    const { error } = await db.from("accounts").update({
-      password_hash: hashPassword(newPassword),
+    const { data: updatedAccounts, error } = await db.from("accounts").update({
+      password_hash: await hashPassword(newPassword),
       last_login_at: new Date().toISOString(),
-    }).eq("id", account.id);
+    }).eq("id", account.id).select("id");
     if (error) throw error;
+    if (!updatedAccounts || updatedAccounts.length !== 1) {
+      res.status(409).json({ error: "Password reset could not be completed. Please request a new code." });
+      return;
+    }
     res.status(200).json({ reset: true });
     return;
   }
