@@ -1,6 +1,7 @@
 // Creem one-time checkout for UXNest audit credits.
 import { requireDb, readSession } from "./_lib.js";
 import { syncCreemPurchase } from "./_creem-transactions.js";
+import { trustedPaymentSuccessUrl } from "./_payment-url.js";
 export const maxDuration = 20;
 const BETA_PRICE_CENTS = 500;
 const MAX_PURCHASE_QUANTITY = 20;
@@ -79,13 +80,12 @@ export default async function handler(req, res) {
       const { productId } = creemConfig();
       const { data: account } = await db.from("accounts").select("email").eq("id", sess.accountId).maybeSingle();
       if (!account?.email) throw new Error("Your account email could not be loaded.");
-      const origin = String(req.headers.origin || process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
       const requestId = `uxnest_${sess.accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const checkout = await creemRequest("/v1/checkouts", {
         method: "POST",
         body: JSON.stringify({
           product_id: productId, request_id: requestId, units: quantity, customer: { email: account.email },
-          success_url: `${origin}/payment/success?payment=success`,
+          success_url: trustedPaymentSuccessUrl(),
           metadata: { account_id: sess.accountId, quantity: String(quantity), source: "uxnest_web" },
         }),
       });
