@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 // Isolated webhook integration harness: replace only external imports with injected mocks.
 const source = await readFile(new URL("../api/creem-webhook.js", import.meta.url), "utf8");
 const instrumented = source
-  .replace('import { requireDb } from "./_lib.js";', "const requireDb = globalThis.__refundTest.requireDb;")
+  .replace('import { requireDb } from "./_lib.js";', "const requireDb = (...args) => globalThis.__refundTest.requireDb(...args);")
   .replace('import { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } from "./_creem-transactions.js";',
     "const { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } = globalThis.__refundTest;");
 assert.notEqual(instrumented, source, "Test harness must inject dependencies");
