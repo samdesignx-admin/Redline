@@ -9,6 +9,7 @@ const instrumented = source
   .replace('import { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } from "./_creem-transactions.js";',
     "const { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } = globalThis.__refundTest;");
 assert.notEqual(instrumented, source, "Test harness must inject dependencies");
+globalThis.__refundTest = { requireDb: () => { throw new Error("Mock database not installed"); } };
 const { default: handler } = await import("data:text/javascript;base64," + Buffer.from(instrumented).toString("base64"));
 const originalSecret = process.env.CREEM_WEBHOOK_SECRET;
 process.env.CREEM_WEBHOOK_SECRET = "isolated-test-secret";
