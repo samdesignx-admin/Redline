@@ -47,7 +47,36 @@ try {
   assert.equal(failure.res.statusCode, 500);
   assert.deepEqual(failure.calls, [], "Lookup failures must not mutate refund state");
 
-  console.log("Refund webhook replay tests passed (2 cases)");
+  // Reject unauthenticated and non-POST requests before any database writes.
+  const body = JSON.stringify(event);
+  const makeRequest = (method, signature) => ({
+    method, headers: { "creem-signature": signature },
+    async *[Symbol.asyncIterator]() { yield Buffer.from(body); }
+  });
+  const makeResponse = () => ({
+    statusCode: 200,
+    status(n) { this.statusCode = n; return this; },
+    send(value) { this.body = value; return this; }
+  });
+  const unexpectedDb = () => { throw new Error("Database must not be accessed"); };
+  globalThis.__refundTest = { requireDb: unexpectedDb };
+  const wrongMethod = makeResponse();
+  await handler(makeRequest("GET", "irrelevant"), wrongMethod);
+  assert.equal(wrongMethod.statusCode, 405);
+
+  // The handler initializes its database before signature verification,
+  // so use a no-write mock to verify the signature gate itself.
+  let writes = 0;
+  globalThis.__refundTest = { requireDb: () => ({
+    from() { writes++; throw new Error("Unauthorized request reached database"); },
+    rpc() { writes++; throw new Error("Unauthorized request reached RPC"); }
+  }) };
+  const invalidSignature = makeResponse();
+  await handler(makeRequest("POST", "00".repeat(32)), invalidSignature);
+  assert.equal(invalidSignature.statusCode, 401);
+  assert.equal(writes, 0, "Invalid signatures must not access refund tables");
+
+  console.log("Refund webhook replay and request-gate tests passed (4 cases)");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
   else process.env.CREEM_WEBHOOK_SECRET = originalSecret;
