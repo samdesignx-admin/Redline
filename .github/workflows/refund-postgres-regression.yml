@@ -1,0 +1,47 @@
+name: Refund SQL disposable PostgreSQL regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-creem-refund-event-postgres.sql'
+      - 'scripts/test-creem-refund-event-concurrency.sh'
+      - 'docs/drafts/record-creem-refund-event-monotonic-proposal.sql'
+      - '.github/workflows/refund-postgres-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refund-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: disposable_only
+          POSTGRES_DB: refund_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d refund_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: test_user
+      PGPASSWORD: disposable_only
+      PGDATABASE: refund_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run refund SQL assertions on ephemeral PostgreSQL 17
+        run: psql -X -v ON_ERROR_STOP=1 -f scripts/test-creem-refund-event-postgres.sql
+      - name: Run concurrent refund replay on disposable PostgreSQL
+        run: bash scripts/test-creem-refund-event-concurrency.sh
+      - name: Verify fixture left no tables or functions
+        run: |
+          test "$(psql -X -Atqc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='creem_refund_events'")" = "0"
+          test "$(psql -X -Atqc "SELECT count(*) FROM pg_proc WHERE proname='record_creem_refund_event'")" = "0"

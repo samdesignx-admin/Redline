@@ -53,6 +53,18 @@ export default async function handler(req, res) {
       // Its embedded transaction.status can still be "paid" immediately
       // after a successful full refund. Check the refunded amount against
       // the original amount paid instead of relying on that stale status.
+      // A repeated delivery of an already-applied event must not regress its
+      // reconciliation state to "received". The refund RPC remains responsible
+      // for atomic credit-ledger idempotency across concurrent deliveries.
+      if (/^evt_[A-Za-z0-9_-]+$/.test(event.id || "")) {
+        const { data: priorEvent, error: priorError } = await db.from("creem_refund_events")
+          .select("state").eq("event_id", event.id).maybeSingle();
+        if (priorError) throw priorError;
+        if (priorEvent?.state === "applied") {
+          res.status(200).send("Refund already applied");
+          return;
+        }
+      }
       await saveRefundEvent(db, event, refund, "received");
       const txn = refund.transaction && typeof refund.transaction === "object" ? refund.transaction : null;
       const transactionId = txn?.id;
