@@ -20,6 +20,29 @@ BEGIN
  IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Apply failed'; END IF;
  result := public.record_creem_refund_event('event-1','refund-1','tx-1',500,'USD',NULL,NULL,'received');
  IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Terminal state regressed'; END IF;
+ -- A terminal event must remain applied even if a replay supplies altered metadata.
+ result := public.record_creem_refund_event('event-1','refund-1','tx-MUTATED',999,'EUR',NULL,NULL,'review_required');
+ IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Terminal event changed state'; END IF;
+ IF EXISTS (SELECT 1 FROM public.creem_refund_events
+            WHERE event_id='event-1' AND
+              (transaction_id IS DISTINCT FROM 'tx-1'
+               OR amount_cents IS DISTINCT FROM 500
+               OR currency IS DISTINCT FROM 'USD'
+               OR state IS DISTINCT FROM 'applied'))
+ THEN RAISE EXCEPTION 'Terminal event metadata was mutated'; END IF;
+ -- Invalid states and blank identities must be rejected.
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-invalid','refund-1',NULL,NULL,NULL,NULL,NULL,'unknown');
+   RAISE EXCEPTION 'Invalid state accepted';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM = 'Invalid state accepted' THEN RAISE; END IF;
+ END;
+ BEGIN
+   PERFORM public.record_creem_refund_event('   ','refund-1',NULL,NULL,NULL,NULL,NULL,'received');
+   RAISE EXCEPTION 'Blank event ID accepted';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM = 'Blank event ID accepted' THEN RAISE; END IF;
+ END;
  BEGIN
    PERFORM public.record_creem_refund_event('event-1','refund-OTHER','tx-1',500,'USD',NULL,NULL,'received');
    RAISE EXCEPTION 'Refund identity mismatch accepted';
