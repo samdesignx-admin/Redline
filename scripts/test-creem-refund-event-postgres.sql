@@ -79,6 +79,23 @@ BEGIN
      RAISE EXCEPTION 'Unexpected error while checking Refund identity mismatch accepted: %', SQLERRM;
    END IF;
  END;
+ -- A missing or whitespace-only refund identity must never be accepted.
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-null-refund',NULL,NULL,NULL,NULL,NULL,NULL,'received');
+   RAISE EXCEPTION 'Null refund ID accepted';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM IS DISTINCT FROM 'Invalid refund event transition' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Null refund ID accepted: %', SQLERRM;
+   END IF;
+ END;
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-blank-refund','   ',NULL,NULL,NULL,NULL,NULL,'received');
+   RAISE EXCEPTION 'Blank refund ID accepted';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM IS DISTINCT FROM 'Invalid refund event transition' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Blank refund ID accepted: %', SQLERRM;
+   END IF;
+ END;
  BEGIN
    PERFORM public.record_creem_refund_event(NULL,'refund-1',NULL,NULL,NULL,NULL,NULL,'received');
    RAISE EXCEPTION 'Null event ID accepted';
