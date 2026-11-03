@@ -2,6 +2,7 @@
 -- Run from repository root:
 -- psql -X -v ON_ERROR_STOP=1 -d "$DISPOSABLE_DATABASE_URL" -f scripts/test-creem-refund-event-postgres.sql
 -- Sequential integration checks; separate parallel-session tests still required.
+-- Expected-failure assertions check exact messages so unrelated SQL errors cannot masquerade as passing tests.
 BEGIN;
 CREATE TABLE public.creem_refund_events (
  event_id text PRIMARY KEY, refund_id text NOT NULL, transaction_id text,
@@ -49,32 +50,42 @@ BEGIN
    PERFORM public.record_creem_refund_event('event-pending','refund-OTHER',NULL,NULL,NULL,NULL,NULL,'received');
    RAISE EXCEPTION 'Nonterminal refund identity mismatch accepted';
  EXCEPTION WHEN OTHERS THEN
-   IF SQLERRM = 'Nonterminal refund identity mismatch accepted' THEN RAISE; END IF;
+   IF SQLERRM IS DISTINCT FROM 'Refund event ID belongs to another refund' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Nonterminal refund identity mismatch accepted: %', SQLERRM;
+   END IF;
  END;
  -- Invalid states and blank identities must be rejected.
  BEGIN
    PERFORM public.record_creem_refund_event('event-invalid','refund-1',NULL,NULL,NULL,NULL,NULL,'unknown');
    RAISE EXCEPTION 'Invalid state accepted';
  EXCEPTION WHEN OTHERS THEN
-   IF SQLERRM = 'Invalid state accepted' THEN RAISE; END IF;
+   IF SQLERRM IS DISTINCT FROM 'Invalid refund event transition' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Invalid state accepted: %', SQLERRM;
+   END IF;
  END;
  BEGIN
    PERFORM public.record_creem_refund_event('   ','refund-1',NULL,NULL,NULL,NULL,NULL,'received');
    RAISE EXCEPTION 'Blank event ID accepted';
  EXCEPTION WHEN OTHERS THEN
-   IF SQLERRM = 'Blank event ID accepted' THEN RAISE; END IF;
+   IF SQLERRM IS DISTINCT FROM 'Invalid refund event transition' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Blank event ID accepted: %', SQLERRM;
+   END IF;
  END;
  BEGIN
    PERFORM public.record_creem_refund_event('event-1','refund-OTHER','tx-1',500,'USD',NULL,NULL,'received');
    RAISE EXCEPTION 'Refund identity mismatch accepted';
  EXCEPTION WHEN OTHERS THEN
-   IF SQLERRM = 'Refund identity mismatch accepted' THEN RAISE; END IF;
+   IF SQLERRM IS DISTINCT FROM 'Refund event ID belongs to another refund' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Refund identity mismatch accepted: %', SQLERRM;
+   END IF;
  END;
  BEGIN
    PERFORM public.record_creem_refund_event(NULL,'refund-1',NULL,NULL,NULL,NULL,NULL,'received');
    RAISE EXCEPTION 'Null event ID accepted';
  EXCEPTION WHEN OTHERS THEN
-   IF SQLERRM = 'Null event ID accepted' THEN RAISE; END IF;
+   IF SQLERRM IS DISTINCT FROM 'Invalid refund event transition' THEN
+     RAISE EXCEPTION 'Unexpected error while checking Null event ID accepted: %', SQLERRM;
+   END IF;
  END;
 END
 $test$;
