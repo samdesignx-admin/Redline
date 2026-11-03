@@ -14,7 +14,7 @@ CREATE TABLE public.creem_refund_events (
  received_at timestamptz NOT NULL DEFAULT now(),
  updated_at timestamptz NOT NULL DEFAULT now()
 );
-\ir ../docs/drafts/record-creem-refund-event-monotonic-proposal.sql
+\i docs/drafts/record-creem-refund-event-monotonic-proposal.sql
 SQL
 cleanup() {
   psql -X -v ON_ERROR_STOP=1 -c 'DROP FUNCTION IF EXISTS public.record_creem_refund_event(text,text,text,integer,text,text,text,text,text); DROP TABLE IF EXISTS public.creem_refund_events;' >/dev/null || true
