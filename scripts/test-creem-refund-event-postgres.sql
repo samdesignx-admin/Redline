@@ -30,6 +30,27 @@ BEGIN
                OR currency IS DISTINCT FROM 'USD'
                OR state IS DISTINCT FROM 'applied'))
  THEN RAISE EXCEPTION 'Terminal event metadata was mutated'; END IF;
+ -- A webhook can arrive with its first observed state already applied.
+ result := public.record_creem_refund_event('event-applied-first','refund-2','tx-2',700,'USD',NULL,NULL,'applied');
+ IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Initial applied event failed'; END IF;
+ result := public.record_creem_refund_event('event-applied-first','refund-2','tx-mutated',701,'EUR',NULL,NULL,'pending_link');
+ IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Applied-first event regressed'; END IF;
+ IF EXISTS (SELECT 1 FROM public.creem_refund_events
+            WHERE event_id='event-applied-first' AND
+              (transaction_id IS DISTINCT FROM 'tx-2'
+               OR amount_cents IS DISTINCT FROM 700
+               OR currency IS DISTINCT FROM 'USD'
+               OR state IS DISTINCT FROM 'applied'))
+ THEN RAISE EXCEPTION 'Applied-first event metadata mutated'; END IF;
+ -- A different refund must not reuse an event ID even before it is terminal.
+ result := public.record_creem_refund_event('event-pending','refund-3',NULL,NULL,NULL,NULL,NULL,'pending_link');
+ IF result IS DISTINCT FROM 'pending_link' THEN RAISE EXCEPTION 'Pending event insert failed'; END IF;
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-pending','refund-OTHER',NULL,NULL,NULL,NULL,NULL,'received');
+   RAISE EXCEPTION 'Nonterminal refund identity mismatch accepted';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM = 'Nonterminal refund identity mismatch accepted' THEN RAISE; END IF;
+ END;
  -- Invalid states and blank identities must be rejected.
  BEGIN
    PERFORM public.record_creem_refund_event('event-invalid','refund-1',NULL,NULL,NULL,NULL,NULL,'unknown');
