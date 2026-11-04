@@ -16,7 +16,9 @@ CREATE TABLE public.creem_refund_events (
 );
 \i docs/drafts/record-creem-refund-event-monotonic-proposal.sql
 SQL
+replay_log=$(mktemp)
 cleanup() {
+  rm -f "$replay_log"
   psql -X -v ON_ERROR_STOP=1 -c 'DROP FUNCTION IF EXISTS public.record_creem_refund_event(text,text,text,integer,text,text,text,text,text); DROP TABLE IF EXISTS public.creem_refund_events;' >/dev/null || true
 }
 trap cleanup EXIT
@@ -30,9 +32,21 @@ COMMIT;
 SQL
 first=$!
 sleep 0.5
-psql -X -v ON_ERROR_STOP=1 <<'SQL' &
+# Conflicting identity must be rejected. Capture the expected failure without
+# masking unexpected SQL errors or the outcome of session A.
+(
+  if psql -X -v ON_ERROR_STOP=1 <<'SQL' >"$replay_log" 2>&1; then
 SELECT public.record_creem_refund_event('evt_race','refund_A','tx_mutated',999,'EUR',NULL,NULL,'received');
 SQL
+    echo 'ERROR: conflicting replay unexpectedly succeeded' >&2
+    exit 1
+  fi
+  if ! grep -Fq 'ERROR:  Refund event identity fields changed on replay' "$replay_log"; then
+    cat "$replay_log" >&2
+    echo 'ERROR: replay failed for an unexpected reason' >&2
+    exit 1
+  fi
+) &
 second=$!
 wait "$first"
 wait "$second"
