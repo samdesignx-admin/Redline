@@ -1,0 +1,26 @@
+name: Refund webhook recovery regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/test-refund-webhook-replay.mjs'
+      - 'api/creem-webhook.js'
+      - 'api/_creem-transactions.js'
+      - '.github/workflows/refund-webhook-recovery.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refund-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify isolated refund replay and recovery behavior
+        run: node scripts/test-refund-webhook-replay.mjs
+      - name: Verify refund event concurrency model
+        run: node scripts/test-refund-event-concurrency-model.mjs
