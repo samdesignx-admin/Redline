@@ -21,9 +21,15 @@ BEGIN
  IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Apply failed'; END IF;
  result := public.record_creem_refund_event('event-1','refund-1','tx-1',500,'USD',NULL,NULL,'received');
  IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Terminal state regressed'; END IF;
- -- A terminal event must remain applied even if a replay supplies altered metadata.
- result := public.record_creem_refund_event('event-1','refund-1','tx-MUTATED',999,'EUR',NULL,NULL,'review_required');
- IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Terminal event changed state'; END IF;
+ -- Terminal replays with changed identity must fail, not silently succeed.
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-1','refund-1','tx-MUTATED',999,'EUR',NULL,NULL,'review_required');
+   RAISE EXCEPTION 'Terminal event accepted changed identity';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM IS DISTINCT FROM 'Refund event identity fields changed on replay' THEN
+     RAISE EXCEPTION 'Unexpected terminal replay result: %', SQLERRM;
+   END IF;
+ END;
  IF EXISTS (SELECT 1 FROM public.creem_refund_events
             WHERE event_id='event-1' AND
               (transaction_id IS DISTINCT FROM 'tx-1'
@@ -34,8 +40,14 @@ BEGIN
  -- A webhook can arrive with its first observed state already applied.
  result := public.record_creem_refund_event('event-applied-first','refund-2','tx-2',700,'USD',NULL,NULL,'applied');
  IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Initial applied event failed'; END IF;
- result := public.record_creem_refund_event('event-applied-first','refund-2','tx-mutated',701,'EUR',NULL,NULL,'pending_link');
- IF result IS DISTINCT FROM 'applied' THEN RAISE EXCEPTION 'Applied-first event regressed'; END IF;
+ BEGIN
+   PERFORM public.record_creem_refund_event('event-applied-first','refund-2','tx-mutated',701,'EUR',NULL,NULL,'pending_link');
+   RAISE EXCEPTION 'Applied-first event accepted changed identity';
+ EXCEPTION WHEN OTHERS THEN
+   IF SQLERRM IS DISTINCT FROM 'Refund event identity fields changed on replay' THEN
+     RAISE EXCEPTION 'Unexpected applied-first replay result: %', SQLERRM;
+   END IF;
+ END;
  IF EXISTS (SELECT 1 FROM public.creem_refund_events
             WHERE event_id='event-applied-first' AND
               (transaction_id IS DISTINCT FROM 'tx-2'
