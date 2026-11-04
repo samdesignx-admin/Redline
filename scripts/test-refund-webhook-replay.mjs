@@ -138,7 +138,72 @@ try {
   assert.match(finalReplay.body, /already applied/);
   assert.equal(rpcCalls, 2, "Applied replay must not re-enter financial RPC");
 
-  console.log("Refund webhook replay, request gates, and event-write recovery passed (5 cases)");
+
+  // A signed but partial refund must be acknowledged for review without
+  // reversing any audit credits. The purchase lookup must not be reached.
+  async function deliverRefundCase(object, { purchase = null, lookupError = null } = {}) {
+    const seen = { eventStates: [], purchaseLookups: 0, reversals: 0 };
+    const caseEvent = { ...event, id: "evt_case_" + object.id.slice(4), object };
+    globalThis.__refundTest = { requireDb: () => ({
+      from(table) {
+        if (table === "creem_refund_events") return {
+          select() { return this; },
+          eq() { return this; },
+          async maybeSingle() { return { data: null, error: null }; },
+          async upsert(row) { seen.eventStates.push(row.state); return { error: null }; }
+        };
+        if (table === "audit_purchases") {
+          seen.purchaseLookups++;
+          return {
+            select() { return this; },
+            eq() { return this; },
+            async maybeSingle() { return { data: purchase, error: lookupError }; }
+          };
+        }
+        throw new Error("Unexpected table " + table);
+      },
+      async rpc() { seen.reversals++; return { data: true, error: null }; }
+    }) };
+    const payload = JSON.stringify(caseEvent);
+    const signed = crypto.createHmac("sha256", process.env.CREEM_WEBHOOK_SECRET)
+      .update(payload).digest("hex");
+    const request = { method: "POST", headers: { "creem-signature": signed },
+      async *[Symbol.asyncIterator]() { yield Buffer.from(payload); } };
+    const response = makeResponse();
+    await handler(request, response);
+    return { seen, response };
+  }
+  const partial = await deliverRefundCase({
+    ...event.object, id: "ref_partial_001", refund_amount: 250
+  });
+  assert.equal(partial.response.statusCode, 200);
+  assert.deepEqual(partial.seen.eventStates, ["received", "review_required"]);
+  assert.equal(partial.seen.purchaseLookups, 0);
+  assert.equal(partial.seen.reversals, 0, "Partial refunds must never reverse full credits");
+
+  const missingPurchase = await deliverRefundCase({
+    ...event.object, id: "ref_unlinked_001"
+  });
+  assert.equal(missingPurchase.response.statusCode, 200);
+  assert.deepEqual(missingPurchase.seen.eventStates, ["received", "pending_link"]);
+  assert.equal(missingPurchase.seen.purchaseLookups, 1);
+  assert.equal(missingPurchase.seen.reversals, 0, "Unlinked refunds must not reverse credits");
+
+  const shortPurchaseRefund = await deliverRefundCase({
+    ...event.object, id: "ref_short_001"
+  }, { purchase: { id: "purchase-1", amount_cents: 1000 } });
+  assert.equal(shortPurchaseRefund.response.statusCode, 200);
+  assert.deepEqual(shortPurchaseRefund.seen.eventStates, ["received", "review_required"]);
+  assert.equal(shortPurchaseRefund.seen.reversals, 0, "Refund below stored purchase must not reverse credits");
+
+  const failedPurchaseLookup = await deliverRefundCase({
+    ...event.object, id: "ref_lookup_001"
+  }, { lookupError: { message: "temporary database failure" } });
+  assert.equal(failedPurchaseLookup.response.statusCode, 500, "DB lookup failure must be retried");
+  assert.deepEqual(failedPurchaseLookup.seen.eventStates, ["received"]);
+  assert.equal(failedPurchaseLookup.seen.reversals, 0, "Lookup failure must not reverse credits");
+
+  console.log("Refund webhook replay, recovery, partial-refund, missing-purchase and failure gates passed (9 cases)");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
   else process.env.CREEM_WEBHOOK_SECRET = originalSecret;
