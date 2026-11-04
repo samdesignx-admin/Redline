@@ -1,6 +1,7 @@
 -- DRAFT ONLY: do not apply to production without explicit approval.
 -- Proposed atomic, monotonic event-state recorder; requires isolated PostgreSQL tests.
--- 'applied' is terminal. Prevent event ID reuse with changed refund identity or payload.
+-- 'applied' is terminal; 'review_required' is a sticky manual hold.
+-- Prevent event ID reuse with changed refund identity or payload.
 -- DRAFT: test against disposable PostgreSQL before any migration; do not deploy.
 -- This does NOT make credit reversal and event recording one transaction.
 CREATE OR REPLACE FUNCTION public.record_creem_refund_event(
@@ -40,7 +41,14 @@ BEGIN
     state = EXCLUDED.state,
     detail = EXCLUDED.detail,
     updated_at = now()
-  WHERE public.creem_refund_events.state IS DISTINCT FROM 'applied'
+  WHERE (
+      (public.creem_refund_events.state = 'received'
+       AND EXCLUDED.state IN ('received', 'pending_link', 'review_required', 'applied'))
+      OR (public.creem_refund_events.state = 'pending_link'
+          AND EXCLUDED.state IN ('pending_link', 'review_required', 'applied'))
+      OR (public.creem_refund_events.state = 'review_required'
+          AND EXCLUDED.state = 'review_required')
+    )
     AND public.creem_refund_events.refund_id = EXCLUDED.refund_id
     AND public.creem_refund_events.transaction_id IS NOT DISTINCT FROM EXCLUDED.transaction_id
     AND public.creem_refund_events.amount_cents IS NOT DISTINCT FROM EXCLUDED.amount_cents
