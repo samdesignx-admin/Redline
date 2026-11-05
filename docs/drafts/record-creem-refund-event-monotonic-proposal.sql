@@ -1,6 +1,8 @@
 -- DRAFT ONLY: do not apply to production without explicit approval.
 -- Proposed atomic, monotonic event-state recorder; requires isolated PostgreSQL tests.
--- 'applied' is terminal. Prevent event ID reuse for a different refund.
+-- 'applied' is terminal; 'review_required' is a sticky manual hold.
+-- Prevent event ID reuse with changed refund identity or payload.
+-- DRAFT: test against disposable PostgreSQL before any migration; do not deploy.
 -- This does NOT make credit reversal and event recording one transaction.
 CREATE OR REPLACE FUNCTION public.record_creem_refund_event(
   p_event_id text,
@@ -20,6 +22,7 @@ AS $$
 DECLARE
   v_state text;
   v_refund_id text;
+  v_identity_matches boolean;
 BEGIN
   IF p_event_id IS NULL OR btrim(p_event_id) = ''
      OR p_refund_id IS NULL OR btrim(p_refund_id) = ''
@@ -35,22 +38,38 @@ BEGIN
     (p_event_id, p_refund_id, p_transaction_id, p_amount_cents, p_currency,
      p_transaction_status, p_refund_status, p_state, p_detail, now())
   ON CONFLICT (event_id) DO UPDATE SET
-    transaction_id = EXCLUDED.transaction_id,
-    amount_cents = EXCLUDED.amount_cents,
-    currency = EXCLUDED.currency,
-    transaction_status = EXCLUDED.transaction_status,
-    refund_status = EXCLUDED.refund_status,
     state = EXCLUDED.state,
     detail = EXCLUDED.detail,
     updated_at = now()
-  WHERE public.creem_refund_events.state IS DISTINCT FROM 'applied'
-    AND public.creem_refund_events.refund_id = EXCLUDED.refund_id;
+  WHERE (
+      (public.creem_refund_events.state = 'received'
+       AND EXCLUDED.state IN ('received', 'pending_link', 'review_required', 'applied'))
+      OR (public.creem_refund_events.state = 'pending_link'
+          AND EXCLUDED.state IN ('pending_link', 'review_required', 'applied'))
+      OR (public.creem_refund_events.state = 'review_required'
+          AND EXCLUDED.state = 'review_required')
+    )
+    AND public.creem_refund_events.refund_id = EXCLUDED.refund_id
+    AND public.creem_refund_events.transaction_id IS NOT DISTINCT FROM EXCLUDED.transaction_id
+    AND public.creem_refund_events.amount_cents IS NOT DISTINCT FROM EXCLUDED.amount_cents
+    AND public.creem_refund_events.currency IS NOT DISTINCT FROM EXCLUDED.currency
+    AND public.creem_refund_events.transaction_status IS NOT DISTINCT FROM EXCLUDED.transaction_status
+    AND public.creem_refund_events.refund_status IS NOT DISTINCT FROM EXCLUDED.refund_status;
 
-  SELECT state, refund_id INTO v_state, v_refund_id
+  SELECT state, refund_id,
+    (transaction_id IS NOT DISTINCT FROM p_transaction_id
+     AND amount_cents IS NOT DISTINCT FROM p_amount_cents
+     AND currency IS NOT DISTINCT FROM p_currency
+     AND transaction_status IS NOT DISTINCT FROM p_transaction_status
+     AND refund_status IS NOT DISTINCT FROM p_refund_status)
+    INTO v_state, v_refund_id, v_identity_matches
   FROM public.creem_refund_events WHERE event_id = p_event_id;
 
   IF v_refund_id IS DISTINCT FROM p_refund_id THEN
     RAISE EXCEPTION 'Refund event ID belongs to another refund';
+  END IF;
+  IF NOT v_identity_matches THEN
+    RAISE EXCEPTION 'Refund event identity fields changed on replay';
   END IF;
   RETURN v_state;
 END;
