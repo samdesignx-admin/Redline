@@ -33,19 +33,25 @@ BEGIN
     PERFORM public.record_creem_refund_event('evt1','ref2','txn1',500,'USD','succeeded','succeeded','received');
     RAISE EXCEPTION 'changed refund ID accepted';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'changed refund ID accepted' THEN RAISE; END IF;
+    IF SQLERRM IS DISTINCT FROM 'Refund event ID belongs to another refund' THEN
+      RAISE EXCEPTION 'Unexpected rejection for changed refund ID accepted: %', SQLERRM;
+    END IF;
   END;
   BEGIN
     PERFORM public.record_creem_refund_event('evt1','ref1','txn1',501,'USD','succeeded','succeeded','received');
     RAISE EXCEPTION 'changed amount accepted';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'changed amount accepted' THEN RAISE; END IF;
+    IF SQLERRM IS DISTINCT FROM 'Refund event identity fields changed on replay' THEN
+      RAISE EXCEPTION 'Unexpected rejection for changed amount accepted: %', SQLERRM;
+    END IF;
   END;
   BEGIN
     PERFORM public.record_creem_refund_event('evt1','ref1','txn1',500,'EUR','succeeded','succeeded','received');
     RAISE EXCEPTION 'changed currency accepted';
   EXCEPTION WHEN OTHERS THEN
-    IF SQLERRM = 'changed currency accepted' THEN RAISE; END IF;
+    IF SQLERRM IS DISTINCT FROM 'Refund event identity fields changed on replay' THEN
+      RAISE EXCEPTION 'Unexpected rejection for changed currency accepted: %', SQLERRM;
+    END IF;
   END;
   s := public.record_creem_refund_event('evt2','ref2','txn2',500,'USD','succeeded','succeeded','applied');
   s := public.record_creem_refund_event('evt2','ref2','txn2',500,'USD','succeeded','succeeded','received');
