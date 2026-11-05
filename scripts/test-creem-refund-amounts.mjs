@@ -35,14 +35,14 @@ globalThis.__refundTest = {
 };
 const { default: handler } = await import("data:text/javascript;base64," + Buffer.from(instrumented).toString("base64"));
 
-async function run({ refundAmount, paidAmount, recordedAmount, currency = "usd" }) {
+async function run({ refundAmount, paidAmount, recordedAmount, currency = "usd", refundId = "ref_test_refund", transactionId = "tran_test_payment" }) {
   calls.length = 0;
   purchaseAmount = recordedAmount;
   const payload = JSON.stringify({
     id: "evt_test_refund_amount", eventType: "refund.created",
-    object: { id: "ref_test_refund", status: "succeeded", refund_amount: refundAmount,
+    object: { id: refundId, status: "succeeded", refund_amount: refundAmount,
       refund_currency: currency,
-      transaction: { id: "tran_test_payment", status: "paid", amount_paid: paidAmount } },
+      transaction: { id: transactionId, status: "paid", amount_paid: paidAmount } },
   });
   const req = Readable.from([payload]);
   req.method = "POST";
@@ -57,6 +57,10 @@ assert.equal((await run({ refundAmount: 600, paidAmount: 500, recordedAmount: 50
 assert.equal((await run({ refundAmount: 400, paidAmount: 500, recordedAmount: 500 })).length, 0, "Partial refund must not reverse credits");
 assert.equal((await run({ refundAmount: 500, paidAmount: 500, recordedAmount: 600 })).length, 0, "Recorded purchase mismatch must not reverse credits");
 assert.equal((await run({ refundAmount: 500, paidAmount: 500, recordedAmount: 500, currency: "eur" })).length, 0, "Non-USD refund must not reverse credits");
+assert.equal((await run({ refundAmount: 500, paidAmount: 500, recordedAmount: 500, refundId: "invalid" })).length, 0, "Invalid refund ID must not reverse credits");
+assert.equal((await run({ refundAmount: 500, paidAmount: 500, recordedAmount: 500, transactionId: "invalid" })).length, 0, "Invalid transaction ID must not reverse credits");
+assert.equal((await run({ refundAmount: 0, paidAmount: 500, recordedAmount: 500 })).length, 0, "Zero refund must not reverse credits");
+assert.equal((await run({ refundAmount: 501.5, paidAmount: 501.5, recordedAmount: 501.5 })).length, 0, "Fractional cents must not reverse credits");
 const exact = await run({ refundAmount: 500, paidAmount: 500, recordedAmount: 500 });
 assert.equal(exact.length, 1, "Matching full refund should invoke the financial RPC exactly once");
 assert.equal(exact[0].name, "apply_creem_refund");
