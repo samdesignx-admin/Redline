@@ -62,3 +62,20 @@ BEGIN
 END $$;
 SQL
 echo "PASS: concurrent received replay cannot regress committed applied event"
+# An identical late replay is permitted but must not downgrade terminal state.
+psql -X -v ON_ERROR_STOP=1 <<'SQL'
+DO $
+DECLARE replay_state text;
+BEGIN
+ SELECT public.record_creem_refund_event('evt_race','refund_A','tx_A',500,'USD',NULL,NULL,'received')
+ INTO replay_state;
+ IF replay_state IS DISTINCT FROM 'applied' THEN
+   RAISE EXCEPTION 'Identical replay downgraded terminal state: %', replay_state;
+ END IF;
+ IF (SELECT count(*) FROM public.creem_refund_events WHERE event_id='evt_race') <> 1 THEN
+   RAISE EXCEPTION 'Identical replay duplicated event';
+ END IF;
+END $;
+SQL
+echo "PASS: identical late replay preserves applied state and one event row"
+
