@@ -45,6 +45,19 @@ export default async function handler(req, res) {
   try {
     if (event.eventType === "refund.created") {
       const refund = event.object || {};
+      // Signed refund events must not be reconciled across Creem environments.
+      // Older payloads without an explicit mode remain review-only.
+      const expectedRefundMode = process.env.CREEM_MODE || "test";
+      const refundMode = String(refund.mode || event.mode || "").toLowerCase();
+      const refundModeMatches = expectedRefundMode === "live"
+        ? ["live", "prod"].includes(refundMode)
+        : expectedRefundMode === "test" && refundMode === "test";
+      if (!refundModeMatches) {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Refund payment mode missing or mismatched; no audit credits reversed.");
+        res.status(200).send("Refund recorded for payment-mode review");
+        return;
+      }
       if (refund.status !== "succeeded") {
         await saveRefundEvent(db, event, refund, "received", "Refund not yet succeeded.");
         res.status(200).send("OK"); return;
