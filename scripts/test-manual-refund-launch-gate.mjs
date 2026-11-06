@@ -15,5 +15,5 @@ assert.match(gateBody, /res\.status\(200\)/, "acknowledge recorded manual refund
 assert.match(gateBody, /return;/, "manual branch must exit before financial RPC");
 assert.match(refund, /if \(refund\.status !== "succeeded"\)/, "non-successful refunds must not reverse credits");
 assert.match(refund, /if \(!existing\)/, "unmatched purchases require reconciliation");
-assert.match(refund, /amountCents < existing\.amount_cents/, "partial refunds require review");
+assert.match(refund, /amountCents !== Number\(existing\.amount_cents\)/, "mismatched refunds require review");
 console.log("PASS: manual refund default gate precedes credit reversal; refund review branches preserved");
