@@ -18,7 +18,7 @@ process.env.CREEM_WEBHOOK_SECRET = "local-test-secret";
 delete process.env.CREEM_AUTOMATED_REFUNDS;
 const event = (id, overrides = {}) => ({
   id, eventType: "refund.created", object: {
-    id: "ref_test123", status: "succeeded", refund_amount: 500,
+    id: "ref_test123", mode: "test", status: "succeeded", refund_amount: 500,
     refund_currency: "USD", transaction: { id: "tran_test123", amount_paid: 500, status: "paid" },
     ...overrides
   }
@@ -54,6 +54,20 @@ try {
     assert.equal(events.at(-1)?.refund_id, "ref_test123");
     assert.deepEqual(calls, []);
   }
+  // A signed refund from another payment environment, or without a mode,
+  // must be review-only even if legacy automation is explicitly enabled.
+  process.env.CREEM_AUTOMATED_REFUNDS = "enabled";
+  for (const [id, mode] of [["evt_live_mode", "live"], ["evt_missing_mode", undefined]]) {
+    const payload = event(id);
+    if (mode === undefined) delete payload.object.mode;
+    else payload.object.mode = mode;
+    const result = await send(payload);
+    assert.equal(result.res.statusCode, 200, id);
+    assert.equal(result.events.at(-1)?.state, "review_required", id);
+    assert.match(result.events.at(-1)?.detail || "", /mode/i, id);
+    assert.deepEqual(result.calls, [], id);
+  }
+  delete process.env.CREEM_AUTOMATED_REFUNDS;
   const invalid = await send(event("evt_bad"), false);
   assert.equal(invalid.res.statusCode, 401);
   assert.equal(invalid.events.length, 0);
@@ -80,7 +94,7 @@ try {
   const pending = await send(event("evt_pending", { status: "pending" }));
   assert.equal(pending.events.at(-1)?.state, "received");
   assert.deepEqual(pending.calls, []);
-  console.log("PASS: signed manual refund, duplicate/replayed events, partial, over/under-amount, currency, invalid IDs, pending and invalid signature; no financial RPC");
+  console.log("PASS: signed manual refund, duplicate/replayed events, partial, over/under-amount, currency, invalid IDs, mode mismatch/missing, pending and invalid signature; no financial RPC");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
   else process.env.CREEM_WEBHOOK_SECRET = originalSecret;
