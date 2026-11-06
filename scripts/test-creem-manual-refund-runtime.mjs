@@ -23,14 +23,14 @@ const event = (id, overrides = {}) => ({
     ...overrides
   }
 });
-async function send(payload, signatureValid = true) {
+async function send(payload, signatureValid = true, purchaseAmount = 500) {
   const events = [], calls = [];
   const db = {
     from(table) {
       return {
         upsert(row) { events.push({ table, ...row }); return Promise.resolve({ error: null }); },
         select() { return this; }, eq() { return this; },
-        maybeSingle() { return Promise.resolve({ data: { id: "purchase1", amount_cents: 500 }, error: null }); }
+        maybeSingle() { return Promise.resolve({ data: { id: "purchase1", amount_cents: purchaseAmount }, error: null }); }
       };
     },
     rpc(name) { calls.push(name); throw Error("Financial RPC must not execute"); }
@@ -61,10 +61,26 @@ try {
   assert.equal(partial.res.statusCode, 200);
   assert.equal(partial.events.at(-1)?.state, "review_required");
   assert.deepEqual(partial.calls, []);
+  // Even if the legacy automation flag is enabled, over-amount events must
+  // never reach the financial RPC. The mock RPC throws if invoked.
+  process.env.CREEM_AUTOMATED_REFUNDS = "enabled";
+  for (const [id, payload, purchaseAmount] of [
+    ["evt_over_provider", { refund_amount: 600 }, 500],
+    ["evt_over_purchase", { refund_amount: 500, transaction: { id: "tran_test123", amount_paid: 500 } }, 400],
+    ["evt_under_purchase", { refund_amount: 500, transaction: { id: "tran_test123", amount_paid: 500 } }, 600],
+    ["evt_wrong_currency", { refund_currency: "EUR" }, 500],
+    ["evt_bad_refund_id", { id: "invalid" }, 500],
+  ]) {
+    const result = await send(event(id, payload), true, purchaseAmount);
+    assert.equal(result.res.statusCode, 200, id);
+    assert.equal(result.events.at(-1)?.state, "review_required", id);
+    assert.deepEqual(result.calls, [], id);
+  }
+  delete process.env.CREEM_AUTOMATED_REFUNDS;
   const pending = await send(event("evt_pending", { status: "pending" }));
   assert.equal(pending.events.at(-1)?.state, "received");
   assert.deepEqual(pending.calls, []);
-  console.log("PASS: signed manual refund, duplicate/replayed events, partial, pending and invalid signature; no financial RPC");
+  console.log("PASS: signed manual refund, duplicate/replayed events, partial, over/under-amount, currency, invalid IDs, pending and invalid signature; no financial RPC");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
   else process.env.CREEM_WEBHOOK_SECRET = originalSecret;
