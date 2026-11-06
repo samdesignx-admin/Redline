@@ -92,6 +92,17 @@ export default async function handler(req, res) {
         return;
       }
 
+      // Launch policy: refunds are handled in the Creem dashboard and reconciled
+      // by an authorized operator. Do not automatically reverse audit credits.
+      // This fail-closed default prevents unintended balance changes while
+      // the refund accounting and concurrency tests are being consolidated.
+      if (process.env.CREEM_AUTOMATED_REFUNDS !== "enabled") {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Manual refund reconciliation required; audit credits unchanged.");
+        res.status(200).send("Refund recorded for manual reconciliation");
+        return;
+      }
+
       const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
         p_transaction_id: transactionId,
         p_refund_id: refundId,
