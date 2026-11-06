@@ -45,6 +45,19 @@ export default async function handler(req, res) {
   try {
     if (event.eventType === "refund.created") {
       const refund = event.object || {};
+      // Signed refund events must not be reconciled across Creem environments.
+      // Older payloads without an explicit mode remain review-only.
+      const expectedRefundMode = process.env.CREEM_MODE || "test";
+      const refundMode = String(refund.mode || event.mode || "").toLowerCase();
+      const refundModeMatches = expectedRefundMode === "live"
+        ? ["live", "prod"].includes(refundMode)
+        : expectedRefundMode === "test" && refundMode === "test";
+      if (!refundModeMatches) {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Refund payment mode missing or mismatched; no audit credits reversed.");
+        res.status(200).send("Refund recorded for payment-mode review");
+        return;
+      }
       if (refund.status !== "succeeded") {
         await saveRefundEvent(db, event, refund, "received", "Refund not yet succeeded.");
         res.status(200).send("OK"); return;
@@ -65,9 +78,9 @@ export default async function handler(req, res) {
         Number.isInteger(paidCents) && paidCents > 0;
       if (!txn || !validIdentifiers || !validAmounts ||
           String(refund.refund_currency || "").toLowerCase() !== "usd" ||
-          amountCents < paidCents) {
+          amountCents !== paidCents) {
         await saveRefundEvent(db, event, refund, "review_required",
-          "Unverified, partial, non-USD, or invalid refund; no audit credits reversed.");
+          "Unverified, amount-mismatched, non-USD, or invalid refund; no audit credits reversed.");
         res.status(200).send("Refund acknowledged for manual review");
         return;
       }
@@ -85,10 +98,21 @@ export default async function handler(req, res) {
         res.status(200).send("Refund recorded for purchase reconciliation");
         return;
       }
-      if (amountCents < existing.amount_cents) {
+      if (!Number.isInteger(Number(existing.amount_cents)) || amountCents !== Number(existing.amount_cents)) {
         await saveRefundEvent(db, event, refund, "review_required",
-          "Refund is smaller than the recorded purchase amount.");
-        res.status(200).send("Partial refund recorded for manual review");
+          "Refund amount does not match the recorded purchase amount.");
+        res.status(200).send("Mismatched refund recorded for manual review");
+        return;
+      }
+
+      // Launch policy: refunds are handled in the Creem dashboard and reconciled
+      // by an authorized operator. Do not automatically reverse audit credits.
+      // This fail-closed default prevents unintended balance changes while
+      // the refund accounting and concurrency tests are being consolidated.
+      if (process.env.CREEM_AUTOMATED_REFUNDS !== "enabled") {
+        await saveRefundEvent(db, event, refund, "review_required",
+          "Manual refund reconciliation required; audit credits unchanged.");
+        res.status(200).send("Refund recorded for manual reconciliation");
         return;
       }
 

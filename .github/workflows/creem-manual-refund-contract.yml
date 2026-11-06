@@ -1,0 +1,19 @@
+name: Creem manual refund launch guard
+on:
+  pull_request:
+    paths:
+      - 'api/creem-webhook.js'
+      - 'scripts/test-creem-manual-refund-contract.mjs'
+      - '.github/workflows/creem-manual-refund-contract.yml'
+  workflow_dispatch:
+jobs:
+  manual-refund-contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/test-creem-manual-refund-contract.mjs
