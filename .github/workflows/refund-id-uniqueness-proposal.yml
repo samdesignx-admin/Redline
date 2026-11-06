@@ -1,0 +1,41 @@
+name: Refund identity uniqueness proposal (disposable PostgreSQL)
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/creem-refund-id-uniqueness-proposal.sql'
+      - 'docs/drafts/record-creem-refund-event-monotonic-proposal.sql'
+      - '.github/workflows/refund-id-uniqueness-proposal.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: regression
+          POSTGRES_PASSWORD: ephemeral_only
+          POSTGRES_DB: refund_regression
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U regression -d refund_regression"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: regression
+      PGPASSWORD: ephemeral_only
+      PGDATABASE: refund_regression
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify refund identity uniqueness in disposable database
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/creem-refund-id-uniqueness-proposal.sql
+      - name: Verify fixture rollback
+        run: |
+          test "$(psql -X -Atqc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='creem_refund_events'")" = "0"
