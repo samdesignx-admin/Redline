@@ -9,6 +9,8 @@ source = source.replace('import crypto from "crypto";', 'const crypto = globalTh
   .replace('import { requireDb } from "./_lib.js";', 'const requireDb = () => globalThis.__refundTest.db;')
   .replace('import { getCreemCheckout, syncCreemPurchase, syncRefundTransactionFromCreem } from "./_creem-transactions.js";',
     'const getCreemCheckout = () => { throw Error("unexpected checkout"); }; const syncCreemPurchase = () => { throw Error("unexpected sync"); };');
+// The transformed module evaluates its crypto binding during import; initialize the stub first.
+globalThis.__refundTest = { crypto, db: null };
 const { default: handler } = await import("data:text/javascript;base64," + Buffer.from(source).toString("base64"));
 const originalSecret = process.env.CREEM_WEBHOOK_SECRET;
 const originalGate = process.env.CREEM_AUTOMATED_REFUNDS;
