@@ -17,6 +17,6 @@ assert(guard >= 0, "automated refunds must be explicitly opted in");
 assert(review > guard && response > review && stop > response, "manual path must persist review and stop");
 assert(reversal > stop, "credit reversal must not run before manual gate");
 assert(!refund.slice(guard, stop).includes('db.rpc("apply_creem_refund"'), "manual path must not reverse credits");
-assert(refund.includes('if (amountCents < existing.amount_cents)'), "partial refunds must be flagged");
+assert(refund.includes('amountCents !== Number(existing.amount_cents)'), "mismatched refunds must be flagged");
 assert(refund.includes('if (!existing)'), "unmatched purchases must be flagged");
 console.log("PASS: manual refund gate contract; integration tests still required");
