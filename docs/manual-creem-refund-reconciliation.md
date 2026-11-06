@@ -17,6 +17,7 @@
 - Implement an audited admin adjustment/reconciliation capability (or formally approve a documented existing equivalent).
 - Prove signed webhook handling with mocked tests for succeeded, duplicate, pending, partial, unmatched, and malformed refunds.
 - Prove manual mode never invokes `apply_creem_refund` and does not modify balances; test checkout credit grants separately.
+- Confirm refund events carry an explicit `mode` matching `CREEM_MODE` (`test` or `live`/`prod`). Missing/mismatched mode is recorded for review and cannot trigger automatic reversal; investigate real Creem payload shape before approving automatic refunds.
 - Validate webhook-event replay does not overwrite a previously applied/closed record (PR #29 overlap).
 - Confirm Preview and Production do not define `CREEM_AUTOMATED_REFUNDS=enabled`; confirm Preview database isolation before any state-changing E2E test.
 - Reconcile overlapping payment PRs #23, #27, #29–#33 into one reviewed release candidate. Keep refund automation out of initial release.
