@@ -65,9 +65,9 @@ export default async function handler(req, res) {
         Number.isInteger(paidCents) && paidCents > 0;
       if (!txn || !validIdentifiers || !validAmounts ||
           String(refund.refund_currency || "").toLowerCase() !== "usd" ||
-          amountCents < paidCents) {
+          amountCents !== paidCents) {
         await saveRefundEvent(db, event, refund, "review_required",
-          "Unverified, partial, non-USD, or invalid refund; no audit credits reversed.");
+          "Unverified, amount-mismatched, non-USD, or invalid refund; no audit credits reversed.");
         res.status(200).send("Refund acknowledged for manual review");
         return;
       }
@@ -85,10 +85,10 @@ export default async function handler(req, res) {
         res.status(200).send("Refund recorded for purchase reconciliation");
         return;
       }
-      if (amountCents < existing.amount_cents) {
+      if (!Number.isInteger(Number(existing.amount_cents)) || amountCents !== Number(existing.amount_cents)) {
         await saveRefundEvent(db, event, refund, "review_required",
-          "Refund is smaller than the recorded purchase amount.");
-        res.status(200).send("Partial refund recorded for manual review");
+          "Refund amount does not match the recorded purchase amount.");
+        res.status(200).send("Mismatched refund recorded for manual review");
         return;
       }
 
