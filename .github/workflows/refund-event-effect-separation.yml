@@ -1,0 +1,40 @@
+name: Refund event/effect separation (disposable PostgreSQL)
+on:
+  pull_request:
+    paths:
+      - 'tests/sql/refund-event-effect-separation.sql'
+      - '.github/workflows/refund-event-effect-separation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: regression
+          POSTGRES_PASSWORD: ephemeral_only
+          POSTGRES_DB: refund_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U regression -d refund_fixture"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: regression
+      PGPASSWORD: ephemeral_only
+      PGDATABASE: refund_fixture
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert separate event history and financial effect identities
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/refund-event-effect-separation.sql
+      - name: Verify disposable fixture cleanup
+        run: |
+          test "$(psql -X -Atqc "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('refund_events','refund_effects')")" = "0"
