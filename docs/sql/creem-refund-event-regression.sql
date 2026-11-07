@@ -30,6 +30,30 @@ BEGIN
     RAISE EXCEPTION 'Stale replay changed state: %', v;
   END IF;
 
+  -- A duplicate at the terminal review state must not mutate audit evidence.
+  v := public.record_creem_refund_event(
+    'evt_regression_001','ref_regression_001','txn_regression_001',
+    500,'USD','succeeded','pending','review_required','duplicate payload');
+  IF v->>'state' <> 'review_required' OR (v->>'changed')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'Duplicate terminal event unexpectedly updated: %', v;
+  END IF;
+  IF (SELECT detail FROM public.creem_refund_events WHERE event_id='evt_regression_001') <> 'manual review' THEN
+    RAISE EXCEPTION 'Duplicate event overwrote review evidence';
+  END IF;
+
+  -- Explicitly reject null states rather than relying on SQL NULL comparisons.
+  v_rejected := false;
+  BEGIN
+    PERFORM public.record_creem_refund_event(
+      'evt_regression_001','ref_regression_001','txn_regression_001',
+      500,'USD','succeeded','pending',NULL,'null state');
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Webhook accepted null refund state';
+  END IF;
+
   SELECT state INTO v_state FROM public.creem_refund_events
     WHERE event_id='evt_regression_001';
   IF v_state <> 'review_required' THEN
