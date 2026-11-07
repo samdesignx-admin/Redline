@@ -1,0 +1,20 @@
+name: Creem refund replay regression (release blocker)
+on:
+  pull_request:
+    paths:
+      - 'api/creem-webhook.js'
+      - 'scripts/test-creem-refund-replay-stateful.mjs'
+      - '.github/workflows/creem-refund-replay-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  refund-replay-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Stateful replay regression (must pass before release)
+        run: node scripts/test-creem-refund-replay-stateful.mjs
