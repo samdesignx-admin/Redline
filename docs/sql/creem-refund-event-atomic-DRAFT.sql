@@ -22,7 +22,7 @@ BEGIN
     RAISE EXCEPTION 'Invalid refund event input' USING ERRCODE = '22023';
   END IF;
 
-  -- A conflict update locks the existing row; WHERE prevents state regression.
+  -- Webhook ingestion cannot mark a refund 'applied': that state requires a separate\n  -- explicitly authorized financial reconciliation path.\n  -- A conflict update locks the existing row; WHERE prevents state regression.
   -- Identity changes must fail rather than silently rewrite existing evidence.
   INSERT INTO public.creem_refund_events AS e
     (event_id, refund_id, transaction_id, amount_cents, currency,
