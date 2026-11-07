@@ -47,11 +47,28 @@ BEGIN
     RAISE EXCEPTION 'Conflicting immutable refund ID was accepted';
   END IF;
 
-  v := public.record_creem_refund_event(
-    'evt_regression_001','ref_regression_001','txn_regression_001',
-    500,'USD','succeeded','succeeded','applied','terminal state');
-  IF v->>'state' <> 'review_required' THEN
-    RAISE EXCEPTION 'Unexpected transition to applied: %', v;
+  v_rejected := false;
+  BEGIN
+    PERFORM public.record_creem_refund_event(
+      'evt_regression_001','ref_regression_001','txn_regression_001',
+      500,'USD','succeeded','succeeded','applied','unauthorized applied state');
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Webhook incorrectly accepted applied state';
+  END IF;
+
+  v_rejected := false;
+  BEGIN
+    PERFORM public.record_creem_refund_event(
+      'evt_regression_new_applied','ref_regression_new','txn_regression_new',
+      500,'USD','succeeded','succeeded','applied','unauthorized initial state');
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Webhook incorrectly inserted applied state';
   END IF;
 
   RAISE NOTICE 'Sequential refund replay/identity regression checks passed';
