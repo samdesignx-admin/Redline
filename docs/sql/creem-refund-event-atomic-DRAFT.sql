@@ -22,7 +22,9 @@ BEGIN
     RAISE EXCEPTION 'Invalid refund event input' USING ERRCODE = '22023';
   END IF;
 
-  -- Webhook ingestion cannot mark a refund 'applied': that state requires a separate\n  -- explicitly authorized financial reconciliation path.\n  -- A conflict update locks the existing row; WHERE prevents state regression.
+  -- Webhook ingestion cannot mark a refund 'applied': that state requires a separate
+  -- explicitly authorized financial reconciliation path.
+  -- A conflict update locks the existing row; WHERE prevents state regression.
   -- Identity changes must fail rather than silently rewrite existing evidence.
   INSERT INTO public.creem_refund_events AS e
     (event_id, refund_id, transaction_id, amount_cents, currency,
@@ -41,8 +43,8 @@ BEGIN
       AND e.amount_cents IS NOT DISTINCT FROM EXCLUDED.amount_cents
       AND e.currency IS NOT DISTINCT FROM EXCLUDED.currency
       AND (
-        (e.state = 'received' AND EXCLUDED.state IN ('pending_link','review_required','applied'))
-        OR (e.state = 'pending_link' AND EXCLUDED.state IN ('review_required','applied'))
+        (e.state = 'received' AND EXCLUDED.state IN ('pending_link','review_required'))
+        OR (e.state = 'pending_link' AND EXCLUDED.state IN ('review_required'))
       )
   RETURNING * INTO v_row;
 
