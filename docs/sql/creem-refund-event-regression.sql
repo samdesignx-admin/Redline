@@ -39,7 +39,7 @@ BEGIN
   BEGIN
     PERFORM public.record_creem_refund_event(
       'evt_regression_001','ref_different','txn_regression_001',
-      500,'USD','succeeded','succeeded','applied','identity collision');
+      500,'USD','succeeded','succeeded','review_required','identity collision');
   EXCEPTION WHEN check_violation THEN
     v_rejected := true;
   END;
@@ -47,6 +47,7 @@ BEGIN
     RAISE EXCEPTION 'Conflicting immutable refund ID was accepted';
   END IF;
 
+  -- Invalid state is tested separately from immutable identity conflicts.
   v_rejected := false;
   BEGIN
     PERFORM public.record_creem_refund_event(
