@@ -17,7 +17,7 @@ DECLARE
 BEGIN
   IF p_event_id !~ '^evt_[A-Za-z0-9_-]+$'
      OR coalesce(p_refund_id, '') = ''
-     OR p_state NOT IN ('received','pending_link','review_required','applied')
+     OR p_state IS NULL OR p_state NOT IN ('received','pending_link','review_required')
   THEN
     RAISE EXCEPTION 'Invalid refund event input' USING ERRCODE = '22023';
   END IF;
