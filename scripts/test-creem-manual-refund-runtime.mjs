@@ -28,12 +28,12 @@ async function send(payload, signatureValid = true, purchaseAmount = 500) {
   const db = {
     from(table) {
       return {
-        upsert(row) { events.push({ table, ...row }); return Promise.resolve({ error: null }); },
+        upsert() { throw Error("Direct event upsert is forbidden"); },
         select() { return this; }, eq() { return this; },
         maybeSingle() { return Promise.resolve({ data: { id: "purchase1", amount_cents: purchaseAmount }, error: null }); }
       };
     },
-    rpc(name) { calls.push(name); throw Error("Financial RPC must not execute"); }
+    rpc(name, params) { calls.push(name); if (name !== "record_creem_refund_event") throw Error("Financial RPC must not execute"); events.push({ table: "creem_refund_events", state: params.p_state, refund_id: params.p_refund_id, detail: params.p_detail }); return Promise.resolve({ error: null }); }
   };
   globalThis.__refundTest = { crypto, db };
   const raw = JSON.stringify(payload);
@@ -52,7 +52,7 @@ try {
     assert.equal(res.statusCode, 200);
     assert.equal(events.at(-1)?.state, "review_required");
     assert.equal(events.at(-1)?.refund_id, "ref_test123");
-    assert.deepEqual(calls, []);
+    assert(calls.every(name => name === "record_creem_refund_event"));
   }
   // A signed refund from another payment environment, or without a mode,
   // must be review-only even if legacy automation is explicitly enabled.
@@ -65,16 +65,17 @@ try {
     assert.equal(result.res.statusCode, 200, id);
     assert.equal(result.events.at(-1)?.state, "review_required", id);
     assert.match(result.events.at(-1)?.detail || "", /mode/i, id);
-    assert.deepEqual(result.calls, [], id);
+    assert(result.calls.every(name => name === "record_creem_refund_event"), id);
   }
   delete process.env.CREEM_AUTOMATED_REFUNDS;
   const invalid = await send(event("evt_bad"), false);
   assert.equal(invalid.res.statusCode, 401);
   assert.equal(invalid.events.length, 0);
+  assert.deepEqual(invalid.calls, []);
   const partial = await send(event("evt_partial", { refund_amount: 200 }));
   assert.equal(partial.res.statusCode, 200);
   assert.equal(partial.events.at(-1)?.state, "review_required");
-  assert.deepEqual(partial.calls, []);
+  assert(partial.calls.every(name => name === "record_creem_refund_event"));
   // Even if the legacy automation flag is enabled, over-amount events must
   // never reach the financial RPC. The mock RPC throws if invoked.
   process.env.CREEM_AUTOMATED_REFUNDS = "enabled";
@@ -88,12 +89,12 @@ try {
     const result = await send(event(id, payload), true, purchaseAmount);
     assert.equal(result.res.statusCode, 200, id);
     assert.equal(result.events.at(-1)?.state, "review_required", id);
-    assert.deepEqual(result.calls, [], id);
+    assert(result.calls.every(name => name === "record_creem_refund_event"), id);
   }
   delete process.env.CREEM_AUTOMATED_REFUNDS;
   const pending = await send(event("evt_pending", { status: "pending" }));
   assert.equal(pending.events.at(-1)?.state, "received");
-  assert.deepEqual(pending.calls, []);
+  assert(pending.calls.every(name => name === "record_creem_refund_event"));
   console.log("PASS: signed manual refund, duplicate/replayed events, partial, over/under-amount, currency, invalid IDs, mode mismatch/missing, pending and invalid signature; no financial RPC");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
