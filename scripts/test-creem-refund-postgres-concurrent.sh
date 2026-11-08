@@ -38,7 +38,7 @@ BEGIN;
 SELECT public.record_creem_refund_event(
   'evt_rollback_01','refund_rollback_01','txn_rollback_01',
   500,'USD','refunded','succeeded','review_required','rollback test');
-DO $ BEGIN RAISE EXCEPTION 'intentional rollback injection'; END $;
+SELECT 1 / 0; -- intentional transaction failure
 COMMIT;
 SQL
 then
