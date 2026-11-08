@@ -22,17 +22,17 @@ function parseQuantity(value) {
 async function saveRefundEvent(db, event, refund, state, detail = null) {
   const txn = refund.transaction && typeof refund.transaction === "object" ? refund.transaction : null;
   if (!/^evt_[A-Za-z0-9_-]+$/.test(event.id || "")) throw new Error("Creem refund event missing id.");
-  const { error } = await db.from("creem_refund_events").upsert({
-    event_id: event.id,
-    refund_id: refund.id || "",
-    transaction_id: txn?.id || (typeof refund.transaction === "string" ? refund.transaction : null),
-    amount_cents: Number.isInteger(Number(refund.refund_amount)) ? Number(refund.refund_amount) : null,
-    currency: refund.refund_currency || null,
-    transaction_status: txn?.status || null,
-    refund_status: refund.status || null,
-    state, detail,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "event_id" });
+  const { error } = await db.rpc("record_creem_refund_event", {
+    p_event_id: event.id,
+    p_refund_id: refund.id || "",
+    p_transaction_id: txn?.id || (typeof refund.transaction === "string" ? refund.transaction : null),
+    p_amount_cents: Number.isInteger(Number(refund.refund_amount)) ? Number(refund.refund_amount) : null,
+    p_currency: refund.refund_currency || null,
+    p_transaction_status: txn?.status || null,
+    p_refund_status: refund.status || null,
+    p_state: state,
+    p_detail: detail,
+  });
   if (error) throw error;
 }
 export default async function handler(req, res) {
@@ -116,15 +116,9 @@ export default async function handler(req, res) {
         return;
       }
 
-      const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
-        p_transaction_id: transactionId,
-        p_refund_id: refundId,
-        p_amount_cents: amountCents,
-      });
-      if (refundError) throw refundError;
-      if (recorded !== true) throw new Error("Creem refund could not be reconciled.");
-      await saveRefundEvent(db, event, refund, "applied");
-      res.status(200).send("Refund applied");
+      // Never execute a financial reversal from this webhook until the accounting
+      // transaction and concurrent-delivery behavior are independently approved.
+      throw new Error("Automated Creem refund reconciliation is not approved.");
       return;
     }
         if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }

@@ -13,9 +13,11 @@ const review = refund.indexOf('saveRefundEvent(db, event, refund, "review_requir
 const response = refund.indexOf('res.status(200).send("Refund recorded for manual reconciliation")', guard);
 const stop = refund.indexOf('return;', response);
 const reversal = refund.indexOf('db.rpc("apply_creem_refund"');
+const explicitStop = refund.indexOf('throw new Error("Automated Creem refund reconciliation is not approved.")');
 assert(guard >= 0, "automated refunds must be explicitly opted in");
 assert(review > guard && response > review && stop > response, "manual path must persist review and stop");
-assert(reversal > stop, "credit reversal must not run before manual gate");
+assert(reversal === -1, "unapproved credit reversal RPC must not exist in refund branch");
+assert(explicitStop > stop, "enabling legacy flag must still fail closed");
 assert(!refund.slice(guard, stop).includes('db.rpc("apply_creem_refund"'), "manual path must not reverse credits");
 assert(refund.includes('amountCents !== Number(existing.amount_cents)'), "mismatched refunds must be flagged");
 assert(refund.includes('if (!existing)'), "unmatched purchases must be flagged");
