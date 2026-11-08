@@ -23,7 +23,25 @@ const db = {
     };
     throw Error("Unexpected table " + table);
   },
-  rpc(name) { financialCalls.push(name); throw Error("Financial RPC not permitted in regression test"); }
+  rpc(name, args) {
+    if (name !== "record_creem_refund_event") {
+      financialCalls.push(name);
+      throw Error("Financial RPC not permitted in regression test");
+    }
+    const prior = rows.get(args.p_event_id);
+    const rank = { received: 0, pending_link: 1, review_required: 2 };
+    if (prior && (prior.refund_id !== args.p_refund_id || prior.transaction_id !== args.p_transaction_id || prior.amount_cents !== args.p_amount_cents || prior.currency !== args.p_currency)) {
+      return Promise.resolve({ error: Error("Conflicting refund event identity") });
+    }
+    if (!prior || rank[args.p_state] > rank[prior.state]) {
+      rows.set(args.p_event_id, {
+        event_id: args.p_event_id, refund_id: args.p_refund_id,
+        transaction_id: args.p_transaction_id, amount_cents: args.p_amount_cents,
+        currency: args.p_currency, state: args.p_state, detail: args.p_detail,
+      });
+    }
+    return Promise.resolve({ data: { state: rows.get(args.p_event_id).state }, error: null });
+  }
 };
 globalThis.__replay = { crypto, db };
 const { default: handler } = await import("data:text/javascript;base64," + Buffer.from(source).toString("base64"));
