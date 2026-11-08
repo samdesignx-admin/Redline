@@ -60,6 +60,8 @@ BEGIN
     RAISE EXCEPTION 'Persisted state regressed to %', v_state;
   END IF;
 
+  -- Reset rejection flag so identity protection is independently asserted.
+  v_rejected := false;
   BEGIN
     PERFORM public.record_creem_refund_event(
       'evt_regression_001','ref_different','txn_regression_001',
