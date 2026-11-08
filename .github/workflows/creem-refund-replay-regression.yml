@@ -5,6 +5,8 @@ on:
       - 'api/creem-webhook.js'
       - 'scripts/test-creem-refund-replay-stateful.mjs'
       - '.github/workflows/creem-refund-replay-regression.yml'
+      - 'docs/sql/creem-refund-event-atomic-DRAFT.sql'
+      - 'docs/sql/creem-refund-event-regression.sql'
   workflow_dispatch:
 permissions:
   contents: read
