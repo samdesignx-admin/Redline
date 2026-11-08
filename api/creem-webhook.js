@@ -116,15 +116,9 @@ export default async function handler(req, res) {
         return;
       }
 
-      // Fail closed: the draft event RPC deliberately rejects the applied state.\n      // Automated reversals require a separately reviewed accounting transaction.\n      throw new Error("Automated Creem refund reconciliation is not approved.");\n      /* const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
-        p_transaction_id: transactionId,
-        p_refund_id: refundId,
-        p_amount_cents: amountCents,
-      });
-      if (refundError) throw refundError;
-      if (recorded !== true) throw new Error("Creem refund could not be reconciled.");
-      await saveRefundEvent(db, event, refund, "applied");
-      res.status(200).send("Refund applied"); */
+      // Never execute a financial reversal from this webhook until the accounting
+      // transaction and concurrent-delivery behavior are independently approved.
+      throw new Error("Automated Creem refund reconciliation is not approved.");
       return;
     }
         if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
