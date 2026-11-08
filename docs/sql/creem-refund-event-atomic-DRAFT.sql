@@ -70,3 +70,10 @@ REVOKE ALL ON FUNCTION public.record_creem_refund_event(
   text,text,text,integer,text,text,text,text,text
 ) FROM PUBLIC, anon, authenticated;
 
+
+-- Explicitly permit only the trusted server-side Supabase service role to invoke.
+-- Revoking PUBLIC also removes the implicit grant inherited by service_role.
+-- SECURITY INVOKER still requires underlying table permissions and applicable RLS policies.
+GRANT EXECUTE ON FUNCTION public.record_creem_refund_event(
+  text,text,text,integer,text,text,text,text,text
+) TO service_role;
