@@ -116,7 +116,7 @@ export default async function handler(req, res) {
         return;
       }
 
-      const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
+      // Fail closed: the draft event RPC deliberately rejects the applied state.\n      // Automated reversals require a separately reviewed accounting transaction.\n      throw new Error("Automated Creem refund reconciliation is not approved.");\n      /* const { data: recorded, error: refundError } = await db.rpc("apply_creem_refund", {
         p_transaction_id: transactionId,
         p_refund_id: refundId,
         p_amount_cents: amountCents,
@@ -124,7 +124,7 @@ export default async function handler(req, res) {
       if (refundError) throw refundError;
       if (recorded !== true) throw new Error("Creem refund could not be reconciled.");
       await saveRefundEvent(db, event, refund, "applied");
-      res.status(200).send("Refund applied");
+      res.status(200).send("Refund applied"); */
       return;
     }
         if (event.eventType !== "checkout.completed") { res.status(200).send("OK"); return; }
