@@ -29,3 +29,23 @@ if psql -X -v ON_ERROR_STOP=1 -Atqc "SELECT public.record_creem_refund_event('ev
   echo "Conflicting identity was accepted" >&2; exit 1
 fi
 echo "PASS: 20 concurrent PostgreSQL calls; one row, monotonic state, conflicting identity rejected"
+
+# Failure injection: an error after the RPC in the same transaction must
+# roll back the event insert, rather than leaving a partially persisted event.
+# psql must fail here; a successful exit would mean the injection did not fire.
+if psql -X -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<'SQL'
+BEGIN;
+SELECT public.record_creem_refund_event(
+  'evt_rollback_01','refund_rollback_01','txn_rollback_01',
+  500,'USD','refunded','succeeded','review_required','rollback test');
+DO $ BEGIN RAISE EXCEPTION 'intentional rollback injection'; END $;
+COMMIT;
+SQL
+then
+  echo "Failure injection unexpectedly succeeded" >&2
+  exit 1
+fi
+rollback_count=$(psql -X -v ON_ERROR_STOP=1 -Atqc "SELECT count(*) FROM public.creem_refund_events WHERE event_id='evt_rollback_01'")
+[[ "$rollback_count" == "0" ]] || { echo "Failed transaction persisted refund event" >&2; exit 1; }
+echo "PASS: injected transaction failure rolls back refund event"
+
