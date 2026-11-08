@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 
-// Stateful regression: intentionally fails against the current unconditional upsert.
+// Stateful regression: exercises the webhook's atomic persistence contract with an in-memory RPC mock.
 // Uses the real handler, a persistent in-memory table, and no network/DB access.
 // Run: node scripts/test-creem-refund-replay-stateful.mjs
 let source = readFileSync(new URL("../api/creem-webhook.js", import.meta.url), "utf8");
@@ -72,8 +72,13 @@ try {
   assert.equal(rows.size, 1);
   assert.equal(rows.get("evt_replay_stateful")?.state, "review_required",
     "REPLAY REGRESSION: pending webhook downgraded review_required");
+  // Concurrent HTTP deliveries may arrive in either order. The RPC must preserve the higher-priority state.
+  await Promise.all(Array.from({ length: 20 }, (_, i) => deliver(i % 2 ? "pending" : "succeeded")));
+  assert.equal(rows.size, 1, "Concurrent duplicate deliveries created multiple events");
+  assert.equal(rows.get("evt_replay_stateful")?.state, "review_required",
+    "Concurrent delivery downgraded the reconciliation state");
   assert.deepEqual(financialCalls, []);
-  console.log("PASS: refund reconciliation state is monotonic across deliveries");
+  console.log("PASS: refund reconciliation state is monotonic across sequential and simulated concurrent deliveries");
 } finally {
   if (originalSecret === undefined) delete process.env.CREEM_WEBHOOK_SECRET;
   else process.env.CREEM_WEBHOOK_SECRET = originalSecret;
