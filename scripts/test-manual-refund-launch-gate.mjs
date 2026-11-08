@@ -1,4 +1,4 @@
-// Source-level launch safety checks; does not replace signed-webhook integration tests.
+// Source-level launch safety checks; signed-webhook integration tests remain required.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const source = readFileSync(new URL("../api/creem-webhook.js", import.meta.url), "utf8");
@@ -7,13 +7,15 @@ const checkoutStart = source.indexOf('if (event.eventType !== "checkout.complete
 assert(refundStart >= 0 && checkoutStart > refundStart, "refund and checkout handlers must exist");
 const refund = source.slice(refundStart, checkoutStart);
 const gate = refund.indexOf('process.env.CREEM_AUTOMATED_REFUNDS !== "enabled"');
-const rpc = refund.indexOf('db.rpc("apply_creem_refund"');
-assert(gate >= 0 && rpc > gate, "manual gate must precede automated reversal");
-const gateBody = refund.slice(gate, rpc);
-assert.match(gateBody, /saveRefundEvent\(db, event, refund, "review_required"/, "manual refunds must be recorded for review");
-assert.match(gateBody, /res\.status\(200\)/, "acknowledge recorded manual refunds");
-assert.match(gateBody, /return;/, "manual branch must exit before financial RPC");
+assert(gate >= 0, "manual refund default gate must exist");
+const manualBranch = refund.slice(gate);
+assert.match(manualBranch, /saveRefundEvent\(db, event, refund, "review_required"/, "manual refunds must be recorded for review");
+assert.match(manualBranch, /res\.status\(200\)/, "acknowledge recorded manual refunds");
+assert.match(manualBranch, /return;/, "manual branch must exit");
 assert.match(refund, /if \(refund\.status !== "succeeded"\)/, "non-successful refunds must not reverse credits");
 assert.match(refund, /if \(!existing\)/, "unmatched purchases require reconciliation");
 assert.match(refund, /amountCents !== Number\(existing\.amount_cents\)/, "mismatched refunds require review");
-console.log("PASS: manual refund default gate precedes credit reversal; refund review branches preserved");
+assert.match(manualBranch, /throw new Error\("Automated Creem refund reconciliation is not approved\."\)/, "enabled flag must not bypass launch approval");
+assert.doesNotMatch(refund, /db\.rpc\(\s*["']apply_creem_refund["']/, "webhook must not execute financial reversal RPC");
+assert.doesNotMatch(refund, /db\.from\(\s*["']audit_purchases["']\s*\)\.update\(/, "webhook must not directly modify purchase accounting");
+console.log("PASS: refund events recorded for review; automated credit reversal remains fail-closed even with enabled flag");
