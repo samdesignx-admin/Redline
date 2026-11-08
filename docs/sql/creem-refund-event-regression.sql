@@ -80,6 +80,31 @@ BEGIN
     RAISE EXCEPTION 'Webhook accepted null refund state';
   END IF;
 
+  -- SQL NULL in a regex predicate must not bypass event-ID validation.
+  v_rejected := false;
+  BEGIN
+    PERFORM public.record_creem_refund_event(
+      NULL,'ref_regression_null_event','txn_regression_null_event',
+      500,'USD','succeeded','pending','received','invalid null ID');
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Webhook accepted null event ID';
+  END IF;
+
+  v_rejected := false;
+  BEGIN
+    PERFORM public.record_creem_refund_event(
+      'evt_regression_blank_refund','   ','txn_regression_blank_refund',
+      500,'USD','succeeded','pending','received','invalid blank refund ID');
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'Webhook accepted whitespace-only refund ID';
+  END IF;
+
   SELECT state INTO v_state FROM public.creem_refund_events
     WHERE event_id='evt_regression_001';
   IF v_state <> 'review_required' THEN
