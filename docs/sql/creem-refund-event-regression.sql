@@ -30,6 +30,32 @@ BEGIN
     RAISE EXCEPTION 'Stale replay changed state: %', v;
   END IF;
 
+  -- Repeated deliveries at the same nonterminal state must be idempotent.
+  -- Use a separate event to ensure the duplicate does not replace evidence.
+  v := public.record_creem_refund_event(
+    'evt_regression_duplicate','ref_regression_duplicate','txn_regression_duplicate',
+    500,'USD','succeeded','pending','received','original evidence');
+  v := public.record_creem_refund_event(
+    'evt_regression_duplicate','ref_regression_duplicate','txn_regression_duplicate',
+    500,'USD','succeeded','succeeded','received','duplicate evidence');
+  IF v->>'state' <> 'received' OR (v->>'changed')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'Same-state duplicate unexpectedly updated: %', v;
+  END IF;
+  IF (SELECT detail FROM public.creem_refund_events WHERE event_id='evt_regression_duplicate') <> 'original evidence' THEN
+    RAISE EXCEPTION 'Same-state duplicate overwrote audit evidence';
+  END IF;
+
+  -- A pending-link event must not regress to received on stale replay.
+  v := public.record_creem_refund_event(
+    'evt_regression_duplicate','ref_regression_duplicate','txn_regression_duplicate',
+    500,'USD','succeeded','pending','pending_link','link pending');
+  v := public.record_creem_refund_event(
+    'evt_regression_duplicate','ref_regression_duplicate','txn_regression_duplicate',
+    500,'USD','succeeded','pending','received','stale received');
+  IF v->>'state' <> 'pending_link' OR (v->>'changed')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'Pending-link state regressed: %', v;
+  END IF;
+
   -- A duplicate at the terminal review state must not mutate audit evidence.
   v := public.record_creem_refund_event(
     'evt_regression_001','ref_regression_001','txn_regression_001',
