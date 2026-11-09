@@ -1,0 +1,19 @@
+name: Auth malformed hash regression
+on:
+  pull_request:
+    paths:
+      - 'api/_lib.js'
+      - 'scripts/verify-malformed-password-hashes.mjs'
+      - '.github/workflows/auth-malformed-hash-regression.yml'
+  workflow_dispatch:
+jobs:
+  malformed-hashes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-malformed-password-hashes.mjs
