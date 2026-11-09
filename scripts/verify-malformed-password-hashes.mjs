@@ -20,6 +20,6 @@ for (const malformed of [
   let result;
   try { result = await verifyPassword(password, malformed); }
   catch (error) { assert.fail(`malformed stored hash must not throw: ${String(error)}`); }
-  assert.equal(result, false, `malformed stored hash was accepted: ${malformed.slice(0, 36)}`);
+  assert.equal(result, false, `malformed stored hash was accepted: ${String(malformed).slice(0, 36)}`);
 }
 console.log("Malformed password hash regression checks passed");
