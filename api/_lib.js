@@ -20,7 +20,9 @@ export function hashPassword(password) {
 }
 
 export function verifyPassword(password, stored) {
-  if (!stored || !stored.includes(":")) return false;
+  // Fail closed on corrupted or attacker-controlled stored values. Require exactly
+  // 16-byte hex salt and 64-byte hex digest, with no additional fields.
+  if (typeof stored !== "string" || !/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(stored)) return false;
   const [salt, hash] = stored.split(":");
   const candidate = crypto.scryptSync(String(password), salt, 64).toString("hex");
   const a = Buffer.from(candidate);
