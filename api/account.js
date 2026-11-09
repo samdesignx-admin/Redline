@@ -6,6 +6,8 @@ import {
   cleanEmail, isEmail, publicAccount,
 } from "./_lib.js";
 
+import { googleTokenClaimsStatus } from "./_google-claims.js";
+
 export const maxDuration = 20;
 
 export default async function handler(req, res) {
@@ -81,17 +83,17 @@ export default async function handler(req, res) {
       const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
       if (!r.ok) { res.status(401).json({ error: "Google sign-in could not be verified." }); return; }
       const info = await r.json();
-      const expectedAud = process.env.GOOGLE_CLIENT_ID;
-      if (!expectedAud || !expectedAud.trim()) {
+      const claimStatus = googleTokenClaimsStatus(info, process.env.GOOGLE_CLIENT_ID);
+      if (claimStatus === "misconfigured") {
         res.status(503).json({ error: "Google sign-in is temporarily unavailable." });
         return;
       }
-      if (info.aud !== expectedAud) {
+      if (claimStatus === "wrong_audience") {
         res.status(401).json({ error: "Google sign-in was issued for a different application." });
         return;
       }
       const email = cleanEmail(info.email);
-      if (!isEmail(email) || ![true, "true"].includes(info.email_verified)) {
+      if (claimStatus !== "valid" || !isEmail(email)) {
         res.status(401).json({ error: "Google did not return a verified email address." });
         return;
       }
