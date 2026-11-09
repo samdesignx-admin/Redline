@@ -14,6 +14,8 @@ for (const malformed of [
   "", "not-a-hash", `${salt}:${digest}:extra`, `:${digest}`,
   `${salt}:`, `${salt}:${digest.slice(0, -2)}`,
   `${salt}:${"g".repeat(128)}`, `${"z".repeat(32)}:${digest}`,
+  `${salt.toUpperCase()}:${digest}`, `${salt}:${digest.toUpperCase()}`,
+  null, undefined, 42, {}, [],
 ]) {
   let result;
   try { result = await verifyPassword(password, malformed); }
