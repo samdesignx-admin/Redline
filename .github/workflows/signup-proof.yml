@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'api/account.js'
+      - 'src/UxnestApp.jsx'
       - 'api/_signup-proof.js'
       - 'scripts/verify-signup-proof.mjs'
       - '.github/workflows/signup-proof.yml'
