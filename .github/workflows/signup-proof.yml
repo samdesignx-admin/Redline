@@ -1,0 +1,18 @@
+name: Signup verification proof regression
+on:
+  pull_request:
+    paths:
+      - 'api/account.js'
+      - 'src/UxnestApp.jsx'
+      - 'api/_signup-proof.js'
+      - 'scripts/verify-signup-proof.mjs'
+      - '.github/workflows/signup-proof.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/verify-signup-proof.mjs
