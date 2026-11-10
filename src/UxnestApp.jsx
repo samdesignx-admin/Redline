@@ -936,7 +936,8 @@ function AuthModal({ onClose, onAuth, reason, initialMode = "login" }) {
         name: name.trim(),
         company: company.trim(),
         mobile: mobile.trim(),
-        emailVerified: true,
+        verificationToken: verifyToken,
+        verificationCode: code.trim(),
       });
       setToken(token);
       onAuth({ email: account.email, name: account.name, plan: account.plan, id: account.id, auditsUsed: account.auditsUsed, paidAudits: account.paidAudits || 0 });
