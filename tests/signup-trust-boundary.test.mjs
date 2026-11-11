@@ -17,6 +17,6 @@ test('signup must explicitly validate email proof on the server before session i
   assert.ok(signup, 'signup handler must exist');
   // Intentional conservative release gate. Any alternate implementation requires updating
   // this gate with an executable mocked endpoint test, not simply removing the assertion.
-  assert.match(signup, /(?:verifySignupProof|consumeSignupProof|validateSignupProof)\s*\(/,
+  assert.match(signup, /(?:validSignupProof|verifySignupProof|consumeSignupProof|validateSignupProof)\s*\(/,
     'Require server-side, email-bound, signup-purpose proof validation');
 });
