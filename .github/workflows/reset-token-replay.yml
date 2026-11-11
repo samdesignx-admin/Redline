@@ -1,0 +1,20 @@
+name: Password reset replay regression
+on:
+  pull_request:
+    paths:
+      - 'api/verify.js'
+      - 'tests/reset-token-replay.test.mjs'
+      - '.github/workflows/reset-token-replay.yml'
+  workflow_dispatch:
+jobs:
+  reset-token-replay:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify reset token replay regression
+        run: node --test tests/reset-token-replay.test.mjs
