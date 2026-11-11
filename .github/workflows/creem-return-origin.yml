@@ -1,0 +1,21 @@
+name: Creem checkout return URL security
+on:
+  pull_request:
+    paths:
+      - 'api/payment.js'
+      - 'scripts/verify-creem-return-origin.mjs'
+      - '.github/workflows/creem-return-origin.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-return-origin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Creem return URL safety (no external calls)
+        run: node scripts/verify-creem-return-origin.mjs

@@ -79,7 +79,15 @@ export default async function handler(req, res) {
       const { productId } = creemConfig();
       const { data: account } = await db.from("accounts").select("email").eq("id", sess.accountId).maybeSingle();
       if (!account?.email) throw new Error("Your account email could not be loaded.");
-      const origin = String(req.headers.origin || process.env.SITE_URL || "https://uxnest.ai").replace(/\/$/, "");
+      // Never trust the caller-controlled Origin header for a payment return URL.
+      // SITE_URL must be an explicitly configured HTTPS application origin.
+      const siteUrl = process.env.SITE_URL || "https://uxnest.ai";
+      let trustedSite;
+      try { trustedSite = new URL(siteUrl); } catch { throw new Error("SITE_URL must be a valid HTTPS application URL."); }
+      if (trustedSite.protocol !== "https:" || trustedSite.username || trustedSite.password || trustedSite.search || trustedSite.hash || trustedSite.pathname !== "/") {
+        throw new Error("SITE_URL must be a clean HTTPS application origin.");
+      }
+      const origin = trustedSite.origin;
       const requestId = `uxnest_${sess.accountId}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       const checkout = await creemRequest("/v1/checkouts", {
         method: "POST",
