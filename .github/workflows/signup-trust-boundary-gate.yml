@@ -1,0 +1,18 @@
+name: Signup verification trust boundary release gate
+on:
+  pull_request:
+    paths:
+      - 'api/account.js'
+      - 'tests/signup-trust-boundary.test.mjs'
+      - '.github/workflows/signup-trust-boundary-gate.yml'
+  workflow_dispatch:
+jobs:
+  signup-trust-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run signup verification static release gate (expected red until fixed)
+        run: node --test tests/signup-trust-boundary.test.mjs
