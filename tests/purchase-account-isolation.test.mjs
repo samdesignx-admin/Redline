@@ -20,3 +20,18 @@ test("stale purchase and refund responses cannot update new account state", () =
   assert.match(src, /if \(session !== purchaseSessionRef\.current\) return;/);
   assert.match(src, /if \(session === purchaseSessionRef\.current\) setHistoryError/);
 });
+
+test("pending refund UI and loading indicators are cleared on account transition", () => {
+  const cleanup = src.match(/const clearPurchaseSession = \(\) => \{([\s\S]*?)\n  \};/);
+  assert.ok(cleanup, "Missing purchase-session cleanup");
+  for (const field of [
+    "setPurchaseHistoryLoading(false)",
+    "setRefundSubmitting(false)",
+    "setRefundPurchaseId(null)",
+    'setRefundReason("")',
+  ]) {
+    assert.ok(cleanup[1].includes(field), `Missing transition cleanup: ${field}`);
+  }
+  assert.match(src, /finally \{ if \(session === purchaseSessionRef\.current\) setRefundSubmitting\(false\); \}/);
+  assert.match(src, /finally \{ if \(session === purchaseSessionRef\.current\) setPurchaseHistoryLoading\(false\); \}/);
+});
