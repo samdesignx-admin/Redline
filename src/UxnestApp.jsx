@@ -3094,26 +3094,36 @@ export default function UxnestApp() {
   });
   const [menuOpen, setMenuOpen] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [refundPurchaseId, setRefundPurchaseId] = useState(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundSubmitting, setRefundSubmitting] = useState(false);
+  // Invalidate in-flight account-specific requests on logout/account switch.
+  const purchaseSessionRef = useRef(0);
+  const clearPurchaseSession = () => {
+    purchaseSessionRef.current += 1;
+    setPurchaseHistory(null); setPurchaseHistoryLoading(false); setHistoryError("");
+    setRefundPurchaseId(null); setRefundReason(""); setRefundSubmitting(false);
+  };
   const loadPurchaseHistory = async () => {
-    setHistoryLoading(true); setHistoryError("");
-    try { const data = await api.purchaseHistory(); setPurchaseHistory(data.purchases || []); }
-    catch (e) { setHistoryError(e.message || "Unable to load purchases."); }
-    finally { setHistoryLoading(false); }
+    const session = purchaseSessionRef.current;
+    setPurchaseHistoryLoading(true); setHistoryError("");
+    try { const data = await api.purchaseHistory(); if (session === purchaseSessionRef.current) setPurchaseHistory(data.purchases || []); }
+    catch (e) { if (session === purchaseSessionRef.current) setHistoryError(e.message || "Unable to load purchases."); }
+    finally { if (session === purchaseSessionRef.current) setPurchaseHistoryLoading(false); }
   };
   const submitRefundRequest = async () => {
     if (!refundPurchaseId) return;
+    const session = purchaseSessionRef.current;
     setRefundSubmitting(true); setHistoryError("");
     try {
       await api.requestRefund(refundPurchaseId, refundReason);
+      if (session !== purchaseSessionRef.current) return;
       setRefundPurchaseId(null); setRefundReason("");
       await loadPurchaseHistory();
-    } catch (e) { setHistoryError(e.message || "Unable to submit request."); }
-    finally { setRefundSubmitting(false); }
+    } catch (e) { if (session === purchaseSessionRef.current) setHistoryError(e.message || "Unable to submit request."); }
+    finally { if (session === purchaseSessionRef.current) setRefundSubmitting(false); }
   };
 
 
@@ -3909,6 +3919,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
   const onAuthSuccess = async (u) => {
+    clearPurchaseSession();
     setUser(u);
     setAuditsUsed(u.auditsUsed || 0);
     setPaidAudits(u.paidAudits || 0);
@@ -3943,6 +3954,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
   const onLogout = () => {
+    clearPurchaseSession();
     setUser(null);
     setAuditsUsed(0);
     setShowHistory(false);
@@ -4278,7 +4290,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                     <button onClick={() => { if (purchaseHistory === null) loadPurchaseHistory(); else setPurchaseHistory(null); }} style={{ width: "100%", background: "transparent", border: "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", color: C.text, fontWeight: 750, fontSize: 14, padding: 0 }}>
                       <span>Purchase history & refunds</span><span>{purchaseHistory === null ? "View purchases ↓" : "Hide ↑"}</span>
                     </button>
-                    {historyLoading && <p style={{ fontSize: 13, color: C.textDim }}>Loading purchases…</p>}
+                    {purchaseHistoryLoading && <p style={{ fontSize: 13, color: C.textDim }}>Loading purchases…</p>}
                     {historyError && <p role="alert" style={{ color: "#B64D46", fontSize: 12 }}>{historyError}</p>}
                     {purchaseHistory && (purchaseHistory.length === 0
                       ? <p style={{ color: C.textDim, fontSize: 13 }}>No purchases yet.</p>
