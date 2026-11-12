@@ -3099,21 +3099,31 @@ export default function UxnestApp() {
   const [refundPurchaseId, setRefundPurchaseId] = useState(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundSubmitting, setRefundSubmitting] = useState(false);
+  // Invalidate in-flight account-specific requests on logout/account switch.
+  const purchaseSessionRef = useRef(0);
+  const clearPurchaseSession = () => {
+    purchaseSessionRef.current += 1;
+    setPurchaseHistory(null); setHistoryLoading(false); setHistoryError("");
+    setRefundPurchaseId(null); setRefundReason(""); setRefundSubmitting(false);
+  };
   const loadPurchaseHistory = async () => {
+    const session = purchaseSessionRef.current;
     setHistoryLoading(true); setHistoryError("");
-    try { const data = await api.purchaseHistory(); setPurchaseHistory(data.purchases || []); }
-    catch (e) { setHistoryError(e.message || "Unable to load purchases."); }
-    finally { setHistoryLoading(false); }
+    try { const data = await api.purchaseHistory(); if (session === purchaseSessionRef.current) setPurchaseHistory(data.purchases || []); }
+    catch (e) { if (session === purchaseSessionRef.current) setHistoryError(e.message || "Unable to load purchases."); }
+    finally { if (session === purchaseSessionRef.current) setHistoryLoading(false); }
   };
   const submitRefundRequest = async () => {
     if (!refundPurchaseId) return;
+    const session = purchaseSessionRef.current;
     setRefundSubmitting(true); setHistoryError("");
     try {
       await api.requestRefund(refundPurchaseId, refundReason);
+      if (session !== purchaseSessionRef.current) return;
       setRefundPurchaseId(null); setRefundReason("");
       await loadPurchaseHistory();
-    } catch (e) { setHistoryError(e.message || "Unable to submit request."); }
-    finally { setRefundSubmitting(false); }
+    } catch (e) { if (session === purchaseSessionRef.current) setHistoryError(e.message || "Unable to submit request."); }
+    finally { if (session === purchaseSessionRef.current) setRefundSubmitting(false); }
   };
 
 
@@ -3909,6 +3919,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
   const onAuthSuccess = async (u) => {
+    clearPurchaseSession();
     setUser(u);
     setAuditsUsed(u.auditsUsed || 0);
     setPaidAudits(u.paidAudits || 0);
@@ -3943,6 +3954,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
   };
 
   const onLogout = () => {
+    clearPurchaseSession();
     setUser(null);
     setAuditsUsed(0);
     setShowHistory(false);
