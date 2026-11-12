@@ -1,0 +1,25 @@
+name: Purchase account isolation regression
+on:
+  pull_request:
+    paths:
+      - 'src/UxnestApp.jsx'
+      - 'tests/purchase-account-isolation.test.mjs'
+      - '.github/workflows/purchase-account-isolation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  account-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify purchase account isolation source regression
+        run: node --test tests/purchase-account-isolation.test.mjs
+      - name: Verify Vite build
+        run: npm run build
