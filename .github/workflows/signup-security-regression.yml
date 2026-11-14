@@ -1,0 +1,23 @@
+name: Signup security regression
+on:
+  pull_request:
+    paths:
+      - 'api/account.js'
+      - 'tests/signup-verification-boundary.test.mjs'
+      - '.github/workflows/signup-security-regression.yml'
+  push:
+    branches:
+      - 'test/signup-verification-trust-boundary-20261114'
+  workflow_dispatch:
+jobs:
+  signup-security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run dependency-free signup trust-boundary tests
+        run: node --test tests/signup-verification-boundary.test.mjs
