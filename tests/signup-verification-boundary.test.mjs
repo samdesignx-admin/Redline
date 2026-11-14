@@ -10,7 +10,7 @@ const signup = source.split('if (action === "signup") {')[1]?.split('/* --------
 assert.ok(signup, 'signup handler must be located for this regression test');
 
 test('signup must not read a client-provided emailVerified claim', () => {
-  assert.doesNotMatch(signup, /\b(?:req\.body\.emailVerified|\{[^}]*\bemailVerified\b[^}]*\}\s*=\s*req\.body)\b?/,
+  assert.doesNotMatch(signup, /\b(?:req\.body\.emailVerified|\{[^}]*\bemailVerified\b[^}]*\}\s*=\s*req\.body)/,
     'Email verification must be established server-side, never from req.body');
 });
 
