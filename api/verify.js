@@ -159,8 +159,9 @@ export default async function handler(req, res) {
         }),
       });
       if (!r.ok) {
-        const detail = await r.text();
-        res.status(502).json({ error: `Couldn't send the verification email. ${detail.slice(0, 200)}` });
+        // Never return upstream provider response bodies to callers: they can contain
+        // account, configuration, or provider-internal details.
+        res.status(502).json({ error: "Couldn't send the verification email. Please try again later." });
         return;
       }
     } catch (e) {
