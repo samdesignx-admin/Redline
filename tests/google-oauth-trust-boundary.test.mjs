@@ -18,3 +18,10 @@ test('Google email_verified must explicitly be true, not merely non-false', () =
   assert.match(google, /info\.email_verified\s*!==\s*true\s*&&\s*info\.email_verified\s*!==\s*["']true["']/);
   assert.doesNotMatch(google, /info\.email_verified\s*===\s*["']false["']/);
 });
+
+
+test('Google issuer must match an explicit trusted issuer allowlist', () => {
+  assert.match(google, /info\.iss\s*!==\s*["']accounts\.google\.com["']/);
+  assert.match(google, /info\.iss\s*!==\s*["']https:\/\/accounts\.google\.com["']/);
+  assert.match(google, /Google sign-in issuer was not recognized/);
+});
