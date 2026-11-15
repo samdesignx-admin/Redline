@@ -123,6 +123,8 @@ export default async function handler(req, res) {
 
     res.status(400).json({ error: "Unknown action" });
   } catch (e) {
-    res.status(500).json({ error: `Account request failed: ${(e && e.message) || "unknown error"}` });
+    // Do not expose database, provider, or internal exception details to callers.
+    console.error("Account request failed", e);
+    res.status(500).json({ error: "Account request failed. Please try again later." });
   }
 }
