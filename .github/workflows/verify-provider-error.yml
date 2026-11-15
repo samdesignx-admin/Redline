@@ -1,0 +1,20 @@
+name: Verification provider error regression
+on:
+  pull_request:
+    paths:
+      - 'api/verify.js'
+      - 'tests/verify-provider-error-sanitization.test.mjs'
+      - '.github/workflows/verify-provider-error.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-provider-error:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run provider error disclosure regression
+        run: node --test tests/verify-provider-error-sanitization.test.mjs
