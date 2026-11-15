@@ -1,0 +1,24 @@
+name: Password reset account enumeration regression
+
+on:
+  pull_request:
+    paths:
+      - "api/verify.js"
+      - "tests/reset-account-enumeration.test.mjs"
+      - ".github/workflows/reset-account-enumeration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reset-account-enumeration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run password reset response regression tests
+        run: node --test tests/reset-account-enumeration.test.mjs

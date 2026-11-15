@@ -231,7 +231,7 @@ export default async function handler(req, res) {
     if (!db) return;
     const { data: account } = await db.from("accounts").select("id").eq("email", cleanEmail).maybeSingle();
     if (!account) {
-      res.status(404).json({ error: "No account exists with that email address." });
+      res.status(400).json({ error: "Unable to reset the password with this code. Request a new code or contact support." });
       return;
     }
     const { error } = await db.from("accounts").update({
