@@ -92,6 +92,11 @@ export default async function handler(req, res) {
         res.status(401).json({ error: "Google sign-in was issued for a different application." });
         return;
       }
+      // Google's tokeninfo response must identify an accepted Google issuer.
+      if (info.iss !== "accounts.google.com" && info.iss !== "https://accounts.google.com") {
+        res.status(401).json({ error: "Google sign-in issuer was not recognized." });
+        return;
+      }
       const email = cleanEmail(info.email);
       if (!isEmail(email) || (info.email_verified !== true && info.email_verified !== "true")) {
         res.status(401).json({ error: "Google did not return a verified email address." });
