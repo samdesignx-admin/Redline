@@ -1,0 +1,31 @@
+name: Google OAuth security regression
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/google-oauth-security.yml'
+  workflow_dispatch:
+jobs:
+  google-oauth-security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Google OAuth security regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' tests < <(find scripts tests -type f \( -iname '*google*oauth*test*' -o -iname '*google*auth*test*' -o -iname '*oauth*security*test*' \) -print0 2>/dev/null || true)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo 'ERROR: No Google OAuth regression test files discovered.'
+            exit 1
+          fi
+          printf 'Running %s test file(s):\n' "${#tests[@]}"
+          printf '%s\n' "${tests[@]}"
+          node --test "${tests[@]}"

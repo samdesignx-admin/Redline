@@ -84,12 +84,21 @@ export default async function handler(req, res) {
       if (!r.ok) { res.status(401).json({ error: "Google sign-in could not be verified." }); return; }
       const info = await r.json();
       const expectedAud = process.env.GOOGLE_CLIENT_ID;
-      if (expectedAud && info.aud !== expectedAud) {
+      if (!expectedAud) {
+        res.status(503).json({ error: "Google sign-in is temporarily unavailable." });
+        return;
+      }
+      if (info.aud !== expectedAud) {
         res.status(401).json({ error: "Google sign-in was issued for a different application." });
         return;
       }
+      // Google's tokeninfo response must identify an accepted Google issuer.
+      if (info.iss !== "accounts.google.com" && info.iss !== "https://accounts.google.com") {
+        res.status(401).json({ error: "Google sign-in issuer was not recognized." });
+        return;
+      }
       const email = cleanEmail(info.email);
-      if (!isEmail(email) || info.email_verified === "false") {
+      if (!isEmail(email) || (info.email_verified !== true && info.email_verified !== "true")) {
         res.status(401).json({ error: "Google did not return a verified email address." });
         return;
       }
@@ -114,6 +123,8 @@ export default async function handler(req, res) {
 
     res.status(400).json({ error: "Unknown action" });
   } catch (e) {
-    res.status(500).json({ error: `Account request failed: ${(e && e.message) || "unknown error"}` });
+    // Do not expose database, provider, or internal exception details to callers.
+    console.error("Account request failed", { type: e?.name || "UnknownError" });
+    res.status(500).json({ error: "Account request failed. Please try again later." });
   }
 }
