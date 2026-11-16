@@ -32,13 +32,13 @@ assert.equal(normalizeEvidenceTarget({
 }), null);
 
 const collection = normalizeEvidenceCollection([
-  { findingIndex: 1, targetX: 10, targetY: 20, target: "A", explanation: "A" },
-  { findingIndex: 1, targetX: 10, targetY: 20, target: "A", explanation: "A" },
+  { findingIndex: 1, targetX: 10, targetY: 20, target: "Primary navigation menu", explanation: "Visible navigation control." },
+  { findingIndex: 1, targetX: 10, targetY: 20, target: "Primary navigation menu", explanation: "Visible navigation control." },
   ...Array.from({ length: MAX_ITEMS + 2 }, (_, i) => ({
     findingIndex: i + 2,
     targetX: i + 1,
     targetY: i + 2,
-    target: `Target ${i + 2}`,
+    target: `Visible target control ${i + 2}`,
     explanation: `Evidence ${i + 2}`,
   })),
 ]);
