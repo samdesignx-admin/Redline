@@ -29,7 +29,7 @@ async function invoke({ clientId, audience, verified = "true", tokenOk = true })
     fetch: async () => {
       fetchCalls++;
       return { ok: tokenOk, json: async () => ({
-        aud: audience, email: "test@example.com", email_verified: verified,
+        aud: audience, email: "test@example.com", ...(verified === "__missing__" ? {} : { email_verified: verified }),
       }) };
     },
     requireDb: () => db,
@@ -77,7 +77,7 @@ test("Google tokeninfo failure denies access", async () => {
 });
 
 test("unverified Google email is rejected before database access", async () => {
-  for (const verified of ["false", false, undefined, null, "unexpected"]) {
+  for (const verified of ["false", false, "__missing__", null, "unexpected"]) {
     const r = await invoke({ clientId: "expected", audience: "expected", verified });
     assert.equal(r.status, 401, `email_verified=${String(verified)} must be rejected`);
     assert.equal(r.dbCalls, 0);
