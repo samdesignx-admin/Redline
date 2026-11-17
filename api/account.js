@@ -93,7 +93,7 @@ export default async function handler(req, res) {
         return;
       }
       const email = cleanEmail(info.email);
-      if (!isEmail(email) || info.email_verified === "false") {
+      if (!isEmail(email) || (info.email_verified !== true && info.email_verified !== "true")) {
         res.status(401).json({ error: "Google did not return a verified email address." });
         return;
       }
