@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         return;
       }
       const { data } = await db.from("accounts").select("*").eq("id", sess.accountId).maybeSingle();
-      res.status(200).json({ account: publicAccount(data) });
+      res.status(200).json({ account: data?.email_verified === true ? publicAccount(data) : null });
       return;
     }
 
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       }).select().single();
       if (error) throw error;
 
-      res.status(200).json({ account: publicAccount(data), token: issueSession(data.id) });
+      res.status(202).json({ account: publicAccount(data), verificationRequired: true });
       return;
     }
 
@@ -67,6 +67,10 @@ export default async function handler(req, res) {
       // which email addresses are registered.
       if (!data || !verifyPassword(password, data.password_hash)) {
         res.status(401).json({ error: "Incorrect email or password." });
+        return;
+      }
+      if (data.email_verified !== true) {
+        res.status(403).json({ error: "Verify your email address before signing in.", verificationRequired: true });
         return;
       }
       await db.from("accounts").update({ last_login_at: new Date().toISOString() }).eq("id", data.id);
@@ -106,7 +110,9 @@ export default async function handler(req, res) {
         if (inserted.error) throw inserted.error;
         data = inserted.data;
       } else {
-        await db.from("accounts").update({ last_login_at: new Date().toISOString() }).eq("id", data.id);
+        // A verified Google identity may establish ownership of this email.
+        await db.from("accounts").update({ email_verified: true, last_login_at: new Date().toISOString() }).eq("id", data.id);
+        data = { ...data, email_verified: true };
       }
       res.status(200).json({ account: publicAccount(data), token: issueSession(data.id) });
       return;
