@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     /* ---------------- Sign up ---------------- */
     if (action === "signup") {
       const email = cleanEmail(req.body.email);
-      const { password, name, company, mobile, emailVerified } = req.body;
+      const { password, name, company, mobile } = req.body;
       if (!isEmail(email)) { res.status(400).json({ error: "Enter a valid email address." }); return; }
       if (!password || String(password).length < 6) { res.status(400).json({ error: "Password must be at least 6 characters." }); return; }
 
@@ -47,7 +47,9 @@ export default async function handler(req, res) {
         company: (company || "").trim(),
         mobile: (mobile || "").trim(),
         password_hash: hashPassword(password),
-        email_verified: !!emailVerified,
+        // Never accept email verification status from an untrusted signup payload.
+        // A separate server-validated verification flow must set this to true.
+        email_verified: false,
         last_login_at: new Date().toISOString(),
       }).select().single();
       if (error) throw error;
