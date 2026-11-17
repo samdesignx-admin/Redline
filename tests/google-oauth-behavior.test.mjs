@@ -34,7 +34,7 @@ async function invoke({ clientId, audience, verified = "true", tokenOk = true })
     },
     requireDb: () => db,
     cleanEmail: x => String(x || "").trim().toLowerCase(),
-    isEmail: x => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(x),
+    isEmail: x => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x),
     publicAccount: x => x,
     issueSession: () => "fake-session",
     console,
