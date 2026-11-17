@@ -75,3 +75,17 @@ test("Google tokeninfo failure denies access", async () => {
   assert.equal(r.status, 401);
   assert.equal(r.dbCalls, 0);
 });
+
+test("unverified Google email is rejected before database access", async () => {
+  for (const verified of ["false", false, undefined, null, "unexpected"]) {
+    const r = await invoke({ clientId: "expected", audience: "expected", verified });
+    assert.equal(r.status, 401, `email_verified=${String(verified)} must be rejected`);
+    assert.equal(r.dbCalls, 0);
+  }
+});
+
+test("boolean true Google email verification is accepted", async () => {
+  const r = await invoke({ clientId: "expected", audience: "expected", verified: true });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.token, "fake-session");
+});
