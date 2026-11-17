@@ -77,17 +77,23 @@ export default async function handler(req, res) {
       const credential = req.body.credential;
       if (!credential) { res.status(400).json({ error: "Missing Google credential" }); return; }
 
+      // Reject missing configuration before contacting Google's tokeninfo endpoint.
+      // Fail closed without making an unnecessary outbound request.
+      const expectedAud = process.env.GOOGLE_CLIENT_ID;
+      if (!expectedAud) {
+        res.status(503).json({ error: "Google sign-in is temporarily unavailable." });
+        return;
+      }
       // Verify the ID token with Google rather than trusting the browser.
       const r = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
       if (!r.ok) { res.status(401).json({ error: "Google sign-in could not be verified." }); return; }
       const info = await r.json();
-      const expectedAud = process.env.GOOGLE_CLIENT_ID;
-      if (expectedAud && info.aud !== expectedAud) {
+      if (info.aud !== expectedAud) {
         res.status(401).json({ error: "Google sign-in was issued for a different application." });
         return;
       }
       const email = cleanEmail(info.email);
-      if (!isEmail(email) || info.email_verified === "false") {
+      if (!isEmail(email) || (info.email_verified !== true && info.email_verified !== "true")) {
         res.status(401).json({ error: "Google did not return a verified email address." });
         return;
       }
