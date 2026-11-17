@@ -13,7 +13,7 @@
     "test:report-model": "node scripts/verify-report-model.mjs",
     "test:evidence-render": "node scripts/verify-evidence-render.mjs",
     "test:report-completeness": "node scripts/verify-report-completeness.mjs",
-    "test:google-oauth-audience": "node scripts/verify-google-oauth-audience.mjs"
+    "test:google-oauth-audience": "node scripts/verify-google-oauth-audience.mjs && node --test tests/google-oauth-behavior.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
