@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run test:free-beta-quota && npm run test:report-model && npm run test:report-completeness && npm run test:free-beta-payments && npm run test:free-beta-audit-gate && vite build",
+    "build": "npm run test:free-beta-quota && npm run test:report-model && npm run test:report-completeness && npm run test:free-beta-payments && npm run test:free-beta-audit-gate && npm run test:beta-error-redaction && vite build",
     "preview": "vite preview",
     "test:evidence": "node scripts/verify-evidence-model.mjs",
     "test:evidence-gate": "node scripts/verify-evidence-gate.mjs",
@@ -15,7 +15,8 @@
     "test:report-completeness": "node scripts/verify-report-completeness.mjs",
     "test:free-beta-quota": "node --test scripts/verify-free-beta-quota.mjs",
     "test:free-beta-payments": "node --test scripts/verify-free-beta-payment-routes.mjs",
-    "test:free-beta-audit-gate": "node --test scripts/verify-free-beta-audit-gate.mjs"
+    "test:free-beta-audit-gate": "node --test scripts/verify-free-beta-audit-gate.mjs",
+    "test:beta-error-redaction": "node --test scripts/verify-beta-error-redaction.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
