@@ -8,6 +8,13 @@ export const maxDuration = 20;
 const AUDIT_QUOTA = 1; // first completed audit is free; additional audits consume purchased credits
 
 export default async function handler(req, res) {
+  // Fail closed until the monthly quota ledger and authentication gates are deployed.
+  // Never enable FREE_BETA_AUDITS_ENABLED before those safeguards pass review.
+  if (process.env.FREE_BETA_MODE === "true" && process.env.FREE_BETA_AUDITS_ENABLED !== "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Free beta audits are not yet available.", code: "BETA_AUDITS_NOT_READY" });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
