@@ -2,6 +2,7 @@
 // storage no longer resets it.
 
 import { requireDb, readSession } from "./_lib.js";
+import { utcMonthWindow, monthlyQuota } from "./_free-beta-quota.js";
 
 export const maxDuration = 20;
 
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
     return;
   }
   const accountId = sess.accountId;
+  const isFreeBeta = process.env.FREE_BETA_MODE === "true";
   const { action } = req.body;
 
   try {
@@ -45,6 +47,15 @@ export default async function handler(req, res) {
 
     /* ---------------- Check remaining quota ---------------- */
     if (action === "quota") {
+      if (isFreeBeta) {
+        const { start, end } = utcMonthWindow();
+        const { count, error } = await db.from("free_beta_audit_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("account_id", accountId).gte("created_at", start).lt("created_at", end);
+        if (error || count === null) throw error || new Error("Monthly usage unavailable");
+        res.status(200).json({ ...monthlyQuota(count), paid: 0, resetsAt: end });
+        return;
+      }
       const { data } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
       const used = (data && data.audits_used) || 0;
       const paid = (data && data.paid_audits) || 0;
@@ -57,8 +68,14 @@ export default async function handler(req, res) {
       const a = req.body.audit || {};
       // Database function locks the account and inserts the audit in one transaction:
       // two concurrent audits cannot spend one credit twice.
-      const { data, error } = await db.rpc("create_uxnest_audit", {
+      const requestId = String(req.body.requestId || "");
+      if (isFreeBeta && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+        res.status(400).json({ error: "A valid audit request ID is required.", code: "INVALID_REQUEST_ID" });
+        return;
+      }
+      const { data, error } = await db.rpc(isFreeBeta ? "create_free_beta_audit" : "create_uxnest_audit", {
         p_account_id: accountId,
+        ...(isFreeBeta ? { p_request_id: requestId } : {}),
         p_audit: {
           title: a.title || null,
           mode: a.mode || "files",
@@ -73,6 +90,10 @@ export default async function handler(req, res) {
         },
       });
       if (error) {
+        if (isFreeBeta && String(error.message || "").includes("BETA_MONTHLY_QUOTA_EXCEEDED")) {
+          res.status(429).json({ error: "You have used all 3 free audits for this month.", code: "BETA_MONTHLY_QUOTA_EXCEEDED" });
+          return;
+        }
         if (String(error.message || "").includes("AUDIT_PAYMENT_REQUIRED")) {
           res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
           return;
