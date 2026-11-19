@@ -65,9 +65,10 @@ export default async function handler(req, res) {
 
     /* ---------------- Save and charge atomically ---------------- */
     if (action === "create") {
-      // Never allow a saved beta audit to be fabricated while the costly AI
-      // reservation/settlement pipeline is intentionally unavailable.
-      if (isFreeBeta && process.env.FREE_BETA_AI_PROXY_ENABLED !== "true") {
+      // A rollout flag is not proof of a reservation. Until the AI proxy
+      // atomically reserves and settles quota, reject beta audit creation
+      // even if every feature flag is accidentally enabled.
+      if (isFreeBeta) {
         res.setHeader("cache-control", "no-store");
         res.status(503).json({
           error: "Beta audit creation is not yet available.",
