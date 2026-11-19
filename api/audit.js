@@ -110,7 +110,7 @@ export default async function handler(req, res) {
   }
   const body = {
     model: typeof model === "string" ? model : "claude-sonnet-5-5",
-    max_tokens: Math.min(Number(max_tokens) || 1000, 4096),
+    max_tokens: Number.isFinite(Number(max_tokens)) && Number(max_tokens) >= 1\n      ? Math.min(Math.floor(Number(max_tokens)), 4096) : 1000,
     messages,
   };
   if (Array.isArray(tools)) body.tools = tools;
