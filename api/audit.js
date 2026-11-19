@@ -61,6 +61,17 @@ export default async function handler(req, res) {
     res.status(401).json({ error: "Please log in to run a beta audit.", code: "BETA_LOGIN_REQUIRED" });
     return;
   }
+  // An activation flag alone must not authorize paid AI usage in beta.
+  // Until a verified atomic reservation RPC is wired here, reject all beta
+  // proxy requests even if both rollout flags are mistakenly enabled.
+  if (process.env.FREE_BETA_MODE === "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({
+      error: "Beta AI quota reservation is not yet implemented.",
+      code: "BETA_RESERVATION_NOT_READY",
+    });
+    return;
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY is not set" });
     return;
