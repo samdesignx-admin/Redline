@@ -51,7 +51,7 @@ export default async function handler(req, res) {
         const { start, end } = utcMonthWindow();
         const { count, error } = await db.from("free_beta_audit_usage")
           .select("id", { count: "exact", head: true })
-          .eq("account_id", accountId).gte("created_at", start).lt("created_at", end);
+          .eq("account_id", accountId).eq("month_start", start.slice(0, 10));
         if (error || count === null) throw error || new Error("Monthly usage unavailable");
         res.status(200).json({ ...monthlyQuota(count), paid: 0, resetsAt: end });
         return;
