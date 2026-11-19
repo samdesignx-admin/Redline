@@ -41,6 +41,13 @@ export default async function handler(req, res) {
     res.status(503).json({ error: "Free beta audits are not yet available.", code: "BETA_AUDITS_NOT_READY" });
     return;
   }
+  // A signed session alone does not reserve quota. Keep the costly AI proxy
+  // disabled until a server-side reservation/settlement flow is verified.
+  if (process.env.FREE_BETA_MODE === "true" && process.env.FREE_BETA_AI_PROXY_ENABLED !== "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Beta AI audits are not yet available.", code: "BETA_AI_PROXY_NOT_READY" });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
