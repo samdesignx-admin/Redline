@@ -9,6 +9,7 @@
 // line of defense (note: in-memory state resets per serverless instance, so
 // for real protection add Upstash Redis or similar before going public).
 
+import crypto from "node:crypto";
 import { readSession } from "./_lib.js";
 
 export const maxDuration = 60;
