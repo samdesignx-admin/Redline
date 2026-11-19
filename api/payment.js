@@ -68,6 +68,12 @@ async function validateCompletedCheckout(checkout, accountId) {
   return { checkoutId: checkout.id, quantity, amountCents: product?.price ? Number(product.price) * quantity : BETA_PRICE_CENTS * quantity, currency: product?.currency || "USD" };
 }
 export default async function handler(req, res) {
+  // Reversible free-beta gate: reject before database or Creem access.
+  if (process.env.FREE_BETA_MODE === "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Payments are unavailable during the free beta.", code: "PAYMENTS_DISABLED" });
+    return;
+  }
   if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
   const db = requireDb(res); if (!db) return;
   const sess = readSession((req.body || {}).token);
