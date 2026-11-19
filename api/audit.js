@@ -9,6 +9,8 @@
 // line of defense (note: in-memory state resets per serverless instance, so
 // for real protection add Upstash Redis or similar before going public).
 
+import { readSession } from "./_lib.js";
+
 export const maxDuration = 60;
 
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -41,6 +43,14 @@ export default async function handler(req, res) {
   }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  // Beta AI calls must be associated with a signed application session.
+  // The client must send its session token before enabling beta audits.
+  if (process.env.FREE_BETA_MODE === "true" && !readSession(
+    req.headers?.["x-uxnest-session"] || (req.body || {}).token
+  )) {
+    res.status(401).json({ error: "Please log in to run a beta audit.", code: "BETA_LOGIN_REQUIRED" });
     return;
   }
   if (!process.env.ANTHROPIC_API_KEY) {
