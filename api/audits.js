@@ -116,6 +116,19 @@ export default async function handler(req, res) {
 
     res.status(400).json({ error: "Unknown action" });
   } catch (e) {
+    // Never expose database error details in public beta responses.
+    if (isFreeBeta) {
+      console.error(JSON.stringify({
+        event: "beta_audit_request_error",
+        action: typeof action === "string" ? action.slice(0, 40) : "unknown",
+        message: e instanceof Error ? e.message : String(e),
+      }));
+      res.status(500).json({
+        error: "We couldn't complete the audit request. Please try again.",
+        code: "BETA_AUDIT_INTERNAL_ERROR",
+      });
+      return;
+    }
     res.status(500).json({ error: `Audit request failed: ${(e && e.message) || "unknown error"}` });
   }
 }
