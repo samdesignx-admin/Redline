@@ -35,6 +35,8 @@ test("beta AI proxy rejects unauthenticated calls before contacting Anthropic", 
   const oldEnabled=process.env.FREE_BETA_AUDITS_ENABLED;
   process.env.FREE_BETA_MODE="true";
   process.env.FREE_BETA_AUDITS_ENABLED="true";
+  const oldProxy=process.env.FREE_BETA_AI_PROXY_ENABLED;
+  process.env.FREE_BETA_AI_PROXY_ENABLED="true";
   try {
     let status,payload;
     const res={status(n){status=n;return this;},json(v){payload=v;return this;}};
@@ -44,5 +46,26 @@ test("beta AI proxy rejects unauthenticated calls before contacting Anthropic", 
   } finally {
     if(oldBeta===undefined)delete process.env.FREE_BETA_MODE;else process.env.FREE_BETA_MODE=oldBeta;
     if(oldEnabled===undefined)delete process.env.FREE_BETA_AUDITS_ENABLED;else process.env.FREE_BETA_AUDITS_ENABLED=oldEnabled;
+    if(oldProxy===undefined)delete process.env.FREE_BETA_AI_PROXY_ENABLED;else process.env.FREE_BETA_AI_PROXY_ENABLED=oldProxy;
+  }
+});
+
+test("beta AI proxy fails closed without quota reservation activation", async () => {
+  const prior = [process.env.FREE_BETA_MODE,process.env.FREE_BETA_AUDITS_ENABLED,process.env.FREE_BETA_AI_PROXY_ENABLED];
+  process.env.FREE_BETA_MODE="true";
+  process.env.FREE_BETA_AUDITS_ENABLED="true";
+  delete process.env.FREE_BETA_AI_PROXY_ENABLED;
+  try {
+    let status, payload;
+    const headers={};
+    const res={setHeader(k,v){headers[k.toLowerCase()]=v;return this;},status(n){status=n;return this;},json(v){payload=v;return this;}};
+    await auditProxy({method:"POST",headers:{},body:{}},res);
+    assert.equal(status,503);
+    assert.equal(payload.code,"BETA_AI_PROXY_NOT_READY");
+    assert.equal(headers["cache-control"],"no-store");
+  } finally {
+    for(const [key,val] of [["FREE_BETA_MODE",prior[0]],["FREE_BETA_AUDITS_ENABLED",prior[1]],["FREE_BETA_AI_PROXY_ENABLED",prior[2]]]){
+      if(val===undefined)delete process.env[key];else process.env[key]=val;
+    }
   }
 });
