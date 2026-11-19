@@ -29,3 +29,20 @@ test("free beta audit endpoints fail closed until separately enabled", async () 
     if(oldEnabled===undefined) delete process.env.FREE_BETA_AUDITS_ENABLED; else process.env.FREE_BETA_AUDITS_ENABLED=oldEnabled;
   }
 });
+
+test("beta AI proxy rejects unauthenticated calls before contacting Anthropic", async () => {
+  const oldBeta=process.env.FREE_BETA_MODE;
+  const oldEnabled=process.env.FREE_BETA_AUDITS_ENABLED;
+  process.env.FREE_BETA_MODE="true";
+  process.env.FREE_BETA_AUDITS_ENABLED="true";
+  try {
+    let status,payload;
+    const res={status(n){status=n;return this;},json(v){payload=v;return this;}};
+    await auditProxy({method:"POST",headers:{},body:{messages:[{role:"user",content:"test"}]}},res);
+    assert.equal(status,401);
+    assert.equal(payload.code,"BETA_LOGIN_REQUIRED");
+  } finally {
+    if(oldBeta===undefined)delete process.env.FREE_BETA_MODE;else process.env.FREE_BETA_MODE=oldBeta;
+    if(oldEnabled===undefined)delete process.env.FREE_BETA_AUDITS_ENABLED;else process.env.FREE_BETA_AUDITS_ENABLED=oldEnabled;
+  }
+});
