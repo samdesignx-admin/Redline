@@ -3678,7 +3678,7 @@ export default function UxnestApp() {
 
   async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
-    const body = { model: "claude-sonnet-5-5", max_tokens: 1000, messages };
+    // Report sections frequently exceed 1,000 output tokens; avoid repeated\n    // max_tokens continuations that multiply latency and timeout risk.\n    const body = { model: "claude-sonnet-5-5", max_tokens: 3000, messages };
     if (tools) body.tools = tools;
 
     const requestId = typeof crypto !== "undefined" && crypto.randomUUID
