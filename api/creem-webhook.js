@@ -36,12 +36,9 @@ async function saveRefundEvent(db, event, refund, state, detail = null) {
   if (error) throw error;
 }
 export default async function handler(req, res) {
-  // Free-beta mode must never process provider webhooks or alter payment records.
-  if (process.env.FREE_BETA_MODE === "true") {
-    res.setHeader("cache-control", "no-store");
-    res.status(503).send("Payments are unavailable during the free beta.");
-    return;
-  }
+  // Keep signed Creem webhooks active even during beta: refunds and delayed
+  // transactions from pre-beta purchases must still be reconciled.
+  // New checkout creation is blocked independently in api/payment.js.
   if (req.method !== "POST") { res.status(405).send("Method not allowed"); return; }
   if (!process.env.CREEM_WEBHOOK_SECRET) { res.status(503).send("Creem webhook is not configured."); return; }
   const db = requireDb(res); if (!db) return;
