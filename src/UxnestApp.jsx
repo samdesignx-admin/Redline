@@ -3871,7 +3871,21 @@ export default function UxnestApp() {
     const earlyFailure = coreIndexes.map((i) => results[i]).find((result) => result?.status === "rejected");
     if (earlyFailure) {
       if (earlyFailure.reason?.message === "CANCELLED" || earlyFailure.reason?.message === "DEADLINE") throw earlyFailure.reason;
-      const error = new Error("The source analysis was incomplete; ranking and scoring were not generated. No audit credit was used.");
+      // Preserve the actual failure category so a provider timeout, HTTP error,
+      // or missing report section is not mislabeled as a generic source failure.
+      const cause = earlyFailure.reason;
+      const failedIndex = coreIndexes.find((i) => results[i]?.status === "rejected");
+      const detail = cause?.code === "AUDIT_INCOMPLETE"
+        ? cause.message
+        : cause?.message && /timed out|temporarily unavailable|rate limit|busy|HTTP 4\\d\\d|HTTP 5\\d\\d|connection|audit service|API request failed/i.test(cause.message)
+          ? cause.message
+          : "The AI analysis service could not complete this section. Please retry.";
+      console.error("uxnest_audit_core_batch_failed", {
+        stage: failedIndex == null ? "unknown" : `report-section-${failedIndex + 1}`,
+        code: cause?.code || "CORE_BATCH_FAILED",
+        message: String(cause?.message || "unknown").slice(0, 300),
+      });
+      const error = new Error(`${detail} Ranking and scoring were not generated. No audit credit was used.`);
       error.code = "AUDIT_INCOMPLETE";
       throw error;
     }
