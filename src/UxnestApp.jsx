@@ -3889,7 +3889,7 @@ export default function UxnestApp() {
       const failedIndex = coreIndexes.find((i) => results[i]?.status === "rejected");
       const detail = cause?.code === "AUDIT_INCOMPLETE"
         ? cause.message
-        : cause?.message && /timed out|temporarily unavailable|rate limit|busy|HTTP 4\\d\\d|HTTP 5\\d\\d|connection|audit service|API request failed/i.test(cause.message)
+        : cause?.message && /timed out|temporarily unavailable|rate limit|busy|HTTP [45]\d\d|connection|audit service|API request failed/i.test(cause.message)
           ? cause.message
           : "The AI analysis service could not complete this section. Please retry.";
       console.error("uxnest_audit_core_batch_failed", {
