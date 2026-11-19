@@ -3760,6 +3760,7 @@ export default function UxnestApp() {
     let messages = initialMessages;
     let fullText = "";
     let iterations = 0;
+    let completed = false;
     while (iterations < 10) {
       iterations++;
       if (onRound) onRound(iterations);
@@ -3780,7 +3781,16 @@ export default function UxnestApp() {
         ];
         continue;
       }
+      completed = true;
       break;
+    }
+    // Ten continuations without an end_turn is not a completed report.
+    // Surface the actual provider stop condition instead of accepting a
+    // truncated response that later fails section validation ambiguously.
+    if (!completed) {
+      const error = new Error(`Claude did not finish ${stage} after ${iterations} continuation rounds. No audit credit was used.`);
+      error.code = "AUDIT_INCOMPLETE";
+      throw error;
     }
     return fullText;
   }
