@@ -65,6 +65,16 @@ export default async function handler(req, res) {
 
     /* ---------------- Save and charge atomically ---------------- */
     if (action === "create") {
+      // Never allow a saved beta audit to be fabricated while the costly AI
+      // reservation/settlement pipeline is intentionally unavailable.
+      if (isFreeBeta && process.env.FREE_BETA_AI_PROXY_ENABLED !== "true") {
+        res.setHeader("cache-control", "no-store");
+        res.status(503).json({
+          error: "Beta audit creation is not yet available.",
+          code: "BETA_RESERVATION_NOT_READY",
+        });
+        return;
+      }
       const a = req.body.audit || {};
       // Database function locks the account and inserts the audit in one transaction:
       // two concurrent audits cannot spend one credit twice.
