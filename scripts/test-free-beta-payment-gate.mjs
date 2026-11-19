@@ -7,7 +7,15 @@ test("free beta blocks checkout and verification before database or provider acc
   const previous = process.env.FREE_BETA_MODE;
   process.env.FREE_BETA_MODE = "true";
   try {
-    for (const action of ["checkout", "verify", "unexpected"]) {
+    for (const scenario of [
+      { method: "POST", body: { action: "checkout" } },
+      { method: "POST", body: { action: "verify" } },
+      { method: "POST", body: { action: "unexpected" } },
+      { method: "POST", body: {} },
+      { method: "GET" },
+      { method: "OPTIONS" },
+    ]) {
+      const label = `${scenario.method}:${scenario.body?.action ?? "no-action"}`;
       let status;
       let payload;
       const headers = {};
@@ -18,11 +26,11 @@ test("free beta blocks checkout and verification before database or provider acc
       };
       // No session, database, or Creem configuration: a successful test proves
       // the beta gate returns before those dependencies are accessed.
-      await handler({ method: "POST", body: { action } }, res);
-      assert.equal(status, 503, action);
-      assert.equal(payload?.code, "PAYMENTS_DISABLED", action);
-      assert.equal(headers["cache-control"], "no-store", action);
-      assert.equal(payload?.checkout_url, undefined, action);
+      await handler(scenario, res);
+      assert.equal(status, 503, label);
+      assert.equal(payload?.code, "PAYMENTS_DISABLED", label);
+      assert.equal(headers["cache-control"], "no-store", label);
+      assert.equal(payload?.checkout_url, undefined, label);
     }
   } finally {
     if (previous === undefined) delete process.env.FREE_BETA_MODE;
