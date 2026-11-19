@@ -8,7 +8,8 @@ const sql = readFileSync(new URL("../docs/free-beta-monthly-quota-review.sql", i
 
 test("beta audit create is blocked before unverified AI reservation rollout", () => {
   const create = records.slice(records.indexOf('if (action === "create")'));
-  assert.match(create, /FREE_BETA_AI_PROXY_ENABLED/);
+  assert.match(create, /if \(isFreeBeta\) \{/);
+  assert.doesNotMatch(create.slice(0, create.indexOf("BETA_RESERVATION_NOT_READY")), /FREE_BETA_AI_PROXY_ENABLED/);
   assert.match(create, /BETA_RESERVATION_NOT_READY/);
   assert.ok(create.indexOf("BETA_RESERVATION_NOT_READY") < create.indexOf('db.rpc('));
 });
