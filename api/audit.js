@@ -14,6 +14,11 @@ import { readSession } from "./_lib.js";
 
 export const maxDuration = 60;
 
+export function safeMaxTokens(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 4096) : 1000;
+}
+
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour
 // The landing-page preview is unauthenticated, so it gets a tighter cap of
