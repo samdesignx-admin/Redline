@@ -51,3 +51,8 @@ test("signed session passes auth gate without invoking provider when key absent"
     names.forEach((k,i) => { if (prior[i] === undefined) delete process.env[k]; else process.env[k] = prior[i]; });
   }
 });
+
+test("browser cannot select an arbitrary expensive Claude model", () => {
+  assert.match(api, /model: "claude-sonnet-5-5"/);
+  assert.doesNotMatch(api, /model:\s*typeof model/);
+});
