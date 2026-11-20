@@ -86,7 +86,8 @@ export default async function handler(req, res) {
     return;
   }
   if (!process.env.ANTHROPIC_API_KEY) {
-    res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY is not set" });
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "The audit service is temporarily unavailable. Please try again later.", code: "AUDIT_PROVIDER_NOT_CONFIGURED" });
     return;
   }
 
