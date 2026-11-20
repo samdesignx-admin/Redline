@@ -3699,6 +3699,7 @@ export default function UxnestApp() {
           "Content-Type": "application/json",
           "X-UXNest-Stage": stage,
           "X-UXNest-Request-Id": requestId,
+          "X-UXNest-Session": getToken(),
         },
         body: JSON.stringify(body),
       });
