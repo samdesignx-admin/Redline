@@ -117,13 +117,14 @@ export default async function handler(req, res) {
 
   // Allowlist of fields forwarded to the API — prevents clients from
   // injecting arbitrary parameters through the proxy.
-  const { model, max_tokens, messages, tools } = req.body || {};
+  const { max_tokens, messages, tools } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "Bad request: messages required" });
     return;
   }
   const body = {
-    model: typeof model === "string" ? model : "claude-sonnet-5-5",
+    // Never let a browser choose an arbitrary, potentially more expensive provider model.
+    model: "claude-sonnet-5-5",
     max_tokens: safeMaxTokens(max_tokens),
     messages,
   };
