@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run test:free-beta-quota && npm run test:report-model && npm run test:report-completeness && npm run test:free-beta-payments && npm run test:free-beta-audit-gate && npm run test:beta-error-redaction && npm run test:beta-rollout-contract && npm run test:audit-token-budget && npm run test:claude-audit && vite build",
+    "build": "npm run test:free-beta-quota && npm run test:report-model && npm run test:report-completeness && npm run test:free-beta-payments && npm run test:free-beta-audit-gate && npm run test:beta-error-redaction && npm run test:beta-rollout-contract && npm run test:audit-token-budget && npm run test:claude-audit && npm run test:audit-session-gate && vite build",
     "preview": "vite preview",
     "test:evidence": "node scripts/verify-evidence-model.mjs",
     "test:evidence-gate": "node scripts/verify-evidence-gate.mjs",
@@ -19,7 +19,8 @@
     "test:beta-error-redaction": "node --test scripts/verify-beta-error-redaction.mjs",
     "test:beta-rollout-contract": "node --test scripts/verify-beta-rollout-contract.mjs",
     "test:audit-token-budget": "node --test scripts/verify-audit-token-budget.mjs",
-    "test:claude-audit": "node --test scripts/verify-claude-audit-regression.mjs"
+    "test:claude-audit": "node --test scripts/verify-claude-audit-regression.mjs",
+    "test:audit-session-gate": "node --test scripts/verify-audit-session-gate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
