@@ -44,8 +44,9 @@ test("signed session passes auth gate without invoking provider when key absent"
     let status, payload;
     const res = { setHeader() { return this; }, status(n) { status = n; return this; }, json(v) { payload = v; return this; } };
     await auditProxy({ method: "POST", headers: { "x-uxnest-session": issueSession("test-account") }, body: { messages: [{ role: "user", content: "hello" }] } }, res);
-    assert.equal(status, 500);
-    assert.match(payload.error, /ANTHROPIC_API_KEY/);
+    assert.equal(status, 503);
+    assert.equal(payload.code, "AUDIT_PROVIDER_NOT_CONFIGURED");
+    assert.doesNotMatch(JSON.stringify(payload), /ANTHROPIC_API_KEY|SESSION_SECRET|SUPABASE_SERVICE_ROLE_KEY/);
   } finally {
     names.forEach((k,i) => { if (prior[i] === undefined) delete process.env[k]; else process.env[k] = prior[i]; });
   }
