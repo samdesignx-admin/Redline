@@ -97,3 +97,29 @@ test("enabling all beta flags cannot bypass missing atomic AI reservation", asyn
     keys.forEach((k,i)=>{if(prior[i]===undefined)delete process.env[k];else process.env[k]=prior[i];});
   }
 });
+
+test("enabling every beta flag cannot create an audit without atomic reservation", async () => {
+  const keys=["FREE_BETA_MODE","FREE_BETA_AUDITS_ENABLED","FREE_BETA_AI_PROXY_ENABLED","SESSION_SECRET"];
+  const prior=keys.map(k=>process.env[k]);
+  process.env.FREE_BETA_MODE="true";
+  process.env.FREE_BETA_AUDITS_ENABLED="true";
+  process.env.FREE_BETA_AI_PROXY_ENABLED="true";
+  process.env.SESSION_SECRET="test-only-secret-not-for-production";
+  try {
+    const { issueSession } = await import("../api/_lib.js");
+    const token=issueSession("00000000-0000-4000-8000-000000000001");
+    let status,payload;
+    const headers={};
+    const res={
+      setHeader(k,v){headers[k.toLowerCase()]=v;return this;},
+      status(n){status=n;return this;},
+      json(v){payload=v;return this;}
+    };
+    await auditRecords({method:"POST",body:{action:"create",token,audit:{title:"test"}}},res);
+    assert.equal(status,503);
+    assert.equal(payload.code,"BETA_RESERVATION_NOT_READY");
+    assert.equal(headers["cache-control"],"no-store");
+  } finally {
+    keys.forEach((k,i)=>{if(prior[i]===undefined)delete process.env[k];else process.env[k]=prior[i];});
+  }
+});
