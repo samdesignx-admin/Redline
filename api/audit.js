@@ -77,6 +77,14 @@ export default async function handler(req, res) {
     });
     return;
   }
+  // Every paid Claude request must belong to a verified application session.
+  // The legacy IP-only limiter is not an authorization boundary.
+  const session = readSession(req.headers?.["x-uxnest-session"]);
+  if (!session) {
+    res.setHeader("cache-control", "no-store");
+    res.status(401).json({ error: "Please log in to use the audit service.", code: "AUDIT_LOGIN_REQUIRED" });
+    return;
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY is not set" });
     return;
