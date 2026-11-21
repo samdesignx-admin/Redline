@@ -29,7 +29,7 @@ export function assertReservationTransition(from, to) {
 }
 
 export function reservationMonth(createdAt) {
-  const date = new Date(createdAt);
+  if (typeof createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(createdAt) || !/(Z|[+-]\d{2}:\d{2})$/.test(createdAt)) {\n    throw new TypeError("Invalid reservation timestamp");\n  }\n  const date = new Date(createdAt);
   if (!Number.isFinite(date.getTime())) throw new TypeError("Invalid reservation timestamp");
   return date.toISOString().slice(0, 7);
 }
