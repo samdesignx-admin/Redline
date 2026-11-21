@@ -29,6 +29,6 @@ test("Claude upstream errors are redacted before reaching clients", () => {
 test("legacy audit API redacts database errors too", () => {
   const source = fs.readFileSync(new URL("../api/audits.js", import.meta.url), "utf8");
   assert.match(source, /code: "AUDIT_INTERNAL_ERROR"/);
-  assert.doesNotMatch(source, /Audit request failed:.*e\\.message/);
-  assert.match(source, /console\\.error\\("audit_request_error", e\\)/);
+  assert.doesNotMatch(source, /Audit request failed:.*e\.message/);
+  assert.match(source, /console\.error\("audit_request_error", e\)/);
 });
