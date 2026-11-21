@@ -40,3 +40,10 @@ test("reservation month remains based on original UTC creation time", () => {
   assert.equal(reservationMonth("2026-12-01T01:00:00+02:00"), "2026-11");
   assert.throws(() => reservationMonth("invalid"), TypeError);
 });
+
+test("reservation timestamps must include an explicit timezone and cannot coerce to epoch", () => {
+  for (const value of [null, undefined, 0, 1, false, true, "", "2026-11-20", "2026-11-20T12:00:00", "2026-11-20T12:00:00+99:99", {}, []]) {
+    assert.throws(() => reservationMonth(value), TypeError);
+  }
+  assert.equal(reservationMonth("2026-11-20T12:00:00-06:00"), "2026-11");
+});
