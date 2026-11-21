@@ -173,6 +173,15 @@ export default async function handler(req, res) {
         status: upstream.status,
         durationMs: Date.now() - startedAt,
       }));
+      // Provider error bodies may contain internal diagnostics. Do not relay them.
+      const retryable = upstream.status === 429 || upstream.status >= 500;
+      res.status(upstream.status).json({
+        error: "The audit provider could not complete this step.",
+        code: "AUDIT_PROVIDER_ERROR",
+        retryable,
+        requestId,
+      });
+      return;
     }
 
     res.status(upstream.status).json(data);
