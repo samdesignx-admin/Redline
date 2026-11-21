@@ -140,6 +140,8 @@ export default async function handler(req, res) {
       });
       return;
     }
-    res.status(500).json({ error: `Audit request failed: ${(e && e.message) || "unknown error"}` });
+    // Legacy mode must also avoid disclosing database or infrastructure details.
+    console.error("audit_request_error", e);
+    res.status(500).json({ error: "We couldn\u0027t complete the audit request. Please try again.", code: "AUDIT_INTERNAL_ERROR" });
   }
 }
