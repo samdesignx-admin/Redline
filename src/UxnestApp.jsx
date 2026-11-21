@@ -3678,7 +3678,9 @@ export default function UxnestApp() {
 
   async function callClaude(messages, tools, attempt = 0, stage = "audit") {
     checkRunState();
-    const body = { model: "claude-sonnet-5-5", max_tokens: 1000, messages };
+    // Report sections frequently exceed 1,000 output tokens; avoid repeated
+    // max_tokens continuations that multiply latency and timeout risk.
+    const body = { model: "claude-sonnet-5-5", max_tokens: 3000, messages };
     if (tools) body.tools = tools;
 
     const requestId = typeof crypto !== "undefined" && crypto.randomUUID
@@ -3697,6 +3699,7 @@ export default function UxnestApp() {
           "Content-Type": "application/json",
           "X-UXNest-Stage": stage,
           "X-UXNest-Request-Id": requestId,
+          "X-UXNest-Session": getToken(),
         },
         body: JSON.stringify(body),
       });
@@ -3758,6 +3761,7 @@ export default function UxnestApp() {
     let messages = initialMessages;
     let fullText = "";
     let iterations = 0;
+    let completed = false;
     while (iterations < 10) {
       iterations++;
       if (onRound) onRound(iterations);
@@ -3778,7 +3782,16 @@ export default function UxnestApp() {
         ];
         continue;
       }
+      completed = true;
       break;
+    }
+    // Ten continuations without an end_turn is not a completed report.
+    // Surface the actual provider stop condition instead of accepting a
+    // truncated response that later fails section validation ambiguously.
+    if (!completed) {
+      const error = new Error(`Claude did not finish ${stage} after ${iterations} continuation rounds. No audit credit was used.`);
+      error.code = "AUDIT_INCOMPLETE";
+      throw error;
     }
     return fullText;
   }
@@ -3871,7 +3884,21 @@ export default function UxnestApp() {
     const earlyFailure = coreIndexes.map((i) => results[i]).find((result) => result?.status === "rejected");
     if (earlyFailure) {
       if (earlyFailure.reason?.message === "CANCELLED" || earlyFailure.reason?.message === "DEADLINE") throw earlyFailure.reason;
-      const error = new Error("The source analysis was incomplete; ranking and scoring were not generated. No audit credit was used.");
+      // Preserve the actual failure category so a provider timeout, HTTP error,
+      // or missing report section is not mislabeled as a generic source failure.
+      const cause = earlyFailure.reason;
+      const failedIndex = coreIndexes.find((i) => results[i]?.status === "rejected");
+      const detail = cause?.code === "AUDIT_INCOMPLETE"
+        ? cause.message
+        : cause?.message && /timed out|temporarily unavailable|rate limit|busy|HTTP [45]\d\d|connection|audit service|API request failed/i.test(cause.message)
+          ? cause.message
+          : "The AI analysis service could not complete this section. Please retry.";
+      console.error("uxnest_audit_core_batch_failed", {
+        stage: failedIndex == null ? "unknown" : `report-section-${failedIndex + 1}`,
+        code: cause?.code || "CORE_BATCH_FAILED",
+        message: String(cause?.message || "unknown").slice(0, 300),
+      });
+      const error = new Error(`${detail} Ranking and scoring were not generated. No audit credit was used.`);
       error.code = "AUDIT_INCOMPLETE";
       throw error;
     }

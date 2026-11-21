@@ -2,12 +2,20 @@
 // storage no longer resets it.
 
 import { requireDb, readSession } from "./_lib.js";
+import { utcMonthWindow, monthlyQuota } from "./_free-beta-quota.js";
 
 export const maxDuration = 20;
 
 const AUDIT_QUOTA = 1; // first completed audit is free; additional audits consume purchased credits
 
 export default async function handler(req, res) {
+  // Fail closed until the monthly quota ledger and authentication gates are deployed.
+  // Never enable FREE_BETA_AUDITS_ENABLED before those safeguards pass review.
+  if (process.env.FREE_BETA_MODE === "true" && process.env.FREE_BETA_AUDITS_ENABLED !== "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Free beta audits are not yet available.", code: "BETA_AUDITS_NOT_READY" });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -21,6 +29,7 @@ export default async function handler(req, res) {
     return;
   }
   const accountId = sess.accountId;
+  const isFreeBeta = process.env.FREE_BETA_MODE === "true";
   const { action } = req.body;
 
   try {
@@ -38,6 +47,15 @@ export default async function handler(req, res) {
 
     /* ---------------- Check remaining quota ---------------- */
     if (action === "quota") {
+      if (isFreeBeta) {
+        const { start, end } = utcMonthWindow();
+        const { count, error } = await db.from("free_beta_audit_usage")
+          .select("id", { count: "exact", head: true })
+          .eq("account_id", accountId).eq("month_start", start.slice(0, 10));
+        if (error || count === null) throw error || new Error("Monthly usage unavailable");
+        res.status(200).json({ ...monthlyQuota(count), paid: 0, resetsAt: end });
+        return;
+      }
       const { data } = await db.from("accounts").select("audits_used, paid_audits").eq("id", accountId).maybeSingle();
       const used = (data && data.audits_used) || 0;
       const paid = (data && data.paid_audits) || 0;
@@ -47,11 +65,28 @@ export default async function handler(req, res) {
 
     /* ---------------- Save and charge atomically ---------------- */
     if (action === "create") {
+      // A rollout flag is not proof of a reservation. Until the AI proxy
+      // atomically reserves and settles quota, reject beta audit creation
+      // even if every feature flag is accidentally enabled.
+      if (isFreeBeta) {
+        res.setHeader("cache-control", "no-store");
+        res.status(503).json({
+          error: "Beta audit creation is not yet available.",
+          code: "BETA_RESERVATION_NOT_READY",
+        });
+        return;
+      }
       const a = req.body.audit || {};
       // Database function locks the account and inserts the audit in one transaction:
       // two concurrent audits cannot spend one credit twice.
-      const { data, error } = await db.rpc("create_uxnest_audit", {
+      const requestId = String(req.body.requestId || "");
+      if (isFreeBeta && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+        res.status(400).json({ error: "A valid audit request ID is required.", code: "INVALID_REQUEST_ID" });
+        return;
+      }
+      const { data, error } = await db.rpc(isFreeBeta ? "create_free_beta_audit" : "create_uxnest_audit", {
         p_account_id: accountId,
+        ...(isFreeBeta ? { p_request_id: requestId } : {}),
         p_audit: {
           title: a.title || null,
           mode: a.mode || "files",
@@ -66,6 +101,10 @@ export default async function handler(req, res) {
         },
       });
       if (error) {
+        if (isFreeBeta && String(error.message || "").includes("BETA_MONTHLY_QUOTA_EXCEEDED")) {
+          res.status(429).json({ error: "You have used all 3 free audits for this month.", code: "BETA_MONTHLY_QUOTA_EXCEEDED" });
+          return;
+        }
         if (String(error.message || "").includes("AUDIT_PAYMENT_REQUIRED")) {
           res.status(402).json({ error: "Your free audit has been used. Purchase another audit for $5.", code: "AUDIT_PAYMENT_REQUIRED" });
           return;
@@ -88,6 +127,19 @@ export default async function handler(req, res) {
 
     res.status(400).json({ error: "Unknown action" });
   } catch (e) {
+    // Never expose database error details in public beta responses.
+    if (isFreeBeta) {
+      console.error(JSON.stringify({
+        event: "beta_audit_request_error",
+        action: typeof action === "string" ? action.slice(0, 40) : "unknown",
+        message: e instanceof Error ? e.message : String(e),
+      }));
+      res.status(500).json({
+        error: "We couldn't complete the audit request. Please try again.",
+        code: "BETA_AUDIT_INTERNAL_ERROR",
+      });
+      return;
+    }
     res.status(500).json({ error: `Audit request failed: ${(e && e.message) || "unknown error"}` });
   }
 }
