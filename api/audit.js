@@ -9,7 +9,15 @@
 // line of defense (note: in-memory state resets per serverless instance, so
 // for real protection add Upstash Redis or similar before going public).
 
+import crypto from "node:crypto";
+import { readSession } from "./_lib.js";
+
 export const maxDuration = 60;
+
+export function safeMaxTokens(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 4096) : 1000;
+}
 
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const MAX_REQUESTS_PER_WINDOW = 60; // ~4-5 full audits per IP per hour
@@ -32,12 +40,54 @@ function rateLimited(ip) {
 }
 
 export default async function handler(req, res) {
+  // Fail closed until the monthly quota ledger and authentication gates are deployed.
+  // Never enable FREE_BETA_AUDITS_ENABLED before those safeguards pass review.
+  if (process.env.FREE_BETA_MODE === "true" && process.env.FREE_BETA_AUDITS_ENABLED !== "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Free beta audits are not yet available.", code: "BETA_AUDITS_NOT_READY" });
+    return;
+  }
+  // A signed session alone does not reserve quota. Keep the costly AI proxy
+  // disabled until a server-side reservation/settlement flow is verified.
+  if (process.env.FREE_BETA_MODE === "true" && process.env.FREE_BETA_AI_PROXY_ENABLED !== "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Beta AI audits are not yet available.", code: "BETA_AI_PROXY_NOT_READY" });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+  // Beta AI calls must be associated with a signed application session.
+  // The client must send its session token before enabling beta audits.
+  if (process.env.FREE_BETA_MODE === "true" && !readSession(
+    req.headers?.["x-uxnest-session"] || (req.body || {}).token
+  )) {
+    res.status(401).json({ error: "Please log in to run a beta audit.", code: "BETA_LOGIN_REQUIRED" });
+    return;
+  }
+  // An activation flag alone must not authorize paid AI usage in beta.
+  // Until a verified atomic reservation RPC is wired here, reject all beta
+  // proxy requests even if both rollout flags are mistakenly enabled.
+  if (process.env.FREE_BETA_MODE === "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({
+      error: "Beta AI quota reservation is not yet implemented.",
+      code: "BETA_RESERVATION_NOT_READY",
+    });
+    return;
+  }
+  // Every paid Claude request must belong to a verified application session.
+  // The legacy IP-only limiter is not an authorization boundary.
+  const session = readSession(req.headers?.["x-uxnest-session"]);
+  if (!session) {
+    res.setHeader("cache-control", "no-store");
+    res.status(401).json({ error: "Please log in to use the audit service.", code: "AUDIT_LOGIN_REQUIRED" });
+    return;
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
-    res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY is not set" });
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "The audit service is temporarily unavailable. Please try again later.", code: "AUDIT_PROVIDER_NOT_CONFIGURED" });
     return;
   }
 
@@ -67,14 +117,15 @@ export default async function handler(req, res) {
 
   // Allowlist of fields forwarded to the API — prevents clients from
   // injecting arbitrary parameters through the proxy.
-  const { model, max_tokens, messages, tools } = req.body || {};
+  const { max_tokens, messages, tools } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: "Bad request: messages required" });
     return;
   }
   const body = {
-    model: typeof model === "string" ? model : "claude-sonnet-5-5",
-    max_tokens: Math.min(Number(max_tokens) || 1000, 4096),
+    // Never let a browser choose an arbitrary, potentially more expensive provider model.
+    model: "claude-sonnet-5-5",
+    max_tokens: safeMaxTokens(max_tokens),
     messages,
   };
   if (Array.isArray(tools)) body.tools = tools;
@@ -122,6 +173,15 @@ export default async function handler(req, res) {
         status: upstream.status,
         durationMs: Date.now() - startedAt,
       }));
+      // Provider error bodies may contain internal diagnostics. Do not relay them.
+      const retryable = upstream.status === 429 || upstream.status >= 500;
+      res.status(upstream.status).json({
+        error: "The audit provider could not complete this step.",
+        code: "AUDIT_PROVIDER_ERROR",
+        retryable,
+        requestId,
+      });
+      return;
     }
 
     res.status(upstream.status).json(data);
