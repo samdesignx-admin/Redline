@@ -74,6 +74,9 @@ test("enabling all beta flags cannot bypass missing atomic AI reservation", asyn
   const keys=["FREE_BETA_MODE","FREE_BETA_AUDITS_ENABLED","FREE_BETA_AI_PROXY_ENABLED"];
   const prior=keys.map(k=>process.env[k]);
   keys.forEach(k=>process.env[k]="true");
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => { providerCalls++; throw new Error("Unexpected provider call"); };
   try {
     // A syntactically signed token must pass readSession; use actual issuer.
     const { issueSession } = await import("../api/_lib.js");
@@ -89,11 +92,13 @@ test("enabling all beta flags cannot bypass missing atomic AI reservation", asyn
       assert.equal(status,503);
       assert.equal(payload.code,"BETA_RESERVATION_NOT_READY");
       assert.equal(headers["cache-control"],"no-store");
+      assert.equal(providerCalls,0,"beta must never invoke Anthropic without an atomic reservation");
     } finally {
       if(oldSecret===undefined)delete process.env.SESSION_SECRET;
       else process.env.SESSION_SECRET=oldSecret;
     }
   } finally {
+    globalThis.fetch = originalFetch;
     keys.forEach((k,i)=>{if(prior[i]===undefined)delete process.env[k];else process.env[k]=prior[i];});
   }
 });
