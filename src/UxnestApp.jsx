@@ -4825,7 +4825,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           <div style={{ maxWidth: 720, margin: "10px auto 0", display: "flex", justifyContent: "flex-end" }}>
           <nav id="uxnest-account-menu" aria-label="Account and help" className="nav-account-menu" style={{ width: "min(100%, 370px)", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
             {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge],
-              // Billing remains accessible by direct URL for historical transactions. ["help", "Help & Support", LifeBuoy]].map(([key, label, Icon]) => (
+              ...(false && user ? [["billing", "Billing & Purchases", Receipt]] : []), ["help", "Help & Support", LifeBuoy]].map(([key, label, Icon]) => (
               <button key={key} onClick={() => { setPage(key); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: page === key && !legalPage ? C.gold : C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
                 <Icon size={16} /> {label}
               </button>
