@@ -20,5 +20,13 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Verify report model and completeness; build
+      - name: Verify evidence model
+        run: npm run test:evidence
+      - name: Verify evidence gate
+        run: npm run test:evidence-gate
+      - name: Verify traceability
+        run: npm run test:traceability
+      - name: Verify evidence rendering
+        run: npm run test:evidence-render
+      - name: Verify report model, completeness and Vite build
         run: npm run build
