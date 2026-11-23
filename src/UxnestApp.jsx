@@ -1272,7 +1272,7 @@ function Footer({ onOpenLegal, onNavigatePage, onNavigateSection, isLoggedIn }) 
     { title: "New Audit", key: "audit" },
     { title: "My Audits", key: "myaudits" },
     { title: "UX Toolkit", key: "dashboard" },
-    ...(isLoggedIn ? [{ title: "Billing & Purchases", key: "billing" }] : []),
+    // Billing history remains reachable by direct link for existing customers; not promoted during free beta.,
   ];
   const exploreLinks = [
     { title: "Features", key: "features" },
@@ -3111,12 +3111,12 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* Free access */}
       <div id="pricing" style={{ ...sect, scrollMarginTop: 96 }}>
         <SectionKicker>Pricing</SectionKicker>
-        <h2 style={h2}>Simple, pay-as-you-go pricing</h2>
+        <h2 style={h2}>Free public beta</h2>
         <p style={{ color: C.textDim, fontSize: 14.5, lineHeight: 1.6, maxWidth: 500, margin: "0 auto 24px" }}>
-          Get your first complete audit free. Additional audits are $5 each during beta (normally $10). Buy 1–20 audit credits per purchase. No subscription.
+          We are preparing three free audits per account each month. Availability is limited while secure monthly usage tracking is completed. No purchase is required.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, maxWidth: 620, margin: "0 auto 24px", textAlign: "left" }}>
-          {["1 complete audit free", "$5 per additional audit during beta (normally $10)", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "Seven evidence-based analysis areas", "AI recommendations and Top 10", "Searchable presentation PDF with optional evidence pages", "No subscription required"].map((f) => (
+          {["Free beta — no checkout required", "Three monthly audits planned; secure enforcement pending", `${SCREEN_LIMIT} screens or ${NAV_LIMIT} pages per audit`, "Screenshots, PDFs and URL audits", "Seven evidence-based analysis areas", "AI recommendations and Top 10", "Searchable presentation PDF with optional evidence pages", "No subscription required"].map((f) => (
             <div key={f} style={{ display: "flex", gap: 8, fontSize: 13, color: C.textDim }}>
               <Check size={15} color={C.gold} style={{ flexShrink: 0, marginTop: 2 }} />{f}
             </div>
@@ -3170,7 +3170,7 @@ function LandingPage({ onStart, onOpenLegal, isLoggedIn }) {
       {/* CTA */}
       <div style={{ ...sect, position: "relative", left: "50%", marginLeft: "-50vw", width: "100vw", background: `linear-gradient(135deg, ${C.dark}, ${C.darkAlt})`, padding: "52px 18px", marginBottom: 0 }}>
         <h2 style={{ ...h2, color: "#FFFFFF" }}>Ready to Transform Your UX?</h2>
-        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Get a professional-grade UX audit in minutes. Your first audit is free; additional audits are $5 during beta (normally $10). Buy 1–20 audit credits per purchase.</p>
+        <p style={{ color: "#BFD8D2", fontSize: 14.5, margin: "0 0 20px" }}>Explore evidence-based UX insights during our free beta. Monthly audit access is being finalized; no purchase is required.</p>
         <button onClick={onStart} style={{ background: C.now, color: C.dark, borderRadius: 999, border: "none", borderRadius: 10, padding: "13px 26px", fontSize: 14.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
           Start Your Free Audit <ArrowRight size={15} />
         </button>
@@ -4825,7 +4825,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
           <div style={{ maxWidth: 720, margin: "10px auto 0", display: "flex", justifyContent: "flex-end" }}>
           <nav id="uxnest-account-menu" aria-label="Account and help" className="nav-account-menu" style={{ width: "min(100%, 370px)", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 10px 28px rgba(18,48,43,0.14)" }}>
             {[...(report ? [["audit", "Report", FileText]] : []), ["myaudits", "My Audits", ClipboardList], ["dashboard", "Toolkit", Gauge],
-              ...(user ? [["billing", "Billing & Purchases", Receipt]] : []), ["help", "Help & Support", LifeBuoy]].map(([key, label, Icon]) => (
+              // Billing remains accessible by direct URL for historical transactions. ["help", "Help & Support", LifeBuoy]].map(([key, label, Icon]) => (
               <button key={key} onClick={() => { setPage(key); setLegalPage(null); setMenuOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", background: page === key && !legalPage ? C.goldSoft : "transparent", border: "none", borderBottom: `1px solid ${C.borderSoft}`, color: page === key && !legalPage ? C.gold : C.text, fontSize: 14, fontWeight: 600, padding: "14px 16px", cursor: "pointer" }}>
                 <Icon size={16} /> {label}
               </button>
@@ -4915,7 +4915,7 @@ Use BLOCKED if the screenshot is an Access Denied, permission denied, WAF, bot-d
                   </div>
                 </details>
 
-                {user && (
+                {false && user && (
                   <details className="audit-credit-widget" aria-label="Audit credits and purchases">
                     <summary className="audit-credit-widget__top">
                       <span className="audit-credit-widget__identity">
