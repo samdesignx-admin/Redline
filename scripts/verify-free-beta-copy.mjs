@@ -14,5 +14,5 @@ assert.doesNotMatch(config.QUOTA_MESSAGE, paidCopyPattern,
 assert.equal(config.AUDIT_QUOTA, 1,
   'Do not increase the client quota without verified server enforcement');
 const source = readFileSync('src/config/app.js', 'utf8');
-assert.match(source, /server.*enforce/i);
+assert.match(source, /server\s+enforces?\s+the monthly allowance atomically/i);
 console.log('Free-beta quota copy guard passed (does not validate checkout gating or quota enforcement).');
