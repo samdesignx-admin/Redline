@@ -1,0 +1,32 @@
+name: Safe report build checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify evidence model
+        run: npm run test:evidence
+      - name: Verify evidence gate
+        run: npm run test:evidence-gate
+      - name: Verify traceability
+        run: npm run test:traceability
+      - name: Verify evidence rendering
+        run: npm run test:evidence-render
+      - name: Verify report model, completeness and Vite build
+        run: npm run build

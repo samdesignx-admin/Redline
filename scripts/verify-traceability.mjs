@@ -10,7 +10,9 @@ const result = buildTraceability([
 assert.equal(result.rootCauses.length, 2);
 assert.equal(result.recommendations.length, 2);
 assert.equal(result.links.length, 3);
-assert.deepEqual(result.links[0], result.links[1]);
+assert.notEqual(result.links[0].findingId, result.links[1].findingId);
+assert.equal(result.links[0].rootCauseId, result.links[1].rootCauseId);
+assert.equal(result.links[0].recommendationId, result.links[1].recommendationId);
 assert.equal(result.rootCauses[0].findingIds.length, 2);
 assert.equal(result.recommendations[0].findingIds.length, 2);
 console.log("Finding traceability checks passed.");
