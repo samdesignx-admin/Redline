@@ -12,6 +12,11 @@ export default async function handler(req, res) {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+  if (process.env.FREE_BETA_MODE === "true" && ["create", "quota"].includes(req.body?.action)) {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Beta audit reservations are not yet available.", code: "BETA_RESERVATION_NOT_READY" });
+    return;
+  }
   const db = requireDb(res);
   if (!db) return;
 
