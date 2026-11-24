@@ -36,6 +36,13 @@ export default async function handler(req, res) {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+  // Fail closed until durable pre-provider quota reservations are integrated.
+  // Rollout flags alone must never authorize a billable beta request.
+  if (process.env.FREE_BETA_MODE === "true") {
+    res.setHeader("cache-control", "no-store");
+    res.status(503).json({ error: "Beta audit reservations are not yet available.", code: "BETA_RESERVATION_NOT_READY" });
+    return;
+  }
   if (!process.env.ANTHROPIC_API_KEY) {
     res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY is not set" });
     return;
